@@ -47,16 +47,29 @@ import { applyRate, clampDiscount, multiply, subtract, sum, toEgp, toPiastres } 
  *   total = net + vat
  */
 
-const LATENCY_MS = 320;
 const OTP_CODE = '4242';
 const HOLD_MINUTES = 15;
 
-function delay<T>(value: T, ms = LATENCY_MS): Promise<T> {
+/**
+ * Test/dev seams. Tests set `latencyMs` to 0 and drive `now` themselves so they can assert
+ * on webhook timing without sleeping.
+ */
+export const mockConfig = {
+  /** Simulated round-trip time, so loading states are exercised in the real app. */
+  latencyMs: 320,
+  /** How long after `payments.initiate` the simulated provider webhook lands. */
+  settleDelayMs: 4000,
+  now: (): number => Date.now(),
+};
+
+function delay<T>(value: T, factor = 1): Promise<T> {
+  const ms = mockConfig.latencyMs * factor;
+  if (ms <= 0) return Promise.resolve(value);
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
 
 function iso(offsetMs = 0): string {
-  return new Date(Date.now() + offsetMs).toISOString();
+  return new Date(mockConfig.now() + offsetMs).toISOString();
 }
 
 let orderSeq = 482;
@@ -190,7 +203,7 @@ function priceOrder(
  * the server, never through a client redirect (CLAUDE.md rule 9).
  */
 function settleDuePayments(): void {
-  const now = Date.now();
+  const now = mockConfig.now();
   for (const [orderId, due] of state.settleAt.entries()) {
     if (now < due) continue;
     state.settleAt.delete(orderId);
@@ -301,22 +314,22 @@ export const mockApi: SukunApi = {
           refreshToken: `mock-refresh-${Date.now()}`,
           expiresIn: 900,
         },
-        80,
+        0.25,
       );
     },
 
     async me(): Promise<CurrentUser> {
-      return delay(requireUser(), 120);
+      return delay(requireUser(), 0.4);
     },
 
     async logout(): Promise<void> {
       state.user = null;
-      return delay(undefined, 80);
+      return delay(undefined, 0.25);
     },
 
     async logoutAll(): Promise<void> {
       state.user = null;
-      return delay(undefined, 80);
+      return delay(undefined, 0.25);
     },
   },
 
@@ -351,7 +364,7 @@ export const mockApi: SukunApi = {
         selfieUrl: uri,
         selfieExpiresAt: iso(15 * 60 * 1000),
       });
-      return delay(state.user, 600);
+      return delay(state.user, 1.9);
     },
 
     async sendEmailVerification(): Promise<void> {
@@ -362,7 +375,7 @@ export const mockApi: SukunApi = {
 
   reference: {
     async areas(): Promise<Area[]> {
-      return delay(areas, 120);
+      return delay(areas, 0.4);
     },
   },
 
@@ -392,7 +405,7 @@ export const mockApi: SukunApi = {
 
   orders: {
     async previewPrice({ eventId, items, promoCode }): Promise<PricePreview> {
-      return delay(priceOrder(eventId, items, promoCode), 200);
+      return delay(priceOrder(eventId, items, promoCode), 0.6);
     },
 
     async validateGuests(
@@ -427,7 +440,7 @@ export const mockApi: SukunApi = {
 
       // Deliberately no "already has a ticket" / "is registered" signal: the response shape
       // is identical for registered and unregistered numbers (CLAUDE.md rule 4).
-      return delay({ valid: issues.length === 0, issues }, 220);
+      return delay({ valid: issues.length === 0, issues }, 0.7);
     },
 
     async validatePromoCode(items, promoCode): Promise<PromoValidationResult> {
@@ -460,7 +473,7 @@ export const mockApi: SukunApi = {
 
       const pricing = priceOrder(input.eventId, input.items, input.promoCode);
       const order: OrderDetail = {
-        id: `ord-${Date.now()}`,
+        id: `ord-${mockConfig.now()}-${orderSeq}`,
         orderNumber: nextOrderNumber(),
         eventId: input.eventId,
         status: 'awaiting_payment',
@@ -491,14 +504,14 @@ export const mockApi: SukunApi = {
       };
 
       state.orders.unshift(order);
-      return delay(order, 500);
+      return delay(order, 1.6);
     },
 
     async detail(orderId: string): Promise<OrderDetail> {
       settleDuePayments();
       const order = state.orders.find((o) => o.id === orderId);
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
-      return delay(order, 150);
+      return delay(order, 0.5);
     },
 
     async list(cursor?: string | null, limit = 20): Promise<CursorPage<OrderSummary>> {
@@ -523,7 +536,7 @@ export const mockApi: SukunApi = {
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
       if (order.status === 'awaiting_payment') order.status = 'cancelled';
       state.settleAt.delete(orderId);
-      return delay(order, 200);
+      return delay(order, 0.6);
     },
   },
 
@@ -532,7 +545,7 @@ export const mockApi: SukunApi = {
       const order = state.orders.find((o) => o.id === orderId);
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
       // Simulated provider webhook lands a few seconds after the sheet opens.
-      state.settleAt.set(orderId, Date.now() + 4000);
+      state.settleAt.set(orderId, mockConfig.now() + mockConfig.settleDelayMs);
       return delay({
         paymentId: `pay-${Date.now()}`,
         provider: 'paymob',
@@ -561,7 +574,7 @@ export const mockApi: SukunApi = {
             : 0,
           paidAt: paid ? iso() : null,
         },
-        150,
+        0.5,
       );
     },
 
@@ -585,7 +598,7 @@ export const mockApi: SukunApi = {
       requireUser();
       const ticket = state.tickets.find((t) => t.id === ticketId);
       if (!ticket) throw new MockApiError('TICKET_NOT_FOUND', 'Ticket not found', 404);
-      return delay(ticket, 150);
+      return delay(ticket, 0.5);
     },
 
     async claim(ticketId: string): Promise<Ticket> {
@@ -594,7 +607,7 @@ export const mockApi: SukunApi = {
       if (!ticket) throw new MockApiError('TICKET_NOT_FOUND', 'Ticket not found', 404);
       ticket.status = 'active';
       ticket.usageStatus = 'usable';
-      return delay(ticket, 200);
+      return delay(ticket, 0.6);
     },
 
     async entryPass(ticketId: string): Promise<EntryPass> {
@@ -605,7 +618,7 @@ export const mockApi: SukunApi = {
         throw new MockApiError('SELFIE_REQUIRED', 'A selfie is required for entry', 403);
       }
       const rotation = 30;
-      const window = Math.floor(Date.now() / (rotation * 1000));
+      const window = Math.floor(mockConfig.now() / (rotation * 1000));
       return delay(
         {
           ticketId,
@@ -616,7 +629,7 @@ export const mockApi: SukunApi = {
           expiresAt: iso(rotation * 1000),
           refreshAfterSeconds: rotation,
         },
-        150,
+        0.5,
       );
     },
   },
@@ -655,7 +668,7 @@ export const mockApi: SukunApi = {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
       resetMockState();
-      return delay(undefined, 400);
+      return delay(undefined, 1.25);
     },
   },
 };

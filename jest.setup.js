@@ -1,4 +1,4 @@
-/* eslint-env jest */
+/* global jest */
 
 jest.mock('expo-secure-store', () => {
   const store = new Map();

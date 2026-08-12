@@ -36,7 +36,16 @@ export function clampDiscount(discount: string, subtotal: string): string {
   return toEgp(Math.min(toPiastres(discount), toPiastres(subtotal)));
 }
 
-/** VAT rate arrives as a decimal string, e.g. `"0.14"`. Rounds half-up, like the server. */
+/**
+ * VAT rate arrives as a decimal string, e.g. `"0.14"`. Rounds half-up, like the server.
+ *
+ * The rate is scaled to an integer before multiplying rather than parsed with `Number`:
+ * `100 * 0.145` is `14.499999999999998` in binary floating point, which would round *down*
+ * and quietly under-charge VAT on the boundary.
+ */
 export function applyRate(base: string, rate: string): string {
-  return toEgp(Math.round(toPiastres(base) * Number(rate)));
+  const [whole = '0', frac = ''] = rate.trim().split('.');
+  const scale = 10 ** frac.length;
+  const scaledRate = parseInt(whole, 10) * scale + (frac ? parseInt(frac, 10) : 0);
+  return toEgp(Math.round((toPiastres(base) * scaledRate) / scale));
 }
