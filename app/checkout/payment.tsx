@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, Platform, StyleSheet, View } from 'react-native';
 import {
   BackButton,
   BulletHeading,
@@ -20,16 +19,29 @@ import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 
 /**
+ * paymob-reactnative is a native module (Android data binding, an iOS pod) — it doesn't run
+ * in Expo Go and isn't bundleable for web, so it's required lazily and only off-web. On web
+ * or in Expo Go, `paymob` stays null and `onPay` reports the platform as unsupported instead
+ * of throwing the SDK's own linking error.
+ */
+// A static import would evaluate the native module's linking check on every platform.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const paymob = Platform.OS === 'web' ? null : require('paymob-reactnative');
+const Paymob = paymob?.default ?? null;
+const PaymentStatus = paymob?.PaymentStatus ?? null;
+
+/**
  * Design screen 11 · Payment.
  *
  * PENDING BACKEND — Paymob is not wired on staging; the mock settles a simulated webhook a
  * few seconds after the sheet opens.
  *
  * The design draws card number / expiry / CVV fields inline. Those are rendered here as a
- * non-editable preview of what Paymob will ask for, and never collect input: the app must
- * hand card entry to Paymob's hosted sheet and treat the order as paid only when the server
- * confirms the webhook (CLAUDE.md rule 9). Taking card details in-process would put the app
- * in PCI scope and let a client redirect stand in for settlement.
+ * non-editable preview of what Paymob's own sheet will ask for, and never collect input: the
+ * app hands card entry to `Paymob.presentPayVC`, and the SDK's result is UI feedback only —
+ * the order is paid only once the server confirms the webhook (CLAUDE.md rule 9). Taking card
+ * details in-process would put the app in PCI scope, and trusting the SDK's own status would
+ * let a client-side result stand in for settlement, same as trusting a redirect would.
  */
 export default function PaymentScreen() {
   const router = useRouter();
@@ -55,17 +67,38 @@ export default function PaymentScreen() {
     router.replace(`/checkout/confirmation?orderId=${orderId}`);
   }, [settled, orderId, router, reset]);
 
+  useEffect(() => {
+    if (!Paymob) return;
+    return () => Paymob.removeSdkListener();
+  }, []);
+
   async function onPay() {
     if (!orderId) return;
     setError(null);
+
+    if (!Paymob) {
+      setError('Payment needs the Sukun app — it isn’t available here.');
+      return;
+    }
+
     try {
       const intent = await initiate.mutateAsync(orderId);
-      setPolling(true);
 
-      // The hosted Paymob sheet. Its result is ignored on purpose — settlement is decided by
-      // the server webhook, which `usePaymentStatus` polls for.
-      const checkoutUrl = `https://accept.paymob.com/unifiedcheckout/?publicKey=${intent.publicKey}&clientSecret=${intent.clientSecret}`;
-      await WebBrowser.openBrowserAsync(checkoutUrl).catch(() => undefined);
+      // Branding must be set before `presentPayVC` — the SDK ignores changes made after.
+      Paymob.setAppName('Sukun');
+      Paymob.setButtonBackgroundColor(colors.gold500);
+      Paymob.setButtonTextColor(colors.creme);
+
+      // Feedback only, not settlement: `usePaymentStatus` polling the webhook decides that.
+      Paymob.setSdkListener((result: string) => {
+        if (result === PaymentStatus.FAIL || result === PaymentStatus.CANCELLED) {
+          setPolling(false);
+          setError('The payment did not go through. Nothing was charged.');
+        }
+      });
+
+      Paymob.presentPayVC(intent.clientSecret, intent.publicKey);
+      setPolling(true);
     } catch (err) {
       setPolling(false);
       setError(messageForError(err));
@@ -90,11 +123,7 @@ export default function PaymentScreen() {
       </Text>
 
       <View style={styles.cardArt}>
-        {card ? (
-          <Image source={card} style={styles.cardImage} />
-        ) : (
-          <View style={styles.cardFallback} />
-        )}
+        <Image source={card} style={styles.cardImage} />
       </View>
 
       <View style={styles.fields} pointerEvents="none">
@@ -183,11 +212,6 @@ const styles = StyleSheet.create({
     height: 858,
     left: -20,
     top: -172,
-  },
-  cardFallback: {
-    flex: 1,
-    borderRadius: 16,
-    backgroundColor: colors.gold500,
   },
   fields: {
     gap: 14,

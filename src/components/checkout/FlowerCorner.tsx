@@ -7,7 +7,6 @@ import { designAsset } from '../../theme/assets';
  */
 export function FlowerCorner({ top = 52 }: { top?: number }) {
   const flower = designAsset('decoFlower');
-  if (!flower) return null;
 
   return (
     <View style={[styles.crop, { top }]} pointerEvents="none">

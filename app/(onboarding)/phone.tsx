@@ -80,11 +80,9 @@ export default function PhoneScreen() {
       />
 
       <View style={styles.decoWrap}>
-        {swirl ? (
-          <View style={styles.swirlCrop}>
-            <Image source={swirl} style={styles.swirl} />
-          </View>
-        ) : null}
+        <View style={styles.swirlCrop}>
+          <Image source={swirl} style={styles.swirl} />
+        </View>
       </View>
 
       <Button

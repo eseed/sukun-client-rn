@@ -78,18 +78,19 @@ simulated webhook a few seconds later.
 Each of these is a place where the static design and the product rules disagree, or the
 design leaves something out.
 
-1. **VAT and total on screen 10.** The design shows `VAT (14%) 448.00` and
-   `Total 3,328.00` on a 3,200.00 subtotal with a 320.00 promo — i.e. VAT charged on the
-   subtotal, with the discount taken afterwards. The backend does the opposite:
+1. **VAT and total on screen 10 — fixed in the design.** The design used to show
+   `VAT (14%) 448.00` and `Total 3,328.00` on a 3,200.00 subtotal with a 320.00 promo — VAT
+   charged on the subtotal, discount taken afterwards. The backend does the opposite:
    `net = subtotal − discount`, `vat = net × rate`, `total = net + vat`
-   (`MobileOrderDetailResponseDto` — its own example, 750/100/650/91/741, confirms it).
-   The app follows the backend, so the same basket renders `VAT (14%) 403.20` and
-   `Total 3,283.20`. **The design's arithmetic needs correcting, or the server does.**
+   (`MobileOrderDetailResponseDto` — its own example, 750/100/650/91/741, confirms it). The
+   app always followed the backend; the design's screen 10/11 source and arithmetic were
+   corrected to match (`VAT (14%) 403.20`, `Total 3,283.20`), so design and app now agree.
 2. **Card fields on screen 11 are a non-editable preview.** The design draws card number,
    expiry and CVV inline. Collecting them in-app would put Sukun in PCI scope and invite
-   treating a client redirect as settlement, which rule 9 forbids. The fields render as the
-   design draws them but take no input; the CTA opens Paymob's hosted sheet and the app
-   polls the server for the webhook result.
+   treating a client result as settlement, which rule 9 forbids. The fields render as the
+   design draws them but take no input; the CTA opens Paymob's native SDK sheet
+   (`Paymob.presentPayVC`), and the app polls the server for the webhook result regardless of
+   what the SDK itself reports.
 3. **Promo entry on screen 10.** The design shows an applied promo line but no way to enter
    a code, so a compact input/apply row was added above the terms checkbox.
 4. **Sign out on screen 15.** The design's Account list has two rows; a third was added,
@@ -97,22 +98,12 @@ design leaves something out.
 5. **Guest count copy on screen 09** is derived from the order rather than hard-coded, so
    the "You bought 2 tickets. Attach 1 guest" line scales with the chosen quantity.
 
-## Assets and fonts — action needed
+## Assets and fonts
 
-Neither the fourteen design images nor the seven brand `.otf` files are in the repo. They
-could not be pulled automatically: the design MCP's file read returns base64 in-band and
-several images exceed its 256 KB cap, while the direct design REST API rejects the available
-token with `needs_consent: agent_design_projects`.
-
-Everything is wired for them, so adding them is a drop-in with no code change beyond flipping
-one flag each:
-
-- Images → [`assets/design/README.md`](./assets/design/README.md)
-- Fonts → [`assets/fonts/README.md`](./assets/fonts/README.md)
-
-Until then images render as token-coloured `ImageSlot` washes at the correct size and aspect
-ratio, and type falls back to a platform serif/sans. Every size, weight, colour, spacing and
-layout value is already correct.
+All fourteen design images and all seven brand `.otf` files are committed and wired in —
+see [`assets/design/README.md`](./assets/design/README.md) and
+[`assets/fonts/README.md`](./assets/fonts/README.md) for the per-file list. `expo export
+--platform web` bundles all 21 cleanly.
 
 ## Verification
 

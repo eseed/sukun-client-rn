@@ -20,9 +20,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.root}>
-      {dots ? (
-        <Image source={dots} style={styles.backdrop} resizeMode="cover" />
-      ) : null}
+      <Image source={dots} style={styles.backdrop} resizeMode="cover" />
 
       <Screen scroll edges={{ bottom: false }} contentStyle={styles.content} style={styles.transparent}>
         <View style={styles.heading}>

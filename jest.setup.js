@@ -36,6 +36,21 @@ jest.mock('expo-image-picker', () => ({
   MediaTypeOptions: { Images: 'Images' },
 }));
 
-jest.mock('expo-web-browser', () => ({
-  openBrowserAsync: jest.fn(async () => ({ type: 'dismiss' })),
+jest.mock('paymob-reactnative', () => ({
+  __esModule: true,
+  default: {
+    setAppName: jest.fn(),
+    setButtonBackgroundColor: jest.fn(),
+    setButtonTextColor: jest.fn(),
+    setAppIcon: jest.fn(),
+    setShowSaveCard: jest.fn(),
+    setSaveCardDefault: jest.fn(),
+    setShowConfirmationPage: jest.fn(),
+    setShowTransactionResult: jest.fn(),
+    setKeyboardHandlingEnabled: jest.fn(),
+    presentPayVC: jest.fn(),
+    setSdkListener: jest.fn(),
+    removeSdkListener: jest.fn(),
+  },
+  PaymentStatus: { SUCCESS: 'Success', FAIL: 'Fail', CANCELLED: 'Cancelled', PENDING: 'Pending' },
 }));

@@ -81,11 +81,9 @@ export default function ProfileFormScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      {flower ? (
-        <View style={styles.flowerCrop} pointerEvents="none">
-          <Image source={flower} style={styles.flower} />
-        </View>
-      ) : null}
+      <View style={styles.flowerCrop} pointerEvents="none">
+        <Image source={flower} style={styles.flower} />
+      </View>
 
       <BackButton onPress={() => router.back()} style={styles.back} />
 

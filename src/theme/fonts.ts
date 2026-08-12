@@ -2,14 +2,10 @@ import { Platform } from 'react-native';
 
 /**
  * The brand `.otf` files are licensed assets held in the Claude Design project
- * (`_ds/.../assets/fonts/`). Drop them into `assets/fonts/` and flip
- * `BRAND_FONTS_AVAILABLE` to `true` — see `assets/fonts/README.md`.
- *
- * Until then every family token resolves to a platform fallback, so nothing references a
- * font that is not registered (which renders as a hard fallback and logs on Android).
- * Sizes, weights, spacing and layout are unaffected either way.
+ * (`_ds/.../assets/fonts/`), committed under `assets/fonts/` and registered via `useFonts`
+ * in `app/_layout.tsx` — see `assets/fonts/README.md`.
  */
-export const BRAND_FONTS_AVAILABLE = false;
+export const BRAND_FONTS_AVAILABLE = true;
 
 export const brandFontFiles = {
   SeriouslyNostalgic: 'SeriouslyNostalgicFine-Regular.otf',

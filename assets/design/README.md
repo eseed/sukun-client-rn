@@ -1,7 +1,8 @@
 # Design images
 
 The screens reference fourteen images from the Claude Design project
-(`https://claude.ai/design/p/6a8faa9e-25ec-48fa-a07a-d22123a33a73`), under `assets/`:
+(`https://claude.ai/design/p/6a8faa9e-25ec-48fa-a07a-d22123a33a73`), under `assets/`. All
+fourteen are committed here and wired into `src/theme/assets.ts`.
 
 | File                        | Used by                    |
 | --------------------------- | -------------------------- |
@@ -20,19 +21,7 @@ The screens reference fourteen images from the Claude Design project
 | `slot-ev-slot-3.webp`       | 06 Discover list thumbnail |
 | `slot-profile-avatar.webp`  | 15 Profile avatar          |
 
-## Why they are not committed
-
-They could not be pulled into this repo automatically: the design MCP's file read returns
-base64 in-band (several are 400–680 KB, over the 256 KB read cap), and the direct design REST
-API rejects the current token with `needs_consent: agent_design_projects`.
-
-## To add them
-
-1. Enable **Claude Design** access at `claude.ai/design/settings` (that clears the consent
-   error), or download the files from the design project by hand.
-2. Drop all fourteen into this directory with the exact filenames above.
-3. In `src/theme/assets.ts`, replace each `null` with the `require(...)` already written on
-   the line beside it.
-
-No other change is needed. Until then `ImageSlot` renders a token-coloured wash at the same
-size, so layout, aspect ratios and overlays are already correct.
+Nine were pulled via the `DesignSync` tool's `get_file` (capped at 256 KB per file — fine for
+the smaller crops and thumbnails). The five large full-bleed/decorative PNGs exceeded that cap
+and were added by hand afterward. `src/theme/assets.ts` `require()`s all fourteen directly —
+there's no `null`/fallback branch left to flip.

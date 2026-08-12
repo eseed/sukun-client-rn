@@ -17,11 +17,7 @@ export default function WelcomeScreen() {
       <ImageSlot source={dancers} tint={colors.rose100} style={styles.background} />
 
       <View style={styles.lockup} pointerEvents="none">
-        {logo ? (
-          <Image source={logo} style={styles.logo} resizeMode="contain" />
-        ) : (
-          <Text style={styles.wordmark}>sukun</Text>
-        )}
+        <Image source={logo} style={styles.logo} resizeMode="contain" />
         <Text style={styles.tagline}>Everything wellness.</Text>
       </View>
 
@@ -60,13 +56,6 @@ const styles = StyleSheet.create({
   logo: {
     width: 276,
     height: 92,
-  },
-  wordmark: {
-    fontFamily: fontFamily.displayItalic,
-    fontStyle: 'italic',
-    fontSize: 76,
-    lineHeight: 84,
-    color: colors.textPrimary,
   },
   tagline: {
     fontFamily: fontFamily.bodyMedium,

@@ -23,8 +23,9 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    `src/api/mock/`, never in a screen or component.
 8. **Profile completeness gates purchase** — full name, email, date of birth, gender, area,
    and selfie. Email _verification_ gates nothing.
-9. **Payments (P1):** open Paymob in a WebView and poll status. An order is `paid` only via
-   the server webhook — never trust a client redirect.
+9. **Payments (P1):** open Paymob's native SDK sheet (`paymob-reactnative`, via
+   `Paymob.presentPayVC`) and poll status. An order is `paid` only via the server webhook —
+   never trust a client redirect, and never trust the SDK's own success/fail callback either.
 
 ### Out of scope
 
