@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "Sukun",
+    "slug": "sukun-client-rn",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "sukun",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F7F0E0"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sukun.client",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry.",
+        "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification.",
+        "NSContactsUsageDescription": "Sukun uses your contacts so you can attach guests to tickets by phone number."
+      }
+    },
+    "android": {
+      "package": "com.sukun.client",
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F0E0",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.CAMERA", "android.permission.READ_CONTACTS"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-font",
+      "expo-image",
+      "expo-splash-screen",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Sukun uses your camera to take the selfie that verifies you at event entry."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Sukun uses your contacts so you can attach guests to tickets by phone number."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

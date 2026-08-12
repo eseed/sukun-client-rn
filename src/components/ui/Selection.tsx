@@ -1,0 +1,242 @@
+import { type ReactNode } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { colors, radius } from '../../theme/tokens';
+import { Text } from './Text';
+
+/** The filled/outlined radio dot used by the pass selector and the contact list. */
+export function RadioDot({ selected, size = 22 }: { selected: boolean; size?: number }) {
+  return (
+    <View
+      style={[
+        styles.radio,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderColor: selected ? colors.black : colors.borderStrong,
+        },
+      ]}
+    >
+      {selected ? (
+        <View style={{ width: size / 2, height: size / 2, borderRadius: size / 4, backgroundColor: colors.black }} />
+      ) : null}
+    </View>
+  );
+}
+
+/** The circular check used on a picked contact. */
+export function CheckCircle({ selected, size = 24 }: { selected: boolean; size?: number }) {
+  return (
+    <View
+      style={[
+        styles.checkCircle,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderColor: selected ? colors.black : colors.borderStrong,
+          backgroundColor: selected ? colors.black : 'transparent',
+        },
+      ]}
+    >
+      {selected ? <Text style={styles.checkGlyph}>✓</Text> : null}
+    </View>
+  );
+}
+
+/** The square checkbox on the review screen's terms line. */
+export function Checkbox({
+  checked,
+  onToggle,
+  label,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      onPress={onToggle}
+      style={styles.checkboxRow}
+    >
+      <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+        {checked ? <Text style={styles.checkGlyph}>✓</Text> : null}
+      </View>
+      <Text variant="metaSm" style={styles.checkboxLabel}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * A selectable bordered card — the "Full Weekend Pass" / "Day 1 Pass" rows. Selected state
+ * is a 1.5px black border on creme; idle is a light border on white.
+ */
+export function SelectableCard({
+  selected,
+  onPress,
+  children,
+  radiusSize = 14,
+  disabled = false,
+}: {
+  selected: boolean;
+  onPress: () => void;
+  children: ReactNode;
+  radiusSize?: number;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.selectable,
+        { borderRadius: radiusSize },
+        selected ? styles.selectableOn : styles.selectableOff,
+        pressed && styles.pressed,
+        disabled && styles.disabled,
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+/** The −/count/+ pill from the quantity step. */
+export function QuantityStepper({
+  value,
+  min = 1,
+  max = 10,
+  onChange,
+}: {
+  value: number;
+  min?: number;
+  max?: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <View style={styles.stepper}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Remove one ticket"
+        disabled={value <= min}
+        onPress={() => onChange(value - 1)}
+        style={({ pressed }) => [styles.stepperButton, pressed && styles.pressed]}
+      >
+        <Text style={[styles.stepperMinus, value <= min && styles.stepperInert]}>−</Text>
+      </Pressable>
+      <Text style={styles.stepperValue}>{value}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add one ticket"
+        disabled={value >= max}
+        onPress={() => onChange(value + 1)}
+        style={({ pressed }) => [styles.stepperButton, pressed && styles.pressed]}
+      >
+        <Text style={[styles.stepperPlus, value >= max && styles.stepperInert]}>+</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  radio: {
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  checkCircle: {
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  checkGlyph: {
+    color: colors.creme,
+    fontSize: 13,
+    lineHeight: 16,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.black,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  checkboxChecked: {
+    backgroundColor: colors.black,
+  },
+  checkboxLabel: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 13 * 1.5,
+  },
+  selectable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderWidth: 1.5,
+  },
+  selectableOn: {
+    borderColor: colors.black,
+    backgroundColor: colors.creme,
+  },
+  selectableOff: {
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface,
+  },
+  pressed: {
+    opacity: 0.85,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  stepperButton: {
+    width: 52,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperMinus: {
+    fontSize: 24,
+    color: colors.textPrimary,
+  },
+  stepperPlus: {
+    fontSize: 22,
+    color: colors.textPrimary,
+  },
+  stepperInert: {
+    opacity: 0.3,
+  },
+  stepperValue: {
+    minWidth: 44,
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+});
