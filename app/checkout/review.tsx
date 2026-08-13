@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { API_MODE } from '../../src/api';
 import {
   BackButton,
   BulletHeading,
@@ -65,7 +66,8 @@ export default function ReviewScreen() {
     items,
     promoCode,
   });
-  const { data: price, isPending: pricePending } = priceQuery;
+  const { data: price, isPending: previewPending } = priceQuery;
+  const pricePending = API_MODE !== 'live' && previewPending;
   const createOrder = useCreateOrder();
   const validatePromo = useValidatePromoCode();
 
@@ -257,7 +259,7 @@ export default function ReviewScreen() {
         </Text>
       ) : null}
 
-      {priceQuery.isError ? (
+      {API_MODE !== 'live' && priceQuery.isError ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {messageForError(priceQuery.error)}
         </Text>

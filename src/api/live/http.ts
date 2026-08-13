@@ -184,7 +184,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   // The app is English-only (CLAUDE.md) — every mobile/public endpoint defaults to Arabic
   // content (event copy, error messages) without this header.
   const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': 'en' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (body !== undefined && form === undefined) headers['Content-Type'] = 'application/json';
   const sentAccessToken = auth ? token ?? (await getSecureItem(SECURE_KEYS.accessToken)) : null;
   if (auth) {
     if (sentAccessToken) headers.Authorization = `Bearer ${sentAccessToken}`;

@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import {
   Avatar,
   avatarColor,
@@ -39,7 +39,7 @@ export default function GuestsScreen() {
   const toggleGuest = useCheckoutStore((s) => s.toggleGuest);
   const addGuest = useCheckoutStore((s) => s.addGuest);
 
-  const { contacts, permission } = useContacts();
+  const { contacts, permission, reload } = useContacts();
   const validateGuests = useValidateGuests();
 
   const [manual, setManual] = useState('');
@@ -191,6 +191,27 @@ export default function GuestsScreen() {
             })}
           </ScrollView>
 
+          {permission === 'denied' || permission === 'error' ? (
+            <View style={styles.contactsNotice}>
+              <Text variant="metaSm" color={colors.textMuted}>
+                {permission === 'denied'
+                  ? 'Allow contacts access in your phone settings to choose guests from your address book.'
+                  : "We couldn't read your contacts right now."}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  if (permission === 'denied') void Linking.openSettings();
+                  else void reload();
+                }}
+              >
+                <Text variant="metaSm" color={colors.accentSky} style={styles.contactsAction}>
+                  {permission === 'denied' ? 'Open settings' : 'Try again'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           <Text style={styles.manualLabel}>Not in your contacts?</Text>
           <View style={styles.manualRow}>
             <View style={styles.manualInput}>
@@ -268,6 +289,13 @@ const styles = StyleSheet.create({
   },
   listContent: {
     gap: 6,
+  },
+  contactsNotice: {
+    gap: 6,
+    marginBottom: 16,
+  },
+  contactsAction: {
+    fontWeight: '600',
   },
   contactRow: {
     flexDirection: 'row',

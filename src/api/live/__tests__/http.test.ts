@@ -104,4 +104,16 @@ describe('live HTTP auth resilience', () => {
     await expect(getSecureItem(SECURE_KEYS.refreshToken)).resolves.toBe('old-refresh');
     expect(onAuthFailure).not.toHaveBeenCalled();
   });
+
+  it('does not set JSON content type for multipart uploads', async () => {
+    global.fetch = jest.fn(async (_input: unknown, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+      expect(init?.body).toBeInstanceOf(FormData);
+      return response(204);
+    }) as unknown as typeof fetch;
+
+    const form = new FormData();
+    form.append('file', new Blob(['photo'], { type: 'image/jpeg' }), 'selfie.jpg');
+    await expect(http.request('mobile/users/me/selfie', { method: 'PUT', form })).resolves.toBeUndefined();
+  });
 });

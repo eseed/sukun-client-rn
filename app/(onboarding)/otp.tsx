@@ -11,7 +11,7 @@ import {
 } from '../../src/components/ui';
 import { OtpInput } from '../../src/components/ui/OtpInput';
 import { useRequestOtp, useVerifyOtp } from '../../src/hooks/queries';
-import { messageForError } from '../../src/lib/errors';
+import { isAccountRestorationRequired, messageForError } from '../../src/lib/errors';
 import { formatCountdown } from '../../src/lib/format';
 import { formatPhoneForDisplay, isValidEgyptianPhone } from '../../src/lib/phone';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
@@ -29,6 +29,7 @@ export default function OtpScreen() {
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [restorationRequired, setRestorationRequired] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
 
   useEffect(() => {
@@ -49,25 +50,36 @@ export default function OtpScreen() {
   async function onVerify() {
     if (!pendingPhone || !isValidEgyptianPhone(pendingPhone)) return;
     setError(null);
+    setRestorationRequired(false);
     try {
        await verifyOtp.mutateAsync({ phoneNumber: pendingPhone, code });
       // Where they land depends on how much of the profile already exists — a returning
       // user skips straight into the app.
-       const user = useAuthStore.getState().user;
+        const user = useAuthStore.getState().user;
         if (!user?.profileComplete) {
           const missing = missingProfileFields(user);
-          router.replace(
-            missing.length === 1 && missing[0] === 'selfie'
-              ? '/(onboarding)/selfie'
-              : '/(onboarding)/profile',
-          );
+          if (missing.length === 0) {
+            router.replace('/(tabs)/discover');
+          } else {
+            router.replace(
+              missing.length === 1 && missing[0] === 'selfie'
+                ? '/(onboarding)/selfie'
+                : '/(onboarding)/profile',
+            );
+          }
       } else {
         router.replace('/(tabs)/discover');
       }
     } catch (err) {
+      setRestorationRequired(isAccountRestorationRequired(err));
       setError(messageForError(err));
       setCode('');
     }
+  }
+
+  function openRestoration() {
+    if (pendingPhone) useAuthStore.getState().setPendingPhone(pendingPhone);
+    router.push('/account/restore-phone');
   }
 
   async function onResend() {
@@ -106,6 +118,15 @@ export default function OtpScreen() {
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {error}
         </Text>
+      ) : null}
+
+      {restorationRequired ? (
+        <Button
+          label="Restore account"
+          variant="secondary"
+          onPress={openRestoration}
+          style={styles.restore}
+        />
       ) : null}
 
       <Pressable onPress={onResend} disabled={secondsLeft > 0} accessibilityRole="button">
@@ -155,6 +176,9 @@ const styles = StyleSheet.create({
   },
   error: {
     marginBottom: 10,
+  },
+  restore: {
+    marginBottom: 16,
   },
   resend: {
     fontWeight: '500',

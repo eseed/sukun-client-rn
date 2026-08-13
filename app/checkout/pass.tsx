@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { API_MODE } from '../../src/api';
 import {
   BackButton,
   BulletHeading,
@@ -165,13 +166,13 @@ export default function ChoosePassScreen() {
         </Text>
       ) : null}
 
-      {priceQuery.isError ? (
+      {API_MODE !== 'live' && priceQuery.isError ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.notice}>
           {messageForError(priceQuery.error)}
         </Text>
       ) : null}
 
-      {priceQuery.isPending ? (
+      {API_MODE !== 'live' && priceQuery.isPending ? (
         <Text variant="metaSm" style={styles.notice}>
           Checking the current price...
         </Text>

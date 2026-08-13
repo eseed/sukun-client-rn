@@ -56,6 +56,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** True only when the API explicitly says this account must use restoration. */
+export function isAccountRestorationRequired(error: unknown): boolean {
+  if (!isRecord(error)) return false;
+  const code = typeof error.code === 'string' ? error.code : '';
+  const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+  return (
+    code === 'ACCOUNT_DELETED' ||
+    code === 'ACCOUNT_RESTORATION_REQUIRED' ||
+    message === 'appusers.errors.accountrestorationrequired' ||
+    (code === 'AUTHENTICATION_UNAVAILABLE' &&
+      message.includes('deleted') &&
+      message.includes('restore'))
+  );
+}
+
 /** Pulls a display message off whatever the api layer threw. */
 export function messageForError(error: unknown): string {
   if (isRecord(error)) {

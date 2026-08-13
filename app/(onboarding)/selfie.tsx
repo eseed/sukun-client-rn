@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
 import {
   BulletHeading,
@@ -14,6 +14,7 @@ import { ConicRing } from '../../src/components/ui/ConicRing';
 import { useUploadSelfie } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { colors } from '../../src/theme/tokens';
+import { useAuthStore } from '../../src/stores/auth';
 
 const RING_SIZE = 236;
 
@@ -25,10 +26,18 @@ const RING_SIZE = 236;
  */
 export default function SelfieScreen() {
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
   const uploadSelfie = useUploadSelfie();
 
   const [uri, setUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.profileComplete) router.replace('/(tabs)/discover');
+    else if (user?.selfieUploaded) router.replace('/(onboarding)/profile');
+  }, [router, user]);
+
+  if (user?.profileComplete || user?.selfieUploaded) return null;
 
   async function capture() {
     setError(null);

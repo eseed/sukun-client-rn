@@ -18,9 +18,10 @@ import { colors, space } from '../../src/theme/tokens';
 export default function RestorePhoneScreen() {
   const router = useRouter();
   const status = useAuthStore((state) => state.status);
+  const pendingPhone = useAuthStore((state) => state.pendingPhone);
   const setPendingPhone = useAuthStore((state) => state.setPendingPhone);
   const requestOtp = useRequestAccountRestorationOtp();
-  const [national, setNational] = useState('');
+  const [national, setNational] = useState(() => pendingPhone?.replace(/^\+20/, '') ?? '');
   const [error, setError] = useState<string | null>(null);
   const phone = `+20${national}`;
 

@@ -74,18 +74,21 @@ export default function EventDetailScreen() {
       router.push('/(onboarding)/welcome');
       return;
     }
+    // The backend is authoritative for purchase eligibility. A projection can omit profile
+    // fields while still reporting a complete profile, so do not route a complete user through
+    // onboarding just because the local mirror is partial.
+    if (user.profileComplete) {
+      startCheckout(eventId, firstPurchasableTier.id);
+      router.push(`/checkout/pass?eventId=${eventId}`);
+      return;
+    }
     const missing = missingProfileFields(user);
     if (missing.length > 0) {
       const profileMissing = missing.some((field) => field !== 'selfie');
       router.push(profileMissing ? '/(onboarding)/profile' : '/(onboarding)/selfie');
       return;
     }
-    if (!user.profileComplete) {
-      router.push('/(onboarding)/profile');
-      return;
-    }
-    startCheckout(eventId, firstPurchasableTier.id);
-    router.push(`/checkout/pass?eventId=${eventId}`);
+    router.push('/(onboarding)/profile');
   }
 
   return (

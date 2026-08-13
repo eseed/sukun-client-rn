@@ -1,4 +1,5 @@
 import type { SukunApi } from '../contract';
+import { Platform } from 'react-native';
 import type {
   AccountDeletionPreview,
   Authenticated,
@@ -161,8 +162,14 @@ export const liveApi: SukunApi = {
       const form = new FormData();
       const name = uri.split('/').pop() ?? 'selfie.jpg';
       const type = name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-      // React Native's FormData accepts this file descriptor shape.
-      form.append('file', { uri, name, type } as unknown as Blob);
+      if (Platform.OS !== 'web') {
+        // React Native's FormData accepts this native file descriptor shape.
+        form.append('file', { uri, name, type } as unknown as Blob);
+      } else {
+        const response = await fetch(uri);
+        if (!response.ok) throw new ApiError('FILE_READ_FAILED', 'The selfie file could not be read.', response.status);
+        form.append('file', await response.blob(), name);
+      }
       await request<SelfieResponse>('mobile/users/me/selfie', { method: 'PUT', form });
       return request<LiveCurrentUser>('mobile/auth/me').then(normalizeCurrentUser);
     },

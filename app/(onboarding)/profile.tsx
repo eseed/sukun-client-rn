@@ -22,7 +22,7 @@ import { formatDateOfBirth, parseDateOfBirth } from '../../src/lib/format';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 import type { AppUserGender } from '../../src/api/types';
-import { useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 
 /**
  * Design screen 04 · About you.
@@ -60,6 +60,20 @@ export default function ProfileFormScreen() {
   const [sheet, setSheet] = useState<'gender' | 'area' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const flower = designAsset('decoFlower');
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.profileComplete) {
+      router.replace('/(tabs)/discover');
+      return;
+    }
+    const missing = missingProfileFields(user);
+    if (missing.length === 0) {
+      router.replace('/(tabs)/discover');
+    } else if (missing.length === 1 && missing[0] === 'selfie') {
+      router.replace('/(onboarding)/selfie');
+    }
+  }, [router, user]);
 
   const { control, handleSubmit, formState, reset } = useForm<FormValues>({
     resolver: zodResolver(schema),

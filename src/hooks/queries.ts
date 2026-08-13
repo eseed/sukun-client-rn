@@ -6,7 +6,7 @@ import {
   type UseQueryOptions,
 } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { api } from '../api';
+import { api, API_MODE } from '../api';
 import type {
   AccountRestorationInput,
   CreateOrderInput,
@@ -262,7 +262,9 @@ export function usePricePreview(input: {
         items,
         promoCode: promoCode ?? undefined,
       }),
-    enabled: signedIn && Boolean(eventId) && items.length > 0,
+     // Staging has no preview endpoint. Live checkout creates the order on the review CTA,
+     // which is the first server-authoritative pricing response.
+     enabled: API_MODE !== 'live' && signedIn && Boolean(eventId) && items.length > 0,
   });
 }
 
