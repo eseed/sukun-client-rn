@@ -10,7 +10,7 @@ import {
   Text,
 } from '../../src/components/ui';
 import { useEvent } from '../../src/hooks/queries';
-import { formatDateRange, formatEgp } from '../../src/lib/format';
+import { formatDateRange, formatEgp, stripHtml } from '../../src/lib/format';
 import { useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
@@ -84,7 +84,7 @@ export default function EventDetailScreen() {
 
         <View style={styles.body}>
           <Text variant="bodyLead" style={styles.lead}>
-            {event.descriptionHtml}
+            {stripHtml(event.descriptionHtml)}
           </Text>
 
           <View style={styles.badges}>

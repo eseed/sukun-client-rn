@@ -568,7 +568,7 @@ export const mockApi: SukunApi = {
       return delay(
         {
           orderStatus: order.status,
-          paymentStatus: paid ? 'succeeded' : 'pending',
+          paymentStatus: paid ? 'captured' : 'pending',
           ticketsIssued: paid
             ? order.items.reduce((acc, i) => acc + i.quantity, 0)
             : 0,
@@ -638,7 +638,7 @@ export const mockApi: SukunApi = {
     async deletionPreview(): Promise<AccountDeletionPreview> {
       requireUser();
       const active = state.tickets.filter((t) => t.status === 'active');
-      const byEvent = new Map<string, { id: string; title: string; startDate: string; ticketCount: number }>();
+      const byEvent = new Map<string, { id: string; title: string; startsAt: string; ticketCount: number }>();
       for (const t of active) {
         const existing = byEvent.get(t.event.id);
         if (existing) existing.ticketCount += 1;
@@ -646,14 +646,18 @@ export const mockApi: SukunApi = {
           byEvent.set(t.event.id, {
             id: t.event.id,
             title: t.event.title,
-            startDate: t.days[0]?.date ?? '',
+            startsAt: t.days[0]?.startsAt ?? '',
             ticketCount: 1,
           });
       }
       return delay({
-        affectedEvents: [...byEvent.values()],
         activeTicketCount: active.length,
-        canDelete: true,
+        affectedEvents: [...byEvent.values()],
+        requiresForfeitConfirmation: active.length > 0,
+        pendingPaymentOrderCount: 0,
+        deletionBlockedByPendingPayment: false,
+        dataRetainedDays: 30,
+        ticketsRestoredAfterAccountRestore: true,
       });
     },
 

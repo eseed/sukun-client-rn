@@ -42,6 +42,12 @@ interface RequestOptions {
   auth?: boolean;
   /** For the multipart selfie upload. */
   form?: FormData;
+  /**
+   * Explicit bearer token, bypassing the secure-storage lookup. Needed right after OTP verify:
+   * the fresh access token isn't persisted yet, but `mobile/auth/me` still needs it to fetch
+   * the full profile the thin verify response doesn't include.
+   */
+  token?: string;
 }
 
 function buildQuery(query: RequestOptions['query']): string {
@@ -57,11 +63,15 @@ function buildQuery(query: RequestOptions['query']): string {
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, query, auth = true, form } = options;
+  const { method = 'GET', body, query, auth = true, form, token: tokenOverride } = options;
 
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  // The app is English-only (CLAUDE.md) — every mobile/public endpoint defaults to Arabic
+  // content (event copy, error messages) without this header.
+  const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': 'en' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (auth) {
+  if (tokenOverride) {
+    headers.Authorization = `Bearer ${tokenOverride}`;
+  } else if (auth) {
     const token = await getSecureItem(SECURE_KEYS.accessToken);
     if (token) headers.Authorization = `Bearer ${token}`;
   }
@@ -78,9 +88,10 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const payload: unknown = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
-    const err = payload as { code?: string; message?: string } | null;
+    // `ErrorResponseDto` names the machine-readable code `error`, not `code`.
+    const err = payload as { error?: string; message?: string } | null;
     throw new ApiError(
-      err?.code ?? 'UNKNOWN',
+      err?.error ?? 'UNKNOWN',
       err?.message ?? response.statusText,
       response.status,
     );

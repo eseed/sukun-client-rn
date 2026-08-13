@@ -16,6 +16,26 @@ export function formatEgp(amount: string, options?: { withCurrency?: boolean }):
   return withCurrency ? `${body} EGP` : body;
 }
 
+/**
+ * `descriptionHtml` arrives as sanitized HTML (paragraphs, bold, lists) — the event screen has
+ * no HTML renderer, so this reduces it to plain text for display: block-level tags become line
+ * breaks, everything else is stripped, and the entities the CMS emits are decoded.
+ */
+export function stripHtml(html: string): string {
+  return html
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const MONTHS_SHORT = [
   'Jan',
   'Feb',

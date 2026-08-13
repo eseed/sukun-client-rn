@@ -165,7 +165,16 @@ export interface EventVenue {
 export interface EventGalleryItem {
   id: string;
   url: string;
-  caption: string | null;
+  label: string | null;
+  altText: string | null;
+  orderIndex: number;
+}
+
+export interface EventDocument {
+  id: string;
+  url: string;
+  label: string | null;
+  orderIndex: number;
 }
 
 /** `PublicEventDetailResponseDto` */
@@ -190,7 +199,7 @@ export interface EventDetail {
   salesCloseAt: string | null;
   days: EventDay[];
   gallery: EventGalleryItem[];
-  documents: { id: string; title: string; url: string }[];
+  documents: EventDocument[];
   youtubeLinks: string[];
   tiers: EventTier[];
   priceFromEgp: string | null;
@@ -384,7 +393,15 @@ export interface PaymentIntent {
 /** `PaymentStatusResponseDto` */
 export interface PaymentStatus {
   orderStatus: OrderStatus;
-  paymentStatus: 'pending' | 'processing' | 'succeeded' | 'failed';
+  paymentStatus:
+    | 'creating'
+    | 'pending'
+    | 'provider_status_unknown'
+    | 'captured'
+    | 'failed'
+    | 'expired'
+    | 'refunded'
+    | 'voided';
   ticketsIssued: number;
   paidAt: string | null;
 }
@@ -393,9 +410,13 @@ export interface PaymentStatus {
 
 /** `AccountDeletionPreviewResponseDto` */
 export interface AccountDeletionPreview {
-  affectedEvents: { id: string; title: string; startDate: string; ticketCount: number }[];
   activeTicketCount: number;
-  canDelete: boolean;
+  affectedEvents: { id: string; title: string; startsAt: string; ticketCount: number }[];
+  requiresForfeitConfirmation: boolean;
+  pendingPaymentOrderCount: number;
+  deletionBlockedByPendingPayment: boolean;
+  dataRetainedDays: number;
+  ticketsRestoredAfterAccountRestore: boolean;
 }
 
 /* ------------------------------------------------------------ pagination */

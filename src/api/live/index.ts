@@ -24,13 +24,10 @@ import type {
 import { ApiError, request } from './http';
 
 /**
- * Live backend implementation. Endpoint paths are taken from the NestJS controllers on
- * `../sukun-backend` (branch `staging`) — see each method. Staging is **not deployed yet**,
- * so this is unreachable until `EXPO_PUBLIC_API_BASE_URL` is set; the app runs on
- * `src/api/mock` in the meantime.
- *
- * Every path below is verified against a controller. Two methods have no endpoint yet and
- * throw a clearly-labelled error rather than guessing a URL — see `NOT_IMPLEMENTED` below.
+ * Live backend implementation. Endpoint paths and DTO shapes are verified against the staging
+ * OpenAPI schema (`GET /api/docs-json` on the deployed backend) — see each method. Two methods
+ * have no endpoint yet and throw a clearly-labelled error rather than guessing a URL — see
+ * `NOT_IMPLEMENTED` below.
  */
 
 function notImplemented(what: string): never {
@@ -39,6 +36,40 @@ function notImplemented(what: string): never {
     `${what} has no endpoint on the backend yet. Run in mock mode (EXPO_PUBLIC_API_MODE=mock).`,
     501,
   );
+}
+
+/** `AppUserAreaResponseDto` — the backend's area id is a smallint; the app's is a string. */
+interface RawArea {
+  id: number;
+  code: string;
+  name: string;
+}
+
+function mapArea(area: RawArea): Area {
+  return { id: String(area.id), code: area.code, name: area.name };
+}
+
+/** `MobileCurrentUserResponseDto`, before its numeric area id is normalised to a string. */
+type RawCurrentUser = Omit<CurrentUser, 'area'> & { area: RawArea | null };
+
+function mapCurrentUser(user: RawCurrentUser): CurrentUser {
+  return { ...user, area: user.area ? mapArea(user.area) : null };
+}
+
+/** `MobileAuthenticatedResponseDto` / `MobileSessionTokensResponseDto` — flat, not nested. */
+interface RawSessionTokens {
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresInSeconds: number;
+  refreshTokenExpiresInSeconds: number;
+}
+
+function mapSessionTokens(raw: RawSessionTokens): SessionTokens {
+  return {
+    accessToken: raw.accessToken,
+    refreshToken: raw.refreshToken,
+    expiresIn: raw.accessTokenExpiresInSeconds,
+  };
 }
 
 export const liveApi: SukunApi = {
@@ -51,24 +82,33 @@ export const liveApi: SukunApi = {
         auth: false,
       }),
 
-    // POST mobile/auth/otp/verify
-    verifyOtp: (phoneNumber, code, deviceId) =>
-      request<Authenticated>('mobile/auth/otp/verify', {
-        method: 'POST',
-        body: { phoneNumber, code, deviceId },
+    // POST mobile/auth/otp/verify. The response's `user` is a thin projection (no fullName,
+    // area, selfie, ...), so we fetch the full profile with the fresh token before it's
+    // persisted to secure storage — see `request`'s `token` override.
+    async verifyOtp(phoneNumber, code, deviceId): Promise<Authenticated> {
+      const raw = await request<RawSessionTokens & { isNewUser: boolean }>(
+        'mobile/auth/otp/verify',
+        { method: 'POST', body: { phoneNumber, code, deviceId }, auth: false },
+      );
+      const user = await request<RawCurrentUser>('mobile/auth/me', {
         auth: false,
-      }),
+        token: raw.accessToken,
+      });
+      return { tokens: mapSessionTokens(raw), user: mapCurrentUser(user) };
+    },
 
     // POST mobile/auth/refresh
-    refresh: (refreshToken) =>
-      request<SessionTokens>('mobile/auth/refresh', {
-        method: 'POST',
-        body: { refreshToken },
-        auth: false,
-      }),
+    refresh: async (refreshToken) =>
+      mapSessionTokens(
+        await request<RawSessionTokens>('mobile/auth/refresh', {
+          method: 'POST',
+          body: { refreshToken },
+          auth: false,
+        }),
+      ),
 
     // GET mobile/auth/me
-    me: () => request<CurrentUser>('mobile/auth/me'),
+    me: async () => mapCurrentUser(await request<RawCurrentUser>('mobile/auth/me')),
 
     // POST mobile/auth/logout → 204
     logout: () => request<void>('mobile/auth/logout', { method: 'POST' }),
@@ -79,10 +119,24 @@ export const liveApi: SukunApi = {
 
   profile: {
     // MobileAppUserProfileController — PATCH mobile/users/me/profile
-    update: (input: UpdateProfileInput) =>
-      request<CurrentUser>('mobile/users/me/profile', { method: 'PATCH', body: input }),
+    async update(input: UpdateProfileInput): Promise<CurrentUser> {
+      const raw = await request<RawCurrentUser>('mobile/users/me/profile', {
+        method: 'PATCH',
+        body: {
+          fullName: input.fullName,
+          email: input.email,
+          dateOfBirth: input.dateOfBirth,
+          gender: input.gender,
+          // `UpdateAppUserProfileRequestDto.areaId` is numeric; the app's is a string id.
+          areaId: input.areaId !== undefined ? Number(input.areaId) : undefined,
+          areaCode: input.areaCode,
+        },
+      });
+      return mapCurrentUser(raw);
+    },
 
-    // PUT mobile/users/me/selfie (multipart, field name `file`)
+    // PUT mobile/users/me/selfie (multipart, field name `file`). The response is a signed
+    // selfie URL, not the user — re-fetch `me` for the current profile shape.
     async uploadSelfie(uri: string): Promise<CurrentUser> {
       const form = new FormData();
       const name = uri.split('/').pop() ?? 'selfie.jpg';
@@ -90,7 +144,7 @@ export const liveApi: SukunApi = {
       // React Native's FormData accepts this file descriptor shape.
       form.append('file', { uri, name, type } as unknown as Blob);
       await request<unknown>('mobile/users/me/selfie', { method: 'PUT', form });
-      return request<CurrentUser>('mobile/auth/me');
+      return mapCurrentUser(await request<RawCurrentUser>('mobile/auth/me'));
     },
 
     // MobileAppUserEmailController — POST mobile/users/me/email/send-verification
@@ -100,7 +154,7 @@ export const liveApi: SukunApi = {
 
   reference: {
     // MobileReferenceController — GET mobile/reference/areas
-    areas: () => request<Area[]>('mobile/reference/areas'),
+    areas: async () => (await request<RawArea[]>('mobile/reference/areas')).map(mapArea),
   },
 
   events: {
@@ -125,50 +179,53 @@ export const liveApi: SukunApi = {
   orders: {
     /**
      * PENDING BACKEND — there is no price-preview endpoint. The server prices only at
-     * `POST /orders`, which also holds capacity, so it cannot stand in for a preview on the
-     * review screen. Either add `POST orders/preview` server-side, or move the review screen
-     * to create the order first and render its authoritative totals.
+     * `POST mobile/orders`, which also holds capacity, so it cannot stand in for a preview.
+     * The checkout screens that used to call this now create the real order (`pass.tsx`
+     * multiplies the public per-tier price for its running subtotal instead; `review.tsx`
+     * creates the order itself for the authoritative total) — see those files.
      */
     previewPrice: () => notImplemented('Order price preview'),
 
-    // MobileOrdersController — POST orders/validate-guests
+    // MobileOrdersController — POST mobile/orders/validate-guests. The endpoint only takes a
+    // phone number per guest; name/tierId are collected for `create` but not sent here.
     validateGuests: (eventId: string, guests: OrderGuestInput[]) =>
-      request<GuestValidationResult>('orders/validate-guests', {
+      request<GuestValidationResult>('mobile/orders/validate-guests', {
         method: 'POST',
-        body: { eventId, guests },
+        body: { eventId, guests: guests.map((g) => ({ phoneNumber: g.phoneNumber })) },
       }),
 
-    // POST orders/validate-promo-code
+    // POST mobile/orders/validate-promo-code
     validatePromoCode: (items, promoCode) =>
-      request<PromoValidationResult>('orders/validate-promo-code', {
+      request<PromoValidationResult>('mobile/orders/validate-promo-code', {
         method: 'POST',
         body: { items, promoCode },
       }),
 
-    // POST orders → 201 first time, 200 on identical retry
+    // POST mobile/orders → 201 first time, 200 on identical retry
     create: (input: CreateOrderInput) =>
-      request<OrderDetail>('orders', { method: 'POST', body: input }),
+      request<OrderDetail>('mobile/orders', { method: 'POST', body: input }),
 
-    // GET orders/:orderId
-    detail: (orderId) => request<OrderDetail>(`orders/${orderId}`),
+    // GET mobile/orders/:orderId
+    detail: (orderId) => request<OrderDetail>(`mobile/orders/${orderId}`),
 
-    // GET orders
+    // GET mobile/orders
     list: (cursor, limit) =>
-      request<CursorPage<OrderSummary>>('orders', {
+      request<CursorPage<OrderSummary>>('mobile/orders', {
         query: { cursor: cursor ?? undefined, limit },
       }),
 
-    // POST orders/:orderId/cancel
-    cancel: (orderId) => request<OrderDetail>(`orders/${orderId}/cancel`, { method: 'POST' }),
+    // POST mobile/orders/:orderId/cancel
+    cancel: (orderId) =>
+      request<OrderDetail>(`mobile/orders/${orderId}/cancel`, { method: 'POST' }),
   },
 
   payments: {
-    // MobilePaymentsController (path `orders/:orderId/payment`) — POST .../initiate
+    // MobilePaymentsController (path `mobile/orders/:orderId/payment`) — POST .../initiate
     initiate: (orderId) =>
-      request<PaymentIntent>(`orders/${orderId}/payment/initiate`, { method: 'POST' }),
+      request<PaymentIntent>(`mobile/orders/${orderId}/payment/initiate`, { method: 'POST' }),
 
-    // GET orders/:orderId/payment/status
-    status: (orderId) => request<PaymentStatus>(`orders/${orderId}/payment/status`),
+    // GET mobile/orders/:orderId/payment/status
+    status: (orderId) => request<PaymentStatus>(`mobile/orders/${orderId}/payment/status`),
 
     // MobilePaymentRetriesController — POST mobile/orders/:orderId/retry-payment
     retry: (orderId) =>
@@ -176,9 +233,9 @@ export const liveApi: SukunApi = {
   },
 
   tickets: {
-    // MobileTicketsController — GET tickets
+    // MobileTicketsController — GET mobile/tickets
     list: (params) =>
-      request<CursorPage<Ticket>>('tickets', {
+      request<CursorPage<Ticket>>('mobile/tickets', {
         query: {
           statuses: params?.statuses,
           cursor: params?.cursor ?? undefined,
@@ -186,11 +243,11 @@ export const liveApi: SukunApi = {
         },
       }),
 
-    // GET tickets/:ticketId
-    detail: (ticketId) => request<Ticket>(`tickets/${ticketId}`),
+    // GET mobile/tickets/:ticketId
+    detail: (ticketId) => request<Ticket>(`mobile/tickets/${ticketId}`),
 
-    // POST tickets/:ticketId/claim
-    claim: (ticketId) => request<Ticket>(`tickets/${ticketId}/claim`, { method: 'POST' }),
+    // POST mobile/tickets/:ticketId/claim
+    claim: (ticketId) => request<Ticket>(`mobile/tickets/${ticketId}/claim`, { method: 'POST' }),
 
     /**
      * PENDING BACKEND — the rotating entry pass has no endpoint. `MobileTicketsController`
@@ -201,14 +258,19 @@ export const liveApi: SukunApi = {
 
   account: {
     // MobileAppUserAccountLifecycleController (path `mobile/users/me`) — GET .../deletion-preview
-    deletionPreview: () => request<AccountDeletionPreview>('mobile/users/me/deletion-preview'),
+    deletionPreview: () =>
+      request<AccountDeletionPreview>('mobile/users/me/deletion-preview'),
 
     // POST mobile/users/me/deletion/otp/request
     requestDeletionOtp: () =>
       request<OtpRequested>('mobile/users/me/deletion/otp/request', { method: 'POST' }),
 
-    // DELETE mobile/users/me
+    // DELETE mobile/users/me. `confirmForfeit` is sent unconditionally: the delete screen
+    // already warns unconditionally that active tickets are forfeited before this fires.
     delete: (code, reason) =>
-      request<void>('mobile/users/me', { method: 'DELETE', body: { code, reason } }),
+      request<void>('mobile/users/me', {
+        method: 'DELETE',
+        body: { otpCode: code, confirmForfeit: true, reason },
+      }),
   },
 };

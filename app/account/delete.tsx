@@ -93,7 +93,7 @@ export default function DeleteAccountScreen() {
                 <View key={event.id} style={styles.eventRow}>
                   <Text variant="bodyValue">{event.title}</Text>
                   <Text variant="metaSm">
-                    {event.startDate ? formatDate(event.startDate) : ''} ·{' '}
+                    {event.startsAt ? formatDate(event.startsAt) : ''} ·{' '}
                     {event.ticketCount} {event.ticketCount === 1 ? 'ticket' : 'tickets'}
                   </Text>
                 </View>

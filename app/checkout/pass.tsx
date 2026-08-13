@@ -12,15 +12,18 @@ import {
   Text,
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
-import { useEvent, usePricePreview } from '../../src/hooks/queries';
+import { useEvent } from '../../src/hooks/queries';
 import { formatEgp } from '../../src/lib/format';
+import { multiplyEgp } from '../../src/lib/money';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { colors } from '../../src/theme/tokens';
 
 /**
  * Design screen 08 · Checkout, choose your pass.
  *
- * The subtotal is read from the api, never multiplied here (CLAUDE.md rule 7).
+ * No order exists yet to price authoritatively (guests aren't picked until the next screen),
+ * so this subtotal is the tier's public unit price times the chosen quantity — see
+ * `multiplyEgp`. The review screen's real order is what's actually charged (CLAUDE.md rule 7).
  */
 export default function ChoosePassScreen() {
   const router = useRouter();
@@ -32,8 +35,6 @@ export default function ChoosePassScreen() {
   const setQuantity = useCheckoutStore((s) => s.setQuantity);
 
   const { data: event, isPending } = useEvent(eventId);
-  const items = tierId ? [{ tierId, quantity }] : [];
-  const { data: price } = usePricePreview({ eventId, items });
 
   if (isPending || !event) {
     return (
@@ -44,6 +45,8 @@ export default function ChoosePassScreen() {
   }
 
   const maxPerOrder = event.maxTicketsPerOrder;
+  const selectedTier = event.tiers.find((t) => t.id === tierId);
+  const subtotal = selectedTier ? multiplyEgp(selectedTier.priceEgp, quantity) : null;
 
   return (
     <Screen contentStyle={styles.content}>
@@ -87,7 +90,7 @@ export default function ChoosePassScreen() {
         <View style={styles.subtotal}>
           <Text style={styles.subtotalLabel}>Subtotal</Text>
           <Text style={styles.subtotalValue}>
-            {price ? formatEgp(price.subtotalEgp) : '—'}
+            {subtotal ? formatEgp(subtotal) : '—'}
           </Text>
         </View>
       </View>
