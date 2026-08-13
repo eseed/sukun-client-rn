@@ -17,7 +17,6 @@ import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
 import { messageForError } from '../../src/lib/errors';
 import { useEvent, usePricePreview } from '../../src/hooks/queries';
 import { formatEgp } from '../../src/lib/format';
-import { multiplyEgp } from '../../src/lib/money';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { colors } from '../../src/theme/tokens';
 import { useCheckoutAccess } from './_guard';
@@ -103,7 +102,7 @@ export default function ChoosePassScreen() {
   const quantityLimit = Math.min(maxPerOrder, tierLimit);
   const eventUnavailable = event.state !== 'on_sale';
   const canContinue = Boolean(
-    selectedTier?.isPurchasable && quantity <= quantityLimit && !eventUnavailable && price,
+    selectedTier?.isPurchasable && quantity <= quantityLimit && !eventUnavailable,
   );
 
   return (
@@ -155,7 +154,7 @@ export default function ChoosePassScreen() {
         <View style={styles.subtotal}>
           <Text style={styles.subtotalLabel}>Subtotal</Text>
           <Text style={styles.subtotalValue}>
-            {subtotal ? formatEgp(subtotal) : '—'}
+            {price?.subtotalEgp ? formatEgp(price.subtotalEgp) : '—'}
           </Text>
         </View>
       </View>

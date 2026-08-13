@@ -1,5 +1,8 @@
 /* global jest */
 
+// Screen and mock-api tests must not inherit a developer's live .env setting.
+process.env.EXPO_PUBLIC_API_MODE = 'mock';
+
 jest.mock('expo-secure-store', () => {
   const store = new Map();
   return {
@@ -53,4 +56,4 @@ jest.mock('paymob-reactnative', () => ({
     removeSdkListener: jest.fn(),
   },
   PaymentStatus: { SUCCESS: 'Success', FAIL: 'Fail', CANCELLED: 'Cancelled', PENDING: 'Pending' },
-}));
+}), { virtual: true });

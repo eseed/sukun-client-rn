@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import {
   BackButton,
@@ -23,6 +23,7 @@ import {
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
+import type { OrderDetail } from '../../src/api/types';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from './_guard';
 
@@ -58,7 +59,7 @@ export default function ReviewScreen() {
 
   const eventQuery = useEvent(validEventId);
   const { data: event } = eventQuery;
-  const items = tierId ? [{ tierId, quantity }] : [];
+  const items = useMemo(() => (tierId ? [{ tierId, quantity }] : []), [quantity, tierId]);
   const priceQuery = usePricePreview({
     eventId: validEventId,
     items,
@@ -69,9 +70,8 @@ export default function ReviewScreen() {
   const validatePromo = useValidatePromoCode();
 
   const tier = event?.tiers.find((t) => t.id === tierId);
-  const vatPercent = price ? Math.round(Number(price.vatRate) * 100) : 0;
+  const vatPercent = Math.round(Number(order?.vatRate ?? price?.vatRate ?? 0) * 100);
   const invalidSelection = !event || !tier || !tier.isPurchasable;
-
   async function applyPromo() {
     setError(null);
     const code = promoDraft.trim().toUpperCase();
@@ -95,24 +95,36 @@ export default function ReviewScreen() {
 
   async function onContinue() {
     setError(null);
-    if (!validEventId || !tierId || invalidSelection || !price) {
+    if (!validEventId || !tierId || invalidSelection) {
       setError('Choose an available pass before continuing.');
       return;
     }
     try {
-      const order = await createOrder.mutateAsync({
+      const created = await createOrder.mutateAsync({
         eventId: validEventId,
         buyerTierId: tierId,
         items,
         guests: guests.map((g) => ({ phoneNumber: g.phoneNumber, name: g.name, tierId })),
-        promoCode: promo,
+        ...(promoCode ? { promoCode } : {}),
       });
       setOrder(created);
       setOrderId(created.id);
+      router.push(`/checkout/payment?orderId=${created.id}`);
     } catch (err) {
       setError(messageForError(err));
     }
   }
+
+  function removePromo() {
+    setPromoCode(null);
+    setOrder(null);
+  }
+
+  const displayedSubtotal = order?.subtotalEgp ?? price?.subtotalEgp;
+  const displayedVat = order?.vatEgp ?? price?.vatEgp;
+  const displayedTotal = order?.totalEgp ?? price?.totalEgp;
+  const displayedDiscount = order?.discountEgp ?? price?.discountEgp;
+  const displayedVatRate = order?.vatRate ?? price?.vatRate;
 
   if (access.loading) {
     return (
@@ -168,21 +180,21 @@ export default function ReviewScreen() {
       <Card radiusSize={14} style={styles.summary}>
         <SummaryRow
           label={`${tier?.name ?? 'Pass'} × ${quantity}`}
-          value={order ? formatEgp(order.subtotalEgp) : '—'}
+           value={displayedSubtotal ? formatEgp(displayedSubtotal) : '—'}
         />
 
-        {order && Number(order.vatRate) > 0 ? (
+        {displayedVat && Number(displayedVatRate) > 0 ? (
           <SummaryRow
             label={`VAT (${vatPercent}%)`}
-            value={formatEgp(order.vatEgp)}
+            value={formatEgp(displayedVat)}
             tone="muted"
           />
         ) : null}
 
-        {order && promoCode && Number(order.discountEgp) > 0 ? (
+        {promoCode && displayedDiscount && Number(displayedDiscount) > 0 ? (
           <SummaryRow
             label={`Promo · ${promoCode}`}
-            value={`−${formatEgp(order.discountEgp)}`}
+            value={`−${formatEgp(displayedDiscount)}`}
             tone="positive"
           />
         ) : null}
@@ -190,7 +202,7 @@ export default function ReviewScreen() {
         <View style={styles.totalDivider} />
         <SummaryRow
           label="Total"
-          value={order ? formatEgp(order.totalEgp) : '—'}
+          value={displayedTotal ? formatEgp(displayedTotal) : '—'}
           emphasis
         />
       </Card>
@@ -256,7 +268,7 @@ export default function ReviewScreen() {
       <Button
         label="Continue to payment"
         onPress={onContinue}
-        disabled={!termsAccepted || pricePending || !price || invalidSelection}
+        disabled={!termsAccepted || pricePending || invalidSelection}
         loading={createOrder.isPending || validatePromo.isPending}
       />
     </Screen>

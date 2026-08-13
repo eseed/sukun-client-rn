@@ -99,7 +99,7 @@ describe('04 About you', () => {
     useAuthStore.setState({ status: 'signed-in', user: null });
     renderWithProviders(<ProfileFormScreen />);
 
-    expect(screen.getByText('Step 2 of 3')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Step 2 of 3')).toBeTruthy());
     expect(screen.getByText('A little about you')).toBeTruthy();
     for (const label of ['Full name', 'Email', 'Date of birth', 'Gender', 'Living area']) {
       expect(screen.getByText(label)).toBeTruthy();

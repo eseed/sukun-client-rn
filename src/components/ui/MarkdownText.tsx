@@ -155,7 +155,7 @@ function inlineMarkdown(
     }
     const link = token.match(/^\[([^\]]+)\]\(([^\)]+)\)$/);
     if (link) {
-      const url = link[2].trim();
+      const url = link[2]?.trim() ?? '';
       const safe = isSafeUrl(url);
       return (
         <RNText

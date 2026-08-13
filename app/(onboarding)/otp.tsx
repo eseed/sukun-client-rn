@@ -14,8 +14,7 @@ import { useRequestOtp, useVerifyOtp } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatCountdown } from '../../src/lib/format';
 import { formatPhoneForDisplay, isValidEgyptianPhone } from '../../src/lib/phone';
-import { missingProfileFields } from '../../src/stores/auth';
-import { useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { colors } from '../../src/theme/tokens';
 
 const CODE_LENGTH = 4;

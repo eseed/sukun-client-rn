@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Platform, StyleSheet, View } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { Image, StyleSheet, View } from 'react-native';
 import {
   BackButton,
   BulletHeading,
@@ -21,20 +20,13 @@ import {
 } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
+import { getPaymob } from '../../src/lib/paymob';
 import { useCheckoutStore } from '../../src/stores/checkout';
-import type { PaymentIntent } from '../../src/api/types';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 
-/**
- * paymob-reactnative is a native module (Android data binding, an iOS pod) — it doesn't run
- * in Expo Go and isn't bundleable for web, so it's required lazily and only off-web. On web
- * or in Expo Go, `paymob` stays null and `onPay` reports the platform as unsupported instead
- * of throwing the SDK's own linking error.
- */
-// A static import would evaluate the native module's linking check on every platform.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const paymob = Platform.OS === 'web' ? null : require('paymob-reactnative');
+/** Paymob is resolved through a platform-specific adapter so Metro can bundle the web app. */
+const paymob = getPaymob();
 const Paymob = paymob?.default ?? null;
 const PaymentStatus = paymob?.PaymentStatus ?? null;
 
@@ -61,7 +53,6 @@ export default function PaymentScreen() {
 
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
 
   const statusQuery = usePaymentStatus(validOrderId, { poll: polling });
   const { data: status } = statusQuery;
@@ -98,8 +89,7 @@ export default function PaymentScreen() {
 
     try {
       const intent = await initiate.mutateAsync(validOrderId);
-      setPolling(true);
-      await openHostedCheckout(intent);
+      presentPaymob(intent);
     } catch (err) {
       setPolling(false);
       setError(messageForError(err));
@@ -111,23 +101,26 @@ export default function PaymentScreen() {
     setError(null);
     try {
       const intent = await retry.mutateAsync(validOrderId);
-      setPolling(true);
-      await openHostedCheckout(intent);
+      presentPaymob(intent);
     } catch (err) {
       setPolling(false);
       setError(messageForError(err));
     }
   }
 
-  async function openHostedCheckout(intent: PaymentIntent) {
-    const url = paymobCheckoutUrl(intent);
-    if (Platform.OS === 'web') {
-      // WebView is not consistently implemented by react-native-webview on web. The browser
-      // fallback still returns to this screen, where status polling remains authoritative.
-      await WebBrowser.openBrowserAsync(url).catch(() => undefined);
-      return;
-    }
-    setPaymentIntent(intent);
+  function presentPaymob(intent: { clientSecret: string; publicKey: string }) {
+    if (!Paymob) return;
+    Paymob.setAppName('Sukun');
+    Paymob.setButtonBackgroundColor(colors.gold500);
+    Paymob.setButtonTextColor(colors.creme);
+    Paymob.setSdkListener((result: string) => {
+      if (result === PaymentStatus?.FAIL || result === PaymentStatus?.CANCELLED) {
+        setPolling(false);
+        setError('The payment did not go through. Nothing was charged.');
+      }
+    });
+    Paymob.presentPayVC(intent.clientSecret, intent.publicKey);
+    setPolling(true);
   }
 
   if (!validOrderId) {
@@ -216,22 +209,6 @@ export default function PaymentScreen() {
       <Text variant="metaSm" style={styles.note}>
         Card details are entered in Paymob&apos;s secure sheet, not in Sukun.
       </Text>
-
-      {paymentIntent ? (
-        <View style={styles.checkout}>
-          <WebView
-            source={{ uri: paymobCheckoutUrl(paymentIntent) }}
-            style={styles.webView}
-            startInLoadingState
-          />
-          <Button
-            label="Return to Sukun"
-            variant="secondary"
-            onPress={() => setPaymentIntent(null)}
-            style={styles.returnButton}
-          />
-        </View>
-      ) : null}
 
       {polling && !failed && !settled ? (
         <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
@@ -327,21 +304,6 @@ const styles = StyleSheet.create({
   note: {
     marginBottom: 8,
   },
-  checkout: {
-    height: 420,
-    marginTop: 8,
-    marginBottom: 12,
-    gap: 12,
-  },
-  webView: {
-    flex: 1,
-    minHeight: 320,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  returnButton: {
-    flexShrink: 0,
-  },
   retryButton: {
     marginTop: 12,
   },
@@ -351,8 +313,3 @@ const styles = StyleSheet.create({
   },
 });
 
-function paymobCheckoutUrl(intent: PaymentIntent): string {
-  const publicKey = encodeURIComponent(intent.publicKey);
-  const clientSecret = encodeURIComponent(intent.clientSecret);
-  return `https://accept.paymob.com/unifiedcheckout/?publicKey=${publicKey}&clientSecret=${clientSecret}`;
-}

@@ -987,7 +987,6 @@ export const mockApi: SukunApi = {
       return delay({
         activeTicketCount: active.length,
         affectedEvents: [...byEvent.values()],
-        activeTicketCount: active.length,
         requiresForfeitConfirmation: false,
         pendingPaymentOrderCount: 0,
         deletionBlockedByPendingPayment: false,

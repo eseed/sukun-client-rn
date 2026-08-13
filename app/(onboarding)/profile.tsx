@@ -18,7 +18,7 @@ import {
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
-import { parseDateOfBirth } from '../../src/lib/format';
+import { formatDateOfBirth, parseDateOfBirth } from '../../src/lib/format';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 import type { AppUserGender } from '../../src/api/types';

@@ -1,0 +1,866 @@
+{
+  "components": {
+    "schemas": {
+      "CursorPageMetaDto": {
+        "properties": {
+          "hasNextPage": {
+            "example": true,
+            "type": "boolean"
+          },
+          "limit": {
+            "example": 20,
+            "type": "number"
+          },
+          "nextCursor": {
+            "example": "eyJ2IjoxfQ.signature",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["limit", "hasNextPage", "nextCursor"],
+        "type": "object"
+      },
+      "ErrorDetailDto": {
+        "properties": {
+          "field": {
+            "example": "name",
+            "type": "string"
+          },
+          "issue": {
+            "example": "name is required",
+            "type": "string"
+          }
+        },
+        "required": ["field", "issue"],
+        "type": "object"
+      },
+      "ErrorResponseDto": {
+        "properties": {
+          "details": {
+            "example": [],
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetailDto"
+            },
+            "type": "array"
+          },
+          "error": {
+            "example": "VALIDATION_ERROR",
+            "type": "string"
+          },
+          "message": {
+            "example": "Invalid data",
+            "type": "string"
+          },
+          "requestId": {
+            "example": "qa-health-001",
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "description": "Seconds to wait before retrying (present on rate-limit errors)",
+            "example": 42,
+            "type": "number"
+          },
+          "statusCode": {
+            "example": 400,
+            "type": "number"
+          },
+          "timestamp": {
+            "example": "2026-07-20T10:15:00.000Z",
+            "type": "string"
+          }
+        },
+        "required": ["statusCode", "error", "message", "details", "requestId", "timestamp"],
+        "type": "object"
+      },
+      "PublicEventDayResponseDto": {
+        "properties": {
+          "dayDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "endsAt": {
+            "example": "2026-10-23T23:00:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "gatesOpenAt": {
+            "example": "2026-10-23T06:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Day 1",
+            "nullable": true,
+            "type": "string"
+          },
+          "startsAt": {
+            "example": "2026-10-23T07:00:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": ["id", "dayDate", "label", "startsAt", "endsAt", "gatesOpenAt"],
+        "type": "object"
+      },
+      "PublicEventDetailResponseDto": {
+        "properties": {
+          "cancellationPolicy": {
+            "example": "Cancellation policy",
+            "nullable": true,
+            "type": "string"
+          },
+          "coverImageUrl": {
+            "example": "https://public-assets.example/events/.../cover.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/PublicEventDayResponseDto"
+            },
+            "type": "array"
+          },
+          "descriptionHtml": {
+            "description": "Sanitized HTML rendered from Markdown.",
+            "example": "<p>Description</p>",
+            "type": "string"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/PublicEventDocumentResponseDto"
+            },
+            "type": "array"
+          },
+          "endDate": {
+            "example": "2026-10-24",
+            "format": "date",
+            "type": "string"
+          },
+          "gallery": {
+            "items": {
+              "$ref": "#/components/schemas/PublicEventGalleryResponseDto"
+            },
+            "type": "array"
+          },
+          "id": {
+            "example": "uuid",
+            "type": "string"
+          },
+          "maxTicketsPerOrder": {
+            "example": 6,
+            "type": "number"
+          },
+          "priceFromEgp": {
+            "example": "350.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "salesCloseAt": {
+            "example": "2026-10-22T20:59:59.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "salesOpenAt": {
+            "example": "2026-08-01T09:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "slug": {
+            "example": "tulua-festival-2026",
+            "type": "string"
+          },
+          "startDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "published",
+              "on_sale",
+              "sold_out",
+              "sales_closed",
+              "live",
+              "completed",
+              "cancelled"
+            ],
+            "example": "on_sale",
+            "type": "string"
+          },
+          "tagline": {
+            "example": "Two days of stillness",
+            "nullable": true,
+            "type": "string"
+          },
+          "tags": {
+            "example": ["festival"],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "terms": {
+            "example": "Terms and conditions",
+            "nullable": true,
+            "type": "string"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/PublicEventTierResponseDto"
+            },
+            "type": "array"
+          },
+          "title": {
+            "example": "Tulua Festival 2026",
+            "type": "string"
+          },
+          "vatEnabled": {
+            "example": true,
+            "type": "boolean"
+          },
+          "venue": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicEventDetailVenueDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "whatToBring": {
+            "example": "What to bring description",
+            "nullable": true,
+            "type": "string"
+          },
+          "youtubeLinks": {
+            "example": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "tagline",
+          "descriptionHtml",
+          "coverImageUrl",
+          "state",
+          "startDate",
+          "endDate",
+          "venue",
+          "tags",
+          "whatToBring",
+          "terms",
+          "cancellationPolicy",
+          "vatEnabled",
+          "maxTicketsPerOrder",
+          "salesOpenAt",
+          "salesCloseAt",
+          "days",
+          "gallery",
+          "documents",
+          "youtubeLinks",
+          "tiers",
+          "priceFromEgp"
+        ],
+        "type": "object"
+      },
+      "PublicEventDetailVenueDto": {
+        "properties": {
+          "address": {
+            "example": "Address",
+            "nullable": true,
+            "type": "string"
+          },
+          "latitude": {
+            "example": "30.0000000",
+            "nullable": true,
+            "type": "string"
+          },
+          "longitude": {
+            "example": "31.0000000",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "example": "Venue",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["name", "address", "latitude", "longitude"],
+        "type": "object"
+      },
+      "PublicEventDocumentResponseDto": {
+        "properties": {
+          "id": {
+            "example": "uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Day 1 Schedule",
+            "nullable": true,
+            "type": "string"
+          },
+          "orderIndex": {
+            "example": 3,
+            "type": "number"
+          },
+          "url": {
+            "example": "https://public-assets.example/events/.../documents/schedule.pdf",
+            "type": "string"
+          }
+        },
+        "required": ["id", "label", "url", "orderIndex"],
+        "type": "object"
+      },
+      "PublicEventGalleryResponseDto": {
+        "properties": {
+          "altText": {
+            "example": "Festival venue",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Outdoor venue",
+            "nullable": true,
+            "type": "string"
+          },
+          "orderIndex": {
+            "example": 0,
+            "type": "number"
+          },
+          "url": {
+            "example": "https://public-assets.example/events/.../gallery/image.webp",
+            "type": "string"
+          }
+        },
+        "required": ["id", "label", "altText", "url", "orderIndex"],
+        "type": "object"
+      },
+      "PublicEventListItemResponseDto": {
+        "properties": {
+          "coverImageUrl": {
+            "example": "https://public-assets.example/events/.../cover.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "endDate": {
+            "example": "2026-10-24",
+            "format": "date",
+            "type": "string"
+          },
+          "id": {
+            "example": "uuid",
+            "type": "string"
+          },
+          "isSoldOut": {
+            "example": false,
+            "type": "boolean"
+          },
+          "priceFromEgp": {
+            "example": "350.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "slug": {
+            "example": "tulua-festival-2026",
+            "type": "string"
+          },
+          "startDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "state": {
+            "example": "on_sale",
+            "type": "string"
+          },
+          "tagline": {
+            "example": "Two days of stillness",
+            "nullable": true,
+            "type": "string"
+          },
+          "tags": {
+            "example": ["festival"],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "example": "Tulua Festival 2026",
+            "type": "string"
+          },
+          "venueName": {
+            "example": "Venue",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "title",
+          "tagline",
+          "coverImageUrl",
+          "state",
+          "startDate",
+          "endDate",
+          "venueName",
+          "priceFromEgp",
+          "tags",
+          "isSoldOut"
+        ],
+        "type": "object"
+      },
+      "PublicEventMetaResponseDto": {
+        "properties": {
+          "coverImageUrl": {
+            "example": "https://public-assets.example/events/.../cover.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "endDate": {
+            "example": "2026-10-24",
+            "format": "date",
+            "type": "string"
+          },
+          "startDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "tagline": {
+            "example": "Two days of stillness",
+            "nullable": true,
+            "type": "string"
+          },
+          "title": {
+            "example": "Tulua Festival 2026",
+            "type": "string"
+          },
+          "venueName": {
+            "example": "Venue",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["title", "tagline", "coverImageUrl", "startDate", "endDate", "venueName"],
+        "type": "object"
+      },
+      "PublicEventTierDayResponseDto": {
+        "properties": {
+          "dayDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "id": {
+            "example": "uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Day 1",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["id", "dayDate", "label"],
+        "type": "object"
+      },
+      "PublicEventTierResponseDto": {
+        "properties": {
+          "availabilityStatus": {
+            "enum": [
+              "available",
+              "expired",
+              "inactive",
+              "not_yet_open",
+              "quantity_limit_reached",
+              "sold_out"
+            ],
+            "example": "available",
+            "type": "string"
+          },
+          "available": {
+            "example": 43,
+            "type": "number"
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/PublicEventTierDayResponseDto"
+            },
+            "type": "array"
+          },
+          "description": {
+            "example": "Full event access",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "uuid",
+            "type": "string"
+          },
+          "isPurchasable": {
+            "example": true,
+            "type": "boolean"
+          },
+          "name": {
+            "example": "Regular",
+            "type": "string"
+          },
+          "priceEgp": {
+            "example": "500.00",
+            "type": "string"
+          },
+          "quantityRemaining": {
+            "example": null,
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "priceEgp",
+          "availabilityStatus",
+          "isPurchasable",
+          "available",
+          "quantityRemaining",
+          "days"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "contact": {},
+    "description": "Sukun events platform backend - Public API",
+    "title": "Sukun Backend API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/public/events": {
+      "get": {
+        "description": "Returns a cursor-paginated list of publicly visible events. Filters apply before ordering. Same-field values use OR; different fields use AND. Date boundaries are interpreted in Africa/Cairo (inclusive from, exclusive next-day to). No authentication is required.",
+        "operationId": "PublicEventsController_list_v1",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "example": "eyJ2IjoxfQ.signature",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "type": "number"
+            }
+          },
+          {
+            "description": "Repeated for OR semantics. Allowed: published, on_sale, sold_out, sales_closed, live, completed, cancelled",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Repeated for OR/overlap semantics. Max 20 unique values, 80 chars each.",
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "When true, filters to upcoming events (not started yet, expected to become live).",
+            "in": "query",
+            "name": "upcoming",
+            "required": false,
+            "schema": {
+              "example": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Filter by earliest startsAt (Cairo date, inclusive).",
+            "in": "query",
+            "name": "startsFrom",
+            "required": false,
+            "schema": {
+              "example": "2026-10-01",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by latest startsAt (Cairo date, exclusive next day).",
+            "in": "query",
+            "name": "startsTo",
+            "required": false,
+            "schema": {
+              "example": "2026-10-31",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by earliest endsAt (Cairo date, inclusive).",
+            "in": "query",
+            "name": "endsFrom",
+            "required": false,
+            "schema": {
+              "example": "2026-10-01",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by latest endsAt (Cairo date, exclusive next day).",
+            "in": "query",
+            "name": "endsTo",
+            "required": false,
+            "schema": {
+              "example": "2026-10-31",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by earliest salesCloseAt (Cairo date, inclusive).",
+            "in": "query",
+            "name": "salesCloseFrom",
+            "required": false,
+            "schema": {
+              "example": "2026-10-01",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter by latest salesCloseAt (Cairo date, exclusive next day).",
+            "in": "query",
+            "name": "salesCloseTo",
+            "required": false,
+            "schema": {
+              "example": "2026-10-31",
+              "format": "date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["ar", "en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/PublicEventListItemResponseDto"
+                      },
+                      "type": "array"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/CursorPageMetaDto"
+                    }
+                  },
+                  "required": ["data", "meta"],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Paginated list of public events."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid event filters or cursor query."
+          }
+        },
+        "summary": "List public events",
+        "tags": ["Public Events"]
+      }
+    },
+    "/api/v1/public/events/{identifier}": {
+      "get": {
+        "description": "Returns full event detail by UUID or slug. Missing, draft, and soft-deleted events return 404 EVENT_NOT_FOUND. Tier availability is computed live and not cached. No authentication is required.",
+        "operationId": "PublicEventsController_detail_v1",
+        "parameters": [
+          {
+            "description": "Event UUID or slug.",
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "pattern": "^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9]+(?:-[a-z0-9]+)*)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["ar", "en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEventDetailResponseDto"
+                }
+              }
+            },
+            "description": "Full event detail."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid event identifier."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "EVENT_NOT_FOUND"
+          }
+        },
+        "summary": "Get public event detail",
+        "tags": ["Public Events"]
+      }
+    },
+    "/api/v1/public/events/{identifier}/meta": {
+      "get": {
+        "description": "Returns minimal metadata for Open Graph and marketing-page rendering. Does not load tier availability or media arrays. No authentication is required.",
+        "operationId": "PublicEventsController_meta_v1",
+        "parameters": [
+          {
+            "description": "Event UUID or slug.",
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "pattern": "^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9]+(?:-[a-z0-9]+)*)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["ar", "en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicEventMetaResponseDto"
+                }
+              }
+            },
+            "description": "Event metadata."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid event identifier."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "EVENT_NOT_FOUND"
+          }
+        },
+        "summary": "Get public event metadata",
+        "tags": ["Public Events"]
+      }
+    }
+  },
+  "servers": [],
+  "tags": [
+    {
+      "description": "",
+      "name": "Public Events"
+    }
+  ]
+}

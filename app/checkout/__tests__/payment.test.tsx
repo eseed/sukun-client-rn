@@ -12,18 +12,17 @@ const mockRouter = {
   replace: jest.fn(),
   navigate: jest.fn(),
 };
-const mockWebView = jest.fn(() => null);
+const mockPaymob = jest.requireMock('paymob-reactnative').default as {
+  presentPayVC: jest.Mock;
+};
 
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
 }));
 
-jest.mock('react-native-webview', () => ({
-  WebView: (props: { source: { uri: string } }) => {
-    mockWebView(props);
-    return null;
-  },
+jest.mock('../../../src/lib/paymob', () => ({
+  getPaymob: () => jest.requireMock('paymob-reactnative'),
 }));
 
 async function signInAndComplete() {
@@ -46,12 +45,12 @@ beforeEach(() => {
   mockConfig.latencyMs = 0;
   mockConfig.settleDelayMs = 5000;
   for (const key of Object.keys(mockParams)) delete mockParams[key];
-  mockWebView.mockClear();
+  mockPaymob.presentPayVC.mockClear();
   mockRouter.replace.mockClear();
   useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
 });
 
-it('opens encoded Paymob checkout while waiting for server settlement', async () => {
+it('opens Paymob native checkout while waiting for server settlement', async () => {
   await signInAndComplete();
   const order = await mockApi.orders.create({
     eventId: TULUA_ID,
@@ -64,14 +63,10 @@ it('opens encoded Paymob checkout while waiting for server settlement', async ()
   renderWithProviders(<PaymentScreen />);
 
   await waitFor(() => expect(screen.getAllByText('Pay 3,648.00 EGP').length).toBe(2));
-  fireEvent.press(screen.getAllByText('Pay 3,648.00 EGP')[0]!);
+  fireEvent.press(screen.getAllByText('Pay 3,648.00 EGP')[1]!);
 
   await waitFor(() =>
-    expect(mockWebView).toHaveBeenCalledWith({
-      source: {
-        uri: 'https://accept.paymob.com/unifiedcheckout/?publicKey=pk_mock_0000&clientSecret=sec_mock_0000',
-      },
-    }),
+    expect(mockPaymob.presentPayVC).toHaveBeenCalledWith('sec_mock_0000', 'pk_mock_0000'),
   );
   expect(screen.getByText('Waiting for the server to confirm payment…')).toBeTruthy();
   expect(mockRouter.replace).not.toHaveBeenCalled();

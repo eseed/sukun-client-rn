@@ -98,13 +98,20 @@ export const liveApi: SukunApi = {
         auth: false,
       }),
 
-    // POST mobile/auth/otp/verify
-    verifyOtp: (phoneNumber, code, deviceId) =>
-      request<Authenticated>('mobile/auth/otp/verify', {
+    // POST mobile/auth/otp/verify. The response contains a projection; fetch the full profile
+    // with the new access token so onboarding has the same shape in live and mock mode.
+    async verifyOtp(phoneNumber, code, deviceId): Promise<Authenticated> {
+      const raw = await request<Authenticated>('mobile/auth/otp/verify', {
         method: 'POST',
         body: { phoneNumber: normalizePhoneForRequest(phoneNumber), code, deviceId },
         auth: false,
-      }),
+      });
+      await request<LiveCurrentUser>('mobile/auth/me', {
+        auth: true,
+        token: raw.accessToken,
+      });
+      return raw;
+    },
 
     requestAccountRestorationOtp: (phoneNumber) =>
       request<void>('mobile/auth/account-restoration/otp/request', {
@@ -118,20 +125,15 @@ export const liveApi: SukunApi = {
         method: 'POST',
         body: { ...input, phoneNumber: normalizePhoneForRequest(input.phoneNumber) },
         auth: false,
-        token: raw.accessToken,
-      });
-      return { tokens: mapSessionTokens(raw), user: mapCurrentUser(user) };
-    },
+      }),
 
     // POST mobile/auth/refresh
-    refresh: async (refreshToken) =>
-      mapSessionTokens(
-        await request<RawSessionTokens>('mobile/auth/refresh', {
-          method: 'POST',
-          body: { refreshToken },
-          auth: false,
-        }),
-      ),
+    refresh: (refreshToken) =>
+      request<SessionTokens>('mobile/auth/refresh', {
+        method: 'POST',
+        body: { refreshToken },
+        auth: false,
+      }),
 
     // GET mobile/auth/me
     me: () => request<LiveCurrentUser>('mobile/auth/me').then(normalizeCurrentUser),

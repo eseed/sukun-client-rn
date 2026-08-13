@@ -66,6 +66,8 @@ interface RequestOptions {
   auth?: boolean;
   /** For the multipart selfie upload. */
   form?: FormData;
+  /** Used for the one authenticated request immediately after OTP verification. */
+  token?: string;
   /** Set false for a request that must not trigger token rotation. */
   retryOnUnauthorized?: boolean;
 }
@@ -175,6 +177,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     query,
     auth = true,
     form,
+    token,
     retryOnUnauthorized = true,
   } = options;
 
@@ -182,7 +185,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   // content (event copy, error messages) without this header.
   const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': 'en' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const sentAccessToken = auth ? await getSecureItem(SECURE_KEYS.accessToken) : null;
+  const sentAccessToken = auth ? token ?? (await getSecureItem(SECURE_KEYS.accessToken)) : null;
   if (auth) {
     if (sentAccessToken) headers.Authorization = `Bearer ${sentAccessToken}`;
   }

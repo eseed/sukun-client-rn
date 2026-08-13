@@ -151,11 +151,8 @@ export default function GuestsScreen() {
             </Text>
           </View>
 
-          {contactsLoading ? (
-            <ResourceState status="loading" loadingLabel="Loading contacts..." style={styles.contactsState} />
-          ) : (
-            <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-              {rows.map((contact) => {
+          <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+            {rows.map((contact) => {
               const selected = selectedNumbers.has(contact.phoneNumber);
               return (
                 <Pressable
@@ -191,10 +188,8 @@ export default function GuestsScreen() {
                   <CheckCircle selected={selected} />
                 </Pressable>
               );
-              );
-              })}
-            </ScrollView>
-          )}
+            })}
+          </ScrollView>
 
           <Text style={styles.manualLabel}>Not in your contacts?</Text>
           <View style={styles.manualRow}>
