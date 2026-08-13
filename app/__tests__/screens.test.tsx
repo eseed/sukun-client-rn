@@ -201,7 +201,7 @@ describe('10 Review & pay', () => {
 
     renderWithProviders(<ReviewScreen />);
 
-    expect(screen.getByText('Checkout · step 3 of 3')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Checkout · step 3 of 3')).toBeTruthy());
     expect(screen.getByText('Review & pay')).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Full Weekend Pass × 2')).toBeTruthy());
     expect(screen.getByText('3,200.00 EGP')).toBeTruthy();
@@ -221,13 +221,13 @@ describe('11 Payment', () => {
       eventId: TULUA_ID,
       buyerTierId: TIER_WEEKEND,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-      guests: [],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
     });
     mockParams.orderId = order.id;
 
     renderWithProviders(<PaymentScreen />);
 
-    expect(screen.getByText('Payment')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Payment')).toBeTruthy());
     expect(screen.getByText('Secured by Paymob · charged in EGP')).toBeTruthy();
     await waitFor(() => expect(screen.getAllByText('Pay 3,648.00 EGP').length).toBe(2));
     expect(screen.getByText('Card number')).toBeTruthy();
@@ -235,6 +235,7 @@ describe('11 Payment', () => {
       screen.getByText("Card details are entered in Paymob's secure sheet, not in Sukun."),
     ).toBeTruthy();
   });
+
 });
 
 describe('12 Confirmation', () => {

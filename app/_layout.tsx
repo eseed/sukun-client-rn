@@ -55,6 +55,11 @@ export default function RootLayout() {
             <Stack.Screen name="event/[slug]" />
             <Stack.Screen name="checkout" />
             <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="orders" />
+            <Stack.Screen name="orders/[id]" />
+            <Stack.Screen name="account/profile" />
+            <Stack.Screen name="account/restore-phone" />
+            <Stack.Screen name="account/restore-otp" />
             <Stack.Screen name="account/delete" />
             <Stack.Screen name="legal" />
           </Stack>

@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -6,6 +6,9 @@ import {
   BulletHeading,
   Button,
   Card,
+  Checkbox,
+  InlineError,
+  ResourceState,
   Screen,
   StepLabel,
   Text,
@@ -34,13 +37,16 @@ import { colors } from '../../src/theme/tokens';
 export default function DeleteAccountScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const authStatus = useAuthStore((s) => s.status);
 
-  const { data: preview, isPending } = useDeletionPreview();
+  const previewQuery = useDeletionPreview(Boolean(user));
+  const { data: preview, isPending, isError } = previewQuery;
   const requestOtp = useRequestDeletionOtp();
   const deleteAccount = useDeleteAccount();
 
   const [stage, setStage] = useState<'review' | 'confirm'>('review');
   const [code, setCode] = useState('');
+  const [confirmForfeit, setConfirmForfeit] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onRequestCode() {
@@ -56,13 +62,22 @@ export default function DeleteAccountScreen() {
   async function onConfirm() {
     setError(null);
     try {
-      await deleteAccount.mutateAsync({ code });
+      await deleteAccount.mutateAsync({ code, confirmForfeit });
       router.replace('/(onboarding)/welcome');
     } catch (err) {
       setError(messageForError(err));
       setCode('');
     }
   }
+
+  const blocked = Boolean(preview?.deletionBlockedByPendingPayment);
+  const needsForfeit = Boolean(preview?.requiresForfeitConfirmation);
+  const canRequestCode = Boolean(preview) && !isPending && !isError && !blocked && (!needsForfeit || confirmForfeit);
+
+  if (authStatus === 'loading') {
+    return <ResourceState status="loading" loadingLabel="Loading your account..." />;
+  }
+  if (!user) return <Redirect href="/(onboarding)/welcome" />;
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -83,7 +98,23 @@ export default function DeleteAccountScreen() {
             tickets are non-refundable.
           </Text>
 
-          {isPending ? null : preview && preview.activeTicketCount > 0 ? (
+          {isPending || isError ? (
+            <ResourceState
+              status={isPending ? 'loading' : 'error'}
+              loadingLabel="Checking your account..."
+              errorMessage="We couldn't check whether your account can be deleted."
+              onRetry={() => void previewQuery.refetch()}
+            />
+          ) : preview?.deletionBlockedByPendingPayment ? (
+            <Card radiusSize={14} style={{ ...styles.card, ...styles.blockedCard }}>
+              <Text variant="eyebrow" style={styles.cardLabel}>
+                Deletion is unavailable
+              </Text>
+              <Text variant="bodyMuted">
+                Finish or cancel your {preview.pendingPaymentOrderCount === 1 ? 'pending order' : 'pending orders'} before deleting your account.
+              </Text>
+            </Card>
+          ) : preview && preview.activeTicketCount > 0 ? (
             <Card radiusSize={14} style={styles.card}>
               <Text variant="eyebrow" style={styles.cardLabel}>
                 You still hold {preview.activeTicketCount}{' '}
@@ -104,11 +135,23 @@ export default function DeleteAccountScreen() {
             </Card>
           ) : null}
 
-          {error ? (
-            <Text variant="metaSm" color={colors.rose700} style={styles.error}>
-              {error}
+          {preview && preview.requiresForfeitConfirmation ? (
+            <Card radiusSize={14} style={styles.forfeitCard}>
+              <Checkbox
+                checked={confirmForfeit}
+                onToggle={() => setConfirmForfeit((checked) => !checked)}
+                label="I understand these tickets will be forfeited and cannot be refunded."
+              />
+            </Card>
+          ) : null}
+
+          {preview && !blocked ? (
+            <Text variant="metaSm" style={styles.retentionNote}>
+              Your account data is retained for {preview.dataRetainedDays} days. If you restore your account during that period, your tickets are restored too.
             </Text>
           ) : null}
+
+          {error ? <InlineError message={error} style={styles.error} /> : null}
 
           <View style={styles.spacer} />
 
@@ -116,7 +159,8 @@ export default function DeleteAccountScreen() {
             label="Send me a code"
             variant="danger"
             onPress={onRequestCode}
-            loading={requestOtp.isPending}
+            disabled={!canRequestCode}
+            loading={requestOtp.isPending || isPending}
           />
           <Button label="Keep my account" variant="secondary" onPress={() => router.back()} style={styles.secondary} />
         </>
@@ -134,11 +178,7 @@ export default function DeleteAccountScreen() {
             <OtpInput value={code} onChange={setCode} length={4} />
           </View>
 
-          {error ? (
-            <Text variant="metaSm" color={colors.rose700} style={styles.error}>
-              {error}
-            </Text>
-          ) : null}
+          {error ? <InlineError message={error} style={styles.error} /> : null}
 
           <View style={styles.spacer} />
 
@@ -180,6 +220,9 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 20,
   },
+  blockedCard: {
+    borderColor: colors.rose100,
+  },
   cardLabel: {
     color: colors.rose700,
   },
@@ -188,6 +231,12 @@ const styles = StyleSheet.create({
   },
   cardNote: {
     marginTop: 4,
+  },
+  retentionNote: {
+    marginBottom: 12,
+  },
+  forfeitCard: {
+    marginBottom: 20,
   },
   otp: {
     marginBottom: 16,

@@ -148,7 +148,7 @@ export const eventDetails: Record<string, EventDetail> = {
         name: 'Full Weekend Pass',
         description: 'Day 1 & 2',
         priceEgp: '1600.00',
-        availabilityStatus: 'on_sale',
+        availabilityStatus: 'available',
         isPurchasable: true,
         available: 120,
         quantityRemaining: 120,
@@ -162,7 +162,7 @@ export const eventDetails: Record<string, EventDetail> = {
         name: 'Day 1 Pass',
         description: 'Sat 23 Oct',
         priceEgp: '950.00',
-        availabilityStatus: 'on_sale',
+        availabilityStatus: 'available',
         isPurchasable: true,
         available: 80,
         quantityRemaining: 80,
@@ -173,7 +173,7 @@ export const eventDetails: Record<string, EventDetail> = {
         name: 'Day 2 Pass',
         description: 'Sun 24 Oct',
         priceEgp: '950.00',
-        availabilityStatus: 'on_sale',
+        availabilityStatus: 'available',
         isPurchasable: true,
         available: 80,
         quantityRemaining: 80,
@@ -226,7 +226,7 @@ export const eventDetails: Record<string, EventDetail> = {
         name: 'General Admission',
         description: 'One mat, one place to lie down',
         priceEgp: '450.00',
-        availabilityStatus: 'on_sale',
+        availabilityStatus: 'available',
         isPurchasable: true,
         available: 40,
         quantityRemaining: 40,
@@ -278,7 +278,7 @@ export const eventDetails: Record<string, EventDetail> = {
         name: 'General Admission',
         description: null,
         priceEgp: '380.00',
-        availabilityStatus: 'on_sale',
+        availabilityStatus: 'available',
         isPurchasable: true,
         available: 25,
         quantityRemaining: 25,
@@ -294,9 +294,12 @@ export const eventDetails: Record<string, EventDetail> = {
  * subtotal (`ValidatePromoCodeResponseDto.discountAmountEgp` / `discountAppliedEgp` /
  * `fullyApplied`).
  */
-export const promoCodes: Record<string, { discountEgp: string }> = {
+export const promoCodes: Record<string, { discountEgp: string; tierIds?: string[] }> = {
   SUKUN10: { discountEgp: '320.00' },
-  TULUA500: { discountEgp: '500.00' },
+  TULUA500: {
+    discountEgp: '500.00',
+    tierIds: [TIER_WEEKEND, TIER_DAY1, TIER_DAY2],
+  },
 };
 
 /**

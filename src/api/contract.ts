@@ -5,13 +5,17 @@ import type {
   CreateOrderInput,
   CurrentUser,
   CursorPage,
+  AccountRestorationInput,
+  EmailVerificationResult,
+  EmailVerificationSent,
+  EventMeta,
+  GuestValidationInput,
   EntryPass,
   EventDetail,
   EventListItem,
   GuestValidationResult,
   ListEventsQuery,
   OrderDetail,
-  OrderGuestInput,
   OrderSummary,
   OtpRequested,
   PaymentIntent,
@@ -19,6 +23,7 @@ import type {
   PricePreview,
   PromoValidationResult,
   SessionTokens,
+  SelfieResponse,
   Ticket,
   TicketStatus,
   UpdateProfileInput,
@@ -40,6 +45,8 @@ export interface SukunApi {
      */
     requestOtp(phoneNumber: string): Promise<OtpRequested>;
     verifyOtp(phoneNumber: string, code: string, deviceId?: string): Promise<Authenticated>;
+    requestAccountRestorationOtp(phoneNumber: string): Promise<void>;
+    confirmAccountRestoration(input: AccountRestorationInput): Promise<Authenticated>;
     refresh(refreshToken: string): Promise<SessionTokens>;
     me(): Promise<CurrentUser>;
     logout(): Promise<void>;
@@ -49,8 +56,10 @@ export interface SukunApi {
   profile: {
     update(input: UpdateProfileInput): Promise<CurrentUser>;
     /** Multipart upload of the entry selfie. */
+    getSelfie(): Promise<SelfieResponse>;
     uploadSelfie(uri: string): Promise<CurrentUser>;
-    sendEmailVerification(): Promise<void>;
+    sendEmailVerification(): Promise<EmailVerificationSent>;
+    verifyEmail(token: string): Promise<EmailVerificationResult>;
   };
 
   reference: {
@@ -60,6 +69,7 @@ export interface SukunApi {
   events: {
     list(query?: ListEventsQuery): Promise<CursorPage<EventListItem>>;
     detail(identifier: string): Promise<EventDetail>;
+    meta(identifier: string): Promise<EventMeta>;
   };
 
   orders: {
@@ -72,7 +82,7 @@ export interface SukunApi {
       items: { tierId: string; quantity: number }[];
       promoCode?: string;
     }): Promise<PricePreview>;
-    validateGuests(eventId: string, guests: OrderGuestInput[]): Promise<GuestValidationResult>;
+    validateGuests(eventId: string, guests: GuestValidationInput[]): Promise<GuestValidationResult>;
     validatePromoCode(
       items: { tierId: string; quantity: number }[],
       promoCode: string,
@@ -107,7 +117,7 @@ export interface SukunApi {
 
   account: {
     deletionPreview(): Promise<AccountDeletionPreview>;
-    requestDeletionOtp(): Promise<OtpRequested>;
-    delete(code: string, reason?: string): Promise<void>;
+    requestDeletionOtp(): Promise<void>;
+    delete(code: string, reason?: string, confirmForfeit?: boolean): Promise<void>;
   };
 }

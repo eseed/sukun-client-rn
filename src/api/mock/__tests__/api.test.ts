@@ -1,5 +1,11 @@
-import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '..';
-import { TIER_DAY1, TIER_WEEKEND, TULUA_ID } from '../fixtures';
+import {
+  mockApi,
+  mockConfig,
+  MOCK_EMAIL_VERIFICATION_TOKEN,
+  MOCK_OTP_CODE,
+  resetMockState,
+} from '..';
+import { TIER_DAY1, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../fixtures';
 
 /** Drives the mock's clock so webhook timing can be asserted without sleeping. */
 let clock = Date.parse('2026-08-12T12:00:00.000Z');
@@ -62,6 +68,25 @@ describe('auth', () => {
     const { user } = await signIn();
     expect(user.status).toBe('pending_profile');
     expect(user.profileComplete).toBe(false);
+  });
+
+  it('binds pending tickets by phone, not guest name', async () => {
+    await signIn();
+    await completeProfile();
+    const order = await mockApi.orders.create({
+      eventId: TULUA_ID,
+      buyerTierId: TIER_WEEKEND,
+      items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Same name', tierId: TIER_WEEKEND }],
+    });
+    await mockApi.payments.initiate(order.id);
+    advance(5000);
+    await mockApi.payments.status(order.id);
+    await mockApi.auth.logout();
+
+    await signIn('+201022334455');
+    const { data } = await mockApi.tickets.list();
+    expect(data.some((ticket) => ticket.status === 'active' && ticket.holderName === 'Same name')).toBe(true);
   });
 });
 
@@ -147,6 +172,12 @@ describe('pricing', () => {
     expect(result.discountAppliedEgp).toBe('500.00');
     expect(result.fullyApplied).toBe(true);
   });
+
+  it('returns server promo error codes', async () => {
+    await expect(
+      mockApi.orders.validatePromoCode([{ tierId: TIER_SOUND_GA, quantity: 1 }], 'NOPE'),
+    ).rejects.toMatchObject({ code: 'PROMO_CODE_NOT_FOUND', status: 404 });
+  });
 });
 
 describe('guest validation', () => {
@@ -157,7 +188,7 @@ describe('guest validation', () => {
 
   it('accepts valid distinct guests', async () => {
     const result = await mockApi.orders.validateGuests(TULUA_ID, [
-      { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+      { phoneNumber: '+201022334455' },
     ]);
     expect(result.valid).toBe(true);
     expect(result.issues).toEqual([]);
@@ -165,26 +196,26 @@ describe('guest validation', () => {
 
   it('flags an invalid number, a duplicate, and the buyer', async () => {
     const result = await mockApi.orders.validateGuests(TULUA_ID, [
-      { phoneNumber: '0223456789', name: 'Landline', tierId: TIER_WEEKEND },
-      { phoneNumber: '+201022334455', name: 'Nour', tierId: TIER_WEEKEND },
-      { phoneNumber: '+201022334455', name: 'Nour again', tierId: TIER_WEEKEND },
-      { phoneNumber: '+201012345678', name: 'Me', tierId: TIER_WEEKEND },
+      { phoneNumber: '0223456789' },
+      { phoneNumber: '+201022334455' },
+      { phoneNumber: '+201022334455' },
+      { phoneNumber: '+201012345678' },
     ]);
     expect(result.valid).toBe(false);
     expect(result.issues.map((i) => i.error)).toEqual([
-      'GUEST_PHONE_INVALID',
-      'GUEST_DUPLICATE',
-      'GUEST_IS_BUYER',
+      'INVALID_PHONE_NUMBER',
+      'DUPLICATE_IN_ORDER',
+      'SAME_AS_BUYER',
     ]);
   });
 
   it('never signals whether a guest number is registered', async () => {
     // Rule 4: an unregistered number and a registered one must validate identically.
     const unregistered = await mockApi.orders.validateGuests(TULUA_ID, [
-      { phoneNumber: '+201199887766', name: 'Stranger', tierId: TIER_WEEKEND },
+      { phoneNumber: '+201199887766' },
     ]);
     const registered = await mockApi.orders.validateGuests(TULUA_ID, [
-      { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+      { phoneNumber: '+201022334455' },
     ]);
     expect(unregistered).toEqual(registered);
   });
@@ -301,5 +332,68 @@ describe('entry pass', () => {
     advance(31_000);
     const second = await mockApi.tickets.entryPass(ticket.id);
     expect(second.payload).not.toBe(first.payload);
+  });
+});
+
+describe('mock parity', () => {
+  it('updates email verification state and requires a sent token', async () => {
+    await signIn();
+    await mockApi.profile.update({ email: 'yasmin@email.com' });
+    await expect(mockApi.profile.verifyEmail(MOCK_EMAIL_VERIFICATION_TOKEN)).rejects.toMatchObject({
+      code: 'EMAIL_VERIFICATION_TOKEN_INVALID',
+    });
+    await mockApi.profile.sendEmailVerification();
+    expect(await mockApi.profile.verifyEmail(MOCK_EMAIL_VERIFICATION_TOKEN)).toEqual({ verified: true });
+    expect((await mockApi.auth.me()).emailVerified).toBe(true);
+  });
+
+  it('paginates event, order, and ticket lists', async () => {
+    const firstEvents = await mockApi.events.list({ limit: 1 });
+    expect(firstEvents.data).toHaveLength(1);
+    expect(firstEvents.meta.hasNextPage).toBe(true);
+    const secondEvents = await mockApi.events.list({ limit: 1, cursor: firstEvents.meta.nextCursor });
+    expect(secondEvents.data[0]?.id).not.toBe(firstEvents.data[0]?.id);
+
+    await signIn();
+    await completeProfile();
+    const order = await mockApi.orders.create({
+      eventId: TULUA_ID,
+      buyerTierId: TIER_DAY1,
+      items: [{ tierId: TIER_DAY1, quantity: 1 }],
+      guests: [],
+    });
+    const orders = await mockApi.orders.list(null, 1);
+    expect(orders.data[0]?.id).toBe(order.id);
+    const tickets = await mockApi.tickets.list({ limit: 1 });
+    expect(tickets.meta.limit).toBe(1);
+  });
+
+  it('expires an unpaid hold and does not settle it later', async () => {
+    await signIn();
+    await completeProfile();
+    const order = await mockApi.orders.create({
+      eventId: TULUA_ID,
+      buyerTierId: TIER_DAY1,
+      items: [{ tierId: TIER_DAY1, quantity: 1 }],
+      guests: [],
+    });
+    await mockApi.payments.initiate(order.id);
+    advance(16 * 60 * 1000);
+    const status = await mockApi.payments.status(order.id);
+    expect(status.orderStatus).toBe('expired');
+    expect(status.paymentStatus).toBe('expired');
+    expect(status.ticketsIssued).toBe(0);
+  });
+
+  it('restores a deleted account and its tickets', async () => {
+    await signIn();
+    await completeProfile();
+    const before = await mockApi.tickets.list();
+    await mockApi.account.requestDeletionOtp();
+    await mockApi.account.delete(MOCK_OTP_CODE);
+    await mockApi.auth.requestAccountRestorationOtp('+201012345678');
+    await mockApi.auth.confirmAccountRestoration({ phoneNumber: '+201012345678', otpCode: MOCK_OTP_CODE });
+    expect((await mockApi.auth.me()).status).toBe('active');
+    expect((await mockApi.tickets.list({ statuses: ['active'] })).data).toHaveLength(before.data.length);
   });
 });

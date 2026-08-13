@@ -34,6 +34,10 @@ const MESSAGES: Record<string, string> = {
   GUEST_IS_BUYER: "That's your own number — your ticket is already included.",
   GUEST_DUPLICATE: "You've already added that number.",
   MAX_TICKETS_EXCEEDED: 'That is more tickets than this event allows in one order.',
+  INVALID_PHONE_NUMBER: 'That does not look like an Egyptian mobile number.',
+  SAME_AS_BUYER: "That's your own number — your ticket is already included.",
+  DUPLICATE_IN_ORDER: "You've already added that number.",
+  GUEST_ALREADY_HAS_TICKET: 'That guest cannot be added to this order.',
 
   // `GuestValidationIssueResponseDto.error` on the live backend — same guest-step copy above,
   // just the server's own vocabulary instead of the mock's.
@@ -53,13 +57,18 @@ export function messageForCode(code: string | undefined): string {
   return MESSAGES[code] ?? FALLBACK;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 /** Pulls a display message off whatever the api layer threw. */
 export function messageForError(error: unknown): string {
-  if (error && typeof error === 'object') {
-    const code = (error as { code?: string }).code;
-    if (code && MESSAGES[code]) return MESSAGES[code];
-    const message = (error as { message?: string }).message;
-    if (message) return message;
+  if (isRecord(error)) {
+    const code = error.code;
+    if (typeof code === 'string') {
+      return messageForCode(code);
+    }
+    if (typeof error.message === 'string' && error.message.trim()) return error.message;
   }
   return FALLBACK;
 }

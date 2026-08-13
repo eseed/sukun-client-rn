@@ -1,10 +1,10 @@
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { BulletHeading, Screen, Text } from '../../src/components/ui';
+import type { TicketStatus } from '../../src/api/types';
+import { StyleSheet, View } from 'react-native';
+import { BulletHeading, ResourceState, Screen } from '../../src/components/ui';
 import { TicketCard } from '../../src/components/tickets/TicketCard';
 import { useTickets } from '../../src/hooks/queries';
-import { colors } from '../../src/theme/tokens';
 
 /**
  * Design screen 13 · My tickets.
@@ -14,7 +14,9 @@ import { colors } from '../../src/theme/tokens';
  */
 export default function TicketsScreen() {
   const router = useRouter();
-  const { data, isPending } = useTickets();
+  const statuses: TicketStatus[] = ['active', 'pending_claim', 'voided', 'refunded'];
+  const ticketsQuery = useTickets(statuses);
+  const { data, isPending, isError, refetch } = ticketsQuery;
 
   const groups = useMemo(() => {
     const tickets = data?.data ?? [];
@@ -41,15 +43,14 @@ export default function TicketsScreen() {
         <BulletHeading title="My tickets" size="md" />
       </View>
 
-      {isPending ? (
-        <ActivityIndicator color={colors.textPrimary} style={styles.loading} />
-      ) : groups.length === 0 ? (
-        <View style={styles.empty}>
-          <Text variant="bodyMuted">
-            No tickets yet. When you buy one — or a friend sends you one — it shows up here.
-          </Text>
-        </View>
-      ) : (
+      <ResourceState
+        status={isPending ? 'loading' : isError ? 'error' : groups.length === 0 ? 'empty' : 'success'}
+        loadingLabel="Loading your tickets..."
+        emptyTitle="No tickets yet"
+        emptyMessage="When you buy one or a friend sends you one, it shows up here."
+        errorMessage="We couldn't load your tickets."
+        onRetry={() => void refetch()}
+      >
         <View style={styles.list}>
           {groups.map(({ lead, count }) => (
             <TicketCard
@@ -60,7 +61,7 @@ export default function TicketsScreen() {
             />
           ))}
         </View>
-      )}
+      </ResourceState>
     </Screen>
   );
 }

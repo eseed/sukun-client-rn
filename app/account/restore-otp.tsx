@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import {
@@ -6,65 +6,52 @@ import {
   BulletHeading,
   Button,
   Screen,
-  StepLabel,
   Text,
 } from '../../src/components/ui';
 import { OtpInput } from '../../src/components/ui/OtpInput';
-import { useRequestOtp, useVerifyOtp } from '../../src/hooks/queries';
+import {
+  useConfirmAccountRestoration,
+  useRequestAccountRestorationOtp,
+} from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatCountdown } from '../../src/lib/format';
-import { formatPhoneForDisplay, isValidEgyptianPhone } from '../../src/lib/phone';
-import { missingProfileFields } from '../../src/stores/auth';
+import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
-import { colors } from '../../src/theme/tokens';
+import { colors, space } from '../../src/theme/tokens';
 
 const CODE_LENGTH = 4;
 const RESEND_SECONDS = 30;
 
-/** Design screen 03 · Verify code. */
-export default function OtpScreen() {
+export default function RestoreOtpScreen() {
   const router = useRouter();
-  const pendingPhone = useAuthStore((s) => s.pendingPhone);
-  const verifyOtp = useVerifyOtp();
-  const requestOtp = useRequestOtp();
-
+  const pendingPhone = useAuthStore((state) => state.pendingPhone);
+  const status = useAuthStore((state) => state.status);
+  const confirm = useConfirmAccountRestoration();
+  const requestOtp = useRequestAccountRestorationOtp();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
-    const timer = setTimeout(() => setSecondsLeft((s) => s - 1), 1000);
+    const timer = setTimeout(() => setSecondsLeft((seconds) => seconds - 1), 1000);
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  // A missing pending number means this screen was opened out of order.
   useEffect(() => {
-    if (!pendingPhone || !isValidEgyptianPhone(pendingPhone)) {
-      router.replace('/(onboarding)/phone');
-    }
+    if (!pendingPhone) router.replace('/account/restore-phone');
   }, [pendingPhone, router]);
 
-  const ready = code.length === CODE_LENGTH && !verifyOtp.isPending;
+  if (status === 'signed-in') return <Redirect href="/(tabs)/discover" />;
+  if (!pendingPhone) return <Redirect href="/account/restore-phone" />;
 
-  async function onVerify() {
-    if (!pendingPhone || !isValidEgyptianPhone(pendingPhone)) return;
+  async function onConfirm() {
+    const phone = pendingPhone;
+    if (!phone) return;
     setError(null);
     try {
-       await verifyOtp.mutateAsync({ phoneNumber: pendingPhone, code });
-      // Where they land depends on how much of the profile already exists — a returning
-      // user skips straight into the app.
-       const user = useAuthStore.getState().user;
-        if (!user?.profileComplete) {
-          const missing = missingProfileFields(user);
-          router.replace(
-            missing.length === 1 && missing[0] === 'selfie'
-              ? '/(onboarding)/selfie'
-              : '/(onboarding)/profile',
-          );
-      } else {
-        router.replace('/(tabs)/discover');
-      }
+      await confirm.mutateAsync({ phoneNumber: phone, otpCode: code });
+      router.replace('/');
     } catch (err) {
       setError(messageForError(err));
       setCode('');
@@ -72,7 +59,7 @@ export default function OtpScreen() {
   }
 
   async function onResend() {
-    if (!pendingPhone || !isValidEgyptianPhone(pendingPhone) || secondsLeft > 0) return;
+    if (!pendingPhone || secondsLeft > 0) return;
     setError(null);
     try {
       await requestOtp.mutateAsync(pendingPhone);
@@ -85,50 +72,36 @@ export default function OtpScreen() {
   return (
     <Screen contentStyle={styles.content}>
       <BackButton onPress={() => router.back()} style={styles.back} />
-
-      <StepLabel>Step 1 of 3</StepLabel>
       <View style={styles.heading}>
         <BulletHeading title="Check your texts" size="lg" />
       </View>
-
       <Text variant="bodyMuted" style={styles.blurb}>
         We sent a code to{' '}
         <Text variant="bodyMuted" color={colors.textPrimary} style={styles.strong}>
           {pendingPhone ? formatPhoneForDisplay(pendingPhone) : ''}
         </Text>
-        .
+        . Enter it to restore your account.
       </Text>
-
-      <View style={styles.inputWrap}>
-        <OtpInput value={code} onChange={setCode} length={CODE_LENGTH} />
-      </View>
-
+      <OtpInput value={code} onChange={setCode} length={CODE_LENGTH} />
       {error ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {error}
         </Text>
       ) : null}
-
       <Pressable onPress={onResend} disabled={secondsLeft > 0} accessibilityRole="button">
         <Text variant="meta">
           Didn&apos;t get it?{' '}
-          <Text
-            variant="meta"
-            color={secondsLeft > 0 ? colors.textMuted : colors.accentSky}
-            style={styles.resend}
-          >
+          <Text variant="meta" color={secondsLeft > 0 ? colors.textMuted : colors.accentSky}>
             {secondsLeft > 0 ? `Resend in ${formatCountdown(secondsLeft)}` : 'Resend code'}
           </Text>
         </Text>
       </Pressable>
-
       <View style={styles.spacer} />
-
       <Button
-        label="Verify"
-        onPress={onVerify}
-        disabled={!ready}
-        loading={verifyOtp.isPending}
+        label="Restore account"
+        onPress={onConfirm}
+        disabled={code.length !== CODE_LENGTH}
+        loading={confirm.isPending}
       />
     </Screen>
   );
@@ -139,28 +112,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   back: {
-    marginBottom: 26,
+    marginBottom: space.s6,
   },
   heading: {
-    marginTop: 8,
-    marginBottom: 10,
+    marginBottom: space.s3,
   },
   blurb: {
-    marginBottom: 30,
+    marginBottom: space.s5,
   },
   strong: {
     fontWeight: '600',
   },
-  inputWrap: {
-    marginBottom: 22,
-  },
   error: {
-    marginBottom: 10,
-  },
-  resend: {
-    fontWeight: '500',
+    marginTop: space.s3,
+    marginBottom: space.s3,
   },
   spacer: {
     flex: 1,
+    minHeight: space.s8,
   },
 });

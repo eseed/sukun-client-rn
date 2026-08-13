@@ -24,7 +24,11 @@ export function FeaturedEventCard({
       onPress={onPress}
       style={({ pressed }) => [styles.featured, pressed && styles.pressed]}
     >
-      <ImageSlot source={designAsset(imageKey)} height={170} tint={colors.sage100}>
+      <ImageSlot
+        source={event.coverImageUrl ? { uri: event.coverImageUrl } : designAsset(imageKey)}
+        height={170}
+        tint={colors.sage100}
+      >
         {event.state === 'on_sale' ? (
           <View style={styles.featuredPill}>
             <OverlayPill label="On sale now" />
@@ -67,7 +71,7 @@ export function EventListRow({
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       <ImageSlot
-        source={imageKey ? designAsset(imageKey) : null}
+        source={event.coverImageUrl ? { uri: event.coverImageUrl } : imageKey ? designAsset(imageKey) : null}
         tint={colors.sky100}
         style={styles.thumb}
       />

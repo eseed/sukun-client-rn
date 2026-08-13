@@ -1,35 +1,26 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Image, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { z } from 'zod';
+import type { AppUserGender } from '../../src/api/types';
 import {
   BackButton,
   BulletHeading,
   Button,
+  InlineError,
   PickerField,
   ResourceState,
   Screen,
-  StepLabel,
-  Text,
   TextField,
 } from '../../src/components/ui';
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
-import { parseDateOfBirth } from '../../src/lib/format';
-import { designAsset } from '../../src/theme/assets';
-import { colors } from '../../src/theme/tokens';
-import type { AppUserGender } from '../../src/api/types';
+import { formatDateOfBirth, parseDateOfBirth } from '../../src/lib/format';
 import { useAuthStore } from '../../src/stores/auth';
-
-/**
- * Design screen 04 · About you.
- *
- * These five fields plus the selfie are what gate purchase (CLAUDE.md rule 8). Email
- * verification is deliberately not required here.
- */
+import { space } from '../../src/theme/tokens';
 
 const GENDERS: { value: AppUserGender; label: string }[] = [
   { value: 'female', label: 'Woman' },
@@ -40,42 +31,43 @@ const GENDERS: { value: AppUserGender; label: string }[] = [
 const schema = z.object({
   fullName: z.string().trim().min(2, 'Tell us your name'),
   email: z.string().trim().email('Check that email address'),
-  dateOfBirth: z
-    .string()
-    .trim()
-    .refine((value) => parseDateOfBirth(value) !== null, 'Use DD/MM/YYYY'),
+  dateOfBirth: z.string().trim().refine((value) => parseDateOfBirth(value) !== null, 'Use DD/MM/YYYY'),
   gender: z.enum(['male', 'female', 'prefer_not_to_say']),
   areaId: z.string().min(1, 'Pick your area'),
 });
 
 type FormValues = z.infer<typeof schema>;
 
-export default function ProfileFormScreen() {
+export default function EditProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const authStatus = useAuthStore((state) => state.status);
   const areasQuery = useAreas();
   const areas = areasQuery.data ?? [];
   const updateProfile = useUpdateProfile();
-
   const [sheet, setSheet] = useState<'gender' | 'area' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const flower = designAsset('decoFlower');
 
-  const { control, handleSubmit, formState, reset } = useForm<FormValues>({
+  const { control, handleSubmit, formState } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { fullName: '', email: '', dateOfBirth: '', gender: undefined, areaId: '' },
-    mode: 'onBlur',
-  });
-
-  useEffect(() => {
-    reset({
+    defaultValues: {
       fullName: user?.fullName ?? '',
       email: user?.email ?? '',
       dateOfBirth: user?.dateOfBirth ? formatDateOfBirth(user.dateOfBirth) : '',
       gender: user?.gender ?? undefined,
       areaId: user?.area?.id ?? '',
-    });
-  }, [reset, user]);
+    },
+    mode: 'onBlur',
+  });
+
+  useEffect(() => {
+    if (!user) router.replace('/(onboarding)/welcome');
+  }, [router, user]);
+
+  if (authStatus === 'loading') {
+    return <ResourceState status="loading" loadingLabel="Loading your profile..." />;
+  }
+  if (!user) return <Redirect href="/(onboarding)/welcome" />;
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
@@ -87,43 +79,17 @@ export default function ProfileFormScreen() {
         gender: values.gender,
         areaId: values.areaId,
       });
-      router.push('/(onboarding)/selfie');
+      router.back();
     } catch (err) {
       setSubmitError(messageForError(err));
     }
   });
 
-  if (areasQuery.isPending) {
-    return (
-      <Screen contentStyle={styles.stateScreen}>
-        <ResourceState status="loading" loadingLabel="Loading areas..." />
-      </Screen>
-    );
-  }
-
-  if (areasQuery.isError) {
-    return (
-      <Screen contentStyle={styles.stateScreen}>
-        <ResourceState
-          status="error"
-          errorMessage="We couldn't load the area list."
-          onRetry={() => void areasQuery.refetch()}
-        />
-      </Screen>
-    );
-  }
-
   return (
     <Screen scroll contentStyle={styles.content}>
-      <View style={styles.flowerCrop} pointerEvents="none">
-        <Image source={flower} style={styles.flower} />
-      </View>
-
       <BackButton onPress={() => router.back()} style={styles.back} />
-
-      <StepLabel>Step 2 of 3</StepLabel>
       <View style={styles.heading}>
-        <BulletHeading title="A little about you" size="lg" />
+        <BulletHeading title="Edit your profile" size="lg" />
       </View>
 
       <View style={styles.fields}>
@@ -136,14 +102,12 @@ export default function ProfileFormScreen() {
               value={field.value}
               onChangeText={field.onChange}
               onBlur={field.onBlur}
-              placeholder="Your name"
               autoCapitalize="words"
               textContentType="name"
               error={fieldState.error?.message ?? null}
             />
           )}
         />
-
         <Controller
           control={control}
           name="email"
@@ -153,16 +117,13 @@ export default function ProfileFormScreen() {
               value={field.value}
               onChangeText={field.onChange}
               onBlur={field.onBlur}
-              placeholder="you@email.com"
               keyboardType="email-address"
               autoCapitalize="none"
-              autoComplete="email"
               textContentType="emailAddress"
               error={fieldState.error?.message ?? null}
             />
           )}
         />
-
         <View style={styles.row}>
           <Controller
             control={control}
@@ -181,7 +142,6 @@ export default function ProfileFormScreen() {
               />
             )}
           />
-
           <Controller
             control={control}
             name="gender"
@@ -190,14 +150,13 @@ export default function ProfileFormScreen() {
                 containerStyle={styles.rowItem}
                 label="Gender"
                 placeholder="Select"
-                value={GENDERS.find((g) => g.value === field.value)?.label ?? null}
+                value={GENDERS.find((item) => item.value === field.value)?.label ?? null}
                 onPress={() => setSheet('gender')}
                 error={fieldState.error?.message ?? null}
               />
             )}
           />
         </View>
-
         <Controller
           control={control}
           name="areaId"
@@ -206,14 +165,14 @@ export default function ProfileFormScreen() {
               <PickerField
                 label="Living area"
                 placeholder="Cairo, Egypt"
-                value={areas.find((a) => a.id === field.value)?.name ?? null}
+                value={areas.find((area) => area.id === field.value)?.name ?? null}
                 onPress={() => setSheet('area')}
                 error={fieldState.error?.message ?? null}
               />
               <OptionSheet
                 visible={sheet === 'area'}
                 title="Living area"
-                options={areas.map((a) => ({ value: a.id, label: a.name }))}
+                options={areas.map((area) => ({ value: area.id, label: area.name }))}
                 selectedValue={field.value || null}
                 onSelect={field.onChange}
                 onClose={() => setSheet(null)}
@@ -221,7 +180,6 @@ export default function ProfileFormScreen() {
             </>
           )}
         />
-
         <Controller
           control={control}
           name="gender"
@@ -238,19 +196,15 @@ export default function ProfileFormScreen() {
         />
       </View>
 
-      {submitError ? (
-        <Text variant="metaSm" color={colors.rose700} style={styles.error}>
-          {submitError}
-        </Text>
+      {areasQuery.isError ? (
+        <InlineError message="We couldn't load the area list. Try again before saving." style={styles.error} />
       ) : null}
-
-      <View style={styles.spacer} />
-
+      {submitError ? <InlineError message={submitError} style={styles.error} /> : null}
       <Button
-        label="Continue"
+        label="Save changes"
         onPress={onSubmit}
         loading={updateProfile.isPending}
-        disabled={formState.isSubmitting}
+         disabled={formState.isSubmitting || areasQuery.isError}
       />
     </Screen>
   );
@@ -259,49 +213,25 @@ export default function ProfileFormScreen() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 28,
-    flexGrow: 1,
-  },
-  stateScreen: {
-    paddingHorizontal: 28,
   },
   back: {
-    marginBottom: 26,
+    marginBottom: space.s5,
   },
   heading: {
-    marginTop: 8,
-    marginBottom: 24,
+    marginBottom: space.s5,
   },
   fields: {
-    gap: 16,
-    marginBottom: 24,
+    gap: space.s4,
+    marginBottom: space.s5,
   },
   row: {
     flexDirection: 'row',
-    gap: 14,
+    gap: space.s3,
   },
   rowItem: {
     flex: 1,
   },
   error: {
-    marginBottom: 12,
-  },
-  spacer: {
-    flex: 1,
-    minHeight: 20,
-  },
-  flowerCrop: {
-    position: 'absolute',
-    top: 58,
-    right: -6,
-    width: 60,
-    height: 60,
-    overflow: 'hidden',
-  },
-  flower: {
-    position: 'absolute',
-    width: 209,
-    height: 455,
-    left: -141,
-    top: -9,
+    marginBottom: space.s3,
   },
 });

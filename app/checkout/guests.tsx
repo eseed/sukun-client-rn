@@ -18,6 +18,7 @@ import { messageForCode, messageForError } from '../../src/lib/errors';
 import { formatNationalInput, normalizeEgyptianPhone, formatPhoneLocal, sanitizeNationalInput } from '../../src/lib/phone';
 import { guestSlots, useCheckoutStore } from '../../src/stores/checkout';
 import { colors, fontFamily } from '../../src/theme/tokens';
+import { useCheckoutAccess } from './_guard';
 
 /**
  * Design screen 09 · Checkout, guests.
@@ -29,6 +30,9 @@ import { colors, fontFamily } from '../../src/theme/tokens';
 export default function GuestsScreen() {
   const router = useRouter();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
+  const validEventId =
+    typeof eventId === 'string' && /^[A-Za-z0-9_-]+$/.test(eventId) ? eventId : undefined;
+  const access = useCheckoutAccess();
 
   const quantity = useCheckoutStore((s) => s.quantity);
   const guests = useCheckoutStore((s) => s.guests);
@@ -80,17 +84,16 @@ export default function GuestsScreen() {
 
   async function onContinue() {
     setError(null);
-    if (!eventId) return;
+    if (!validEventId) {
+      setError('This checkout link is incomplete. Go back and choose an event again.');
+      return;
+    }
 
     if (guests.length > 0) {
       try {
         const result = await validateGuests.mutateAsync({
-          eventId,
-          guests: guests.map((g) => ({
-            phoneNumber: g.phoneNumber,
-            name: g.name,
-            tierId: useCheckoutStore.getState().tierId ?? '',
-          })),
+          eventId: validEventId,
+          guests: guests.map((g) => ({ phoneNumber: g.phoneNumber })),
         });
         if (!result.valid) {
           setError(messageForCode(result.issues[0]?.error));
@@ -102,7 +105,22 @@ export default function GuestsScreen() {
       }
     }
 
-    router.push(`/checkout/review?eventId=${eventId}`);
+    router.push(`/checkout/review?eventId=${validEventId}`);
+  }
+
+  if (access.loading) return <Screen><View /></Screen>;
+  if (access.blocked) return <Screen><View /></Screen>;
+
+  if (!validEventId) {
+    return (
+      <Screen contentStyle={styles.content}>
+        <BackButton onPress={() => router.back()} style={styles.back} />
+        <Text variant="titleSm">Checkout link is incomplete</Text>
+        <Text variant="bodyMuted" style={styles.blurb}>
+          Go back and choose an event again.
+        </Text>
+      </Screen>
+    );
   }
 
   return (
@@ -133,8 +151,11 @@ export default function GuestsScreen() {
             </Text>
           </View>
 
-          <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {rows.map((contact) => {
+          {contactsLoading ? (
+            <ResourceState status="loading" loadingLabel="Loading contacts..." style={styles.contactsState} />
+          ) : (
+            <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+              {rows.map((contact) => {
               const selected = selectedNumbers.has(contact.phoneNumber);
               return (
                 <Pressable
@@ -170,8 +191,10 @@ export default function GuestsScreen() {
                   <CheckCircle selected={selected} />
                 </Pressable>
               );
-            })}
-          </ScrollView>
+              );
+              })}
+            </ScrollView>
+          )}
 
           <Text style={styles.manualLabel}>Not in your contacts?</Text>
           <View style={styles.manualRow}>

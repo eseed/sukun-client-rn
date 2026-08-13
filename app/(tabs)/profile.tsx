@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Avatar, BulletHeading, ListRow, Screen, Text } from '../../src/components/ui';
+import { Avatar, BulletHeading, ListRow, ResourceState, Screen, Text } from '../../src/components/ui';
 import { useTickets } from '../../src/hooks/queries';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
@@ -12,7 +12,8 @@ export default function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
-  const { data } = useTickets();
+  const ticketsQuery = useTickets();
+  const { data, isPending, isError, refetch } = ticketsQuery;
 
   const tickets = data?.data ?? [];
   const eventCount = new Set(tickets.map((t) => t.event.id)).size;
@@ -42,22 +43,37 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.stats}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{tickets.length}</Text>
-            <Text style={styles.statLabel}>Tickets</Text>
+        <ResourceState
+          status={isPending ? 'loading' : isError ? 'error' : 'success'}
+          loadingLabel="Loading your ticket stats..."
+          errorMessage="We couldn't load your ticket stats."
+          onRetry={() => void refetch()}
+        >
+          <View style={styles.stats}>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{tickets.length}</Text>
+              <Text style={styles.statLabel}>Tickets</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{eventCount}</Text>
+              <Text style={styles.statLabel}>Events</Text>
+            </View>
           </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{eventCount}</Text>
-            <Text style={styles.statLabel}>Events</Text>
-          </View>
-        </View>
+        </ResourceState>
 
         <Text variant="eyebrow" style={styles.sectionLabel}>
           Account
         </Text>
 
         <View style={styles.rows}>
+          <Pressable onPress={() => router.push('/account/profile')} accessibilityRole="button">
+            <ListRow label="Edit profile" />
+          </Pressable>
+
+          <Pressable onPress={() => router.push('/orders/index')} accessibilityRole="button">
+            <ListRow label="Order history" />
+          </Pressable>
+
           <Pressable onPress={() => router.push('/legal/terms')} accessibilityRole="button">
             <ListRow label="Privacy policy & terms" />
           </Pressable>

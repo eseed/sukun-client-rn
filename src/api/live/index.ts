@@ -1,27 +1,35 @@
 import type { SukunApi } from '../contract';
 import type {
   AccountDeletionPreview,
-  Area,
   Authenticated,
   CreateOrderInput,
   CurrentUser,
   CursorPage,
-  EventDetail,
   EventListItem,
-  GuestValidationResult,
+  EventMeta,
+  EmailVerificationResult,
+  EmailVerificationSent,
+  GuestValidationInput,
   ListEventsQuery,
   OrderDetail,
-  OrderGuestInput,
   OrderSummary,
   OtpRequested,
   PaymentIntent,
   PaymentStatus,
   PromoValidationResult,
   SessionTokens,
+  SelfieResponse,
+  LiveArea,
+  LiveCurrentUser,
+  LiveEventDetail,
+  LiveTicket,
+  LiveUpdateProfileInput,
+  LiveGuestValidationIssue,
   Ticket,
   UpdateProfileInput,
 } from '../types';
 import { ApiError, request } from './http';
+import { normalizeEgyptianPhone } from '../../lib/phone';
 
 /**
  * Live backend implementation. Endpoint paths and DTO shapes are verified against the staging
@@ -38,37 +46,45 @@ function notImplemented(what: string): never {
   );
 }
 
-/** `AppUserAreaResponseDto` — the backend's area id is a smallint; the app's is a string. */
-interface RawArea {
-  id: number;
-  code: string;
-  name: string;
-}
-
-function mapArea(area: RawArea): Area {
-  return { id: String(area.id), code: area.code, name: area.name };
-}
-
-/** `MobileCurrentUserResponseDto`, before its numeric area id is normalised to a string. */
-type RawCurrentUser = Omit<CurrentUser, 'area'> & { area: RawArea | null };
-
-function mapCurrentUser(user: RawCurrentUser): CurrentUser {
-  return { ...user, area: user.area ? mapArea(user.area) : null };
-}
-
-/** `MobileAuthenticatedResponseDto` / `MobileSessionTokensResponseDto` — flat, not nested. */
-interface RawSessionTokens {
-  accessToken: string;
-  refreshToken: string;
-  accessTokenExpiresInSeconds: number;
-  refreshTokenExpiresInSeconds: number;
-}
-
-function mapSessionTokens(raw: RawSessionTokens): SessionTokens {
+function normalizeCurrentUser(user: LiveCurrentUser): CurrentUser {
   return {
-    accessToken: raw.accessToken,
-    refreshToken: raw.refreshToken,
-    expiresIn: raw.accessTokenExpiresInSeconds,
+    ...user,
+    area: user.area ? { ...user.area, id: String(user.area.id) } : null,
+  };
+}
+
+function normalizePhoneForRequest(phoneNumber: string): string {
+  // Preserve invalid input so the backend returns its normal validation error and copy.
+  return normalizeEgyptianPhone(phoneNumber) ?? phoneNumber;
+}
+
+function toLiveProfileInput(input: UpdateProfileInput): LiveUpdateProfileInput {
+  const { areaId, areaCode, ...profile } = input;
+  return {
+    ...profile,
+    ...(areaId !== undefined && areaId !== ''
+      ? { areaId: Number(areaId) }
+      : areaCode !== undefined && areaCode !== ''
+        ? { areaCode }
+        : {}),
+  };
+}
+
+function normalizeTicket(ticket: LiveTicket): Ticket {
+  return {
+    ...ticket,
+    event: {
+      id: ticket.event.id,
+      slug: ticket.event.slug,
+      title: ticket.event.title,
+      coverImageUrl: ticket.event.coverImageUrl ?? null,
+      venueName: ticket.event.venueName ?? null,
+      venueLat: ticket.event.venueLat ?? null,
+      venueLng: ticket.event.venueLng ?? null,
+    },
+    days: ticket.days.map((day) => ({ ...day, gatesOpenAt: day.gatesOpenAt ?? null })),
+    orderNumber: ticket.orderNumber ?? null,
+    purchasedBy: ticket.purchasedBy ?? null,
   };
 }
 
@@ -78,19 +94,29 @@ export const liveApi: SukunApi = {
     requestOtp: (phoneNumber) =>
       request<OtpRequested>('mobile/auth/otp/request', {
         method: 'POST',
-        body: { phoneNumber },
+        body: { phoneNumber: normalizePhoneForRequest(phoneNumber) },
         auth: false,
       }),
 
-    // POST mobile/auth/otp/verify. The response's `user` is a thin projection (no fullName,
-    // area, selfie, ...), so we fetch the full profile with the fresh token before it's
-    // persisted to secure storage — see `request`'s `token` override.
-    async verifyOtp(phoneNumber, code, deviceId): Promise<Authenticated> {
-      const raw = await request<RawSessionTokens & { isNewUser: boolean }>(
-        'mobile/auth/otp/verify',
-        { method: 'POST', body: { phoneNumber, code, deviceId }, auth: false },
-      );
-      const user = await request<RawCurrentUser>('mobile/auth/me', {
+    // POST mobile/auth/otp/verify
+    verifyOtp: (phoneNumber, code, deviceId) =>
+      request<Authenticated>('mobile/auth/otp/verify', {
+        method: 'POST',
+        body: { phoneNumber: normalizePhoneForRequest(phoneNumber), code, deviceId },
+        auth: false,
+      }),
+
+    requestAccountRestorationOtp: (phoneNumber) =>
+      request<void>('mobile/auth/account-restoration/otp/request', {
+        method: 'POST',
+        body: { phoneNumber: normalizePhoneForRequest(phoneNumber) },
+        auth: false,
+      }),
+
+    confirmAccountRestoration: (input) =>
+      request<Authenticated>('mobile/auth/account-restoration/confirm', {
+        method: 'POST',
+        body: { ...input, phoneNumber: normalizePhoneForRequest(input.phoneNumber) },
         auth: false,
         token: raw.accessToken,
       });
@@ -108,7 +134,7 @@ export const liveApi: SukunApi = {
       ),
 
     // GET mobile/auth/me
-    me: async () => mapCurrentUser(await request<RawCurrentUser>('mobile/auth/me')),
+    me: () => request<LiveCurrentUser>('mobile/auth/me').then(normalizeCurrentUser),
 
     // POST mobile/auth/logout → 204
     logout: () => request<void>('mobile/auth/logout', { method: 'POST' }),
@@ -119,21 +145,13 @@ export const liveApi: SukunApi = {
 
   profile: {
     // MobileAppUserProfileController — PATCH mobile/users/me/profile
-    async update(input: UpdateProfileInput): Promise<CurrentUser> {
-      const raw = await request<RawCurrentUser>('mobile/users/me/profile', {
+    update: (input: UpdateProfileInput) =>
+      request<LiveCurrentUser>('mobile/users/me/profile', {
         method: 'PATCH',
-        body: {
-          fullName: input.fullName,
-          email: input.email,
-          dateOfBirth: input.dateOfBirth,
-          gender: input.gender,
-          // `UpdateAppUserProfileRequestDto.areaId` is numeric; the app's is a string id.
-          areaId: input.areaId !== undefined ? Number(input.areaId) : undefined,
-          areaCode: input.areaCode,
-        },
-      });
-      return mapCurrentUser(raw);
-    },
+        body: toLiveProfileInput(input),
+      }).then(normalizeCurrentUser),
+
+    getSelfie: () => request<SelfieResponse>('mobile/users/me/selfie'),
 
     // PUT mobile/users/me/selfie (multipart, field name `file`). The response is a signed
     // selfie URL, not the user — re-fetch `me` for the current profile shape.
@@ -143,18 +161,27 @@ export const liveApi: SukunApi = {
       const type = name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
       // React Native's FormData accepts this file descriptor shape.
       form.append('file', { uri, name, type } as unknown as Blob);
-      await request<unknown>('mobile/users/me/selfie', { method: 'PUT', form });
-      return mapCurrentUser(await request<RawCurrentUser>('mobile/auth/me'));
+      await request<SelfieResponse>('mobile/users/me/selfie', { method: 'PUT', form });
+      return request<LiveCurrentUser>('mobile/auth/me').then(normalizeCurrentUser);
     },
 
     // MobileAppUserEmailController — POST mobile/users/me/email/send-verification
     sendEmailVerification: () =>
-      request<void>('mobile/users/me/email/send-verification', { method: 'POST' }),
+      request<EmailVerificationSent>('mobile/users/me/email/send-verification', { method: 'POST' }),
+
+    verifyEmail: (token) =>
+      request<EmailVerificationResult>('mobile/users/me/email/verify', {
+        method: 'POST',
+        body: { token },
+      }),
   },
 
   reference: {
     // MobileReferenceController — GET mobile/reference/areas
-    areas: async () => (await request<RawArea[]>('mobile/reference/areas')).map(mapArea),
+    areas: async () => {
+      const result = await request<LiveArea[]>('mobile/reference/areas', { auth: false });
+      return result.map((area) => ({ ...area, id: String(area.id) }));
+    },
   },
 
   events: {
@@ -168,12 +195,21 @@ export const liveApi: SukunApi = {
           state: query?.state,
           tag: query?.tag,
           upcoming: query?.upcoming,
+          startsFrom: query?.startsFrom,
+          startsTo: query?.startsTo,
+          endsFrom: query?.endsFrom,
+          endsTo: query?.endsTo,
+          salesCloseFrom: query?.salesCloseFrom,
+          salesCloseTo: query?.salesCloseTo,
         },
       }),
 
     // GET public/events/:identifier (uuid or slug)
     detail: (identifier) =>
-      request<EventDetail>(`public/events/${encodeURIComponent(identifier)}`, { auth: false }),
+      request<LiveEventDetail>(`public/events/${encodeURIComponent(identifier)}`, { auth: false }),
+
+    meta: (identifier) =>
+      request<EventMeta>(`public/events/${encodeURIComponent(identifier)}/meta`, { auth: false }),
   },
 
   orders: {
@@ -186,13 +222,28 @@ export const liveApi: SukunApi = {
      */
     previewPrice: () => notImplemented('Order price preview'),
 
-    // MobileOrdersController — POST mobile/orders/validate-guests. The endpoint only takes a
-    // phone number per guest; name/tierId are collected for `create` but not sent here.
-    validateGuests: (eventId: string, guests: OrderGuestInput[]) =>
-      request<GuestValidationResult>('mobile/orders/validate-guests', {
+    // MobileOrdersController — POST orders/validate-guests
+    validateGuests: (eventId: string, guests: GuestValidationInput[]) =>
+      request<{ valid: boolean; issues: LiveGuestValidationIssue[] }>('mobile/orders/validate-guests', {
         method: 'POST',
-        body: { eventId, guests: guests.map((g) => ({ phoneNumber: g.phoneNumber })) },
-      }),
+        body: {
+          eventId,
+          guests: guests.map(({ phoneNumber }) => ({
+            phoneNumber: normalizePhoneForRequest(phoneNumber),
+          })),
+        },
+      }).then((result) => ({
+        valid: result.valid,
+        issues: result.issues.map(({ guestIndex, error }) => ({
+          guestIndex,
+          error: {
+            INVALID_PHONE_NUMBER: 'GUEST_PHONE_INVALID',
+            DUPLICATE_IN_ORDER: 'GUEST_DUPLICATE',
+            SAME_AS_BUYER: 'GUEST_IS_BUYER',
+            GUEST_ALREADY_HAS_TICKET: 'GUEST_ALREADY_HAS_TICKET',
+          }[error],
+        })),
+      })),
 
     // POST mobile/orders/validate-promo-code
     validatePromoCode: (items, promoCode) =>
@@ -203,9 +254,18 @@ export const liveApi: SukunApi = {
 
     // POST mobile/orders → 201 first time, 200 on identical retry
     create: (input: CreateOrderInput) =>
-      request<OrderDetail>('mobile/orders', { method: 'POST', body: input }),
+      request<OrderDetail>('mobile/orders', {
+        method: 'POST',
+        body: {
+          ...input,
+          guests: input.guests.map((guest) => ({
+            ...guest,
+            phoneNumber: normalizePhoneForRequest(guest.phoneNumber),
+          })),
+        },
+      }),
 
-    // GET mobile/orders/:orderId
+    // GET orders/:orderId
     detail: (orderId) => request<OrderDetail>(`mobile/orders/${orderId}`),
 
     // GET mobile/orders
@@ -214,7 +274,7 @@ export const liveApi: SukunApi = {
         query: { cursor: cursor ?? undefined, limit },
       }),
 
-    // POST mobile/orders/:orderId/cancel
+    // POST orders/:orderId/cancel
     cancel: (orderId) =>
       request<OrderDetail>(`mobile/orders/${orderId}/cancel`, { method: 'POST' }),
   },
@@ -224,7 +284,7 @@ export const liveApi: SukunApi = {
     initiate: (orderId) =>
       request<PaymentIntent>(`mobile/orders/${orderId}/payment/initiate`, { method: 'POST' }),
 
-    // GET mobile/orders/:orderId/payment/status
+    // GET orders/:orderId/payment/status
     status: (orderId) => request<PaymentStatus>(`mobile/orders/${orderId}/payment/status`),
 
     // MobilePaymentRetriesController — POST mobile/orders/:orderId/retry-payment
@@ -235,19 +295,21 @@ export const liveApi: SukunApi = {
   tickets: {
     // MobileTicketsController — GET mobile/tickets
     list: (params) =>
-      request<CursorPage<Ticket>>('mobile/tickets', {
+      request<CursorPage<LiveTicket>>('mobile/tickets', {
         query: {
           statuses: params?.statuses,
           cursor: params?.cursor ?? undefined,
           limit: params?.limit,
         },
-      }),
+      }).then((page) => ({ ...page, data: page.data.map(normalizeTicket) })),
 
-    // GET mobile/tickets/:ticketId
-    detail: (ticketId) => request<Ticket>(`mobile/tickets/${ticketId}`),
+    // GET tickets/:ticketId
+    detail: (ticketId) =>
+      request<LiveTicket>(`mobile/tickets/${ticketId}`).then(normalizeTicket),
 
-    // POST mobile/tickets/:ticketId/claim
-    claim: (ticketId) => request<Ticket>(`mobile/tickets/${ticketId}/claim`, { method: 'POST' }),
+    // POST tickets/:ticketId/claim
+    claim: (ticketId) =>
+      request<LiveTicket>(`mobile/tickets/${ticketId}/claim`, { method: 'POST' }).then(normalizeTicket),
 
     /**
      * PENDING BACKEND — the rotating entry pass has no endpoint. `MobileTicketsController`
@@ -262,15 +324,15 @@ export const liveApi: SukunApi = {
       request<AccountDeletionPreview>('mobile/users/me/deletion-preview'),
 
     // POST mobile/users/me/deletion/otp/request
-    requestDeletionOtp: () =>
-      request<OtpRequested>('mobile/users/me/deletion/otp/request', { method: 'POST' }),
+    requestDeletionOtp: async () => {
+      await request<void>('mobile/users/me/deletion/otp/request', { method: 'POST' });
+    },
 
-    // DELETE mobile/users/me. `confirmForfeit` is sent unconditionally: the delete screen
-    // already warns unconditionally that active tickets are forfeited before this fires.
-    delete: (code, reason) =>
+    // DELETE mobile/users/me
+    delete: (code, reason, confirmForfeit) =>
       request<void>('mobile/users/me', {
         method: 'DELETE',
-        body: { otpCode: code, confirmForfeit: true, reason },
+        body: { otpCode: code, reason, confirmForfeit },
       }),
   },
 };

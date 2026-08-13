@@ -41,6 +41,7 @@ export type TicketSource = 'order' | 'invitation';
 
 /** `ListPublicEventsQueryDto` PUBLIC_STATE_VALUES */
 export type PublicEventState =
+  | 'draft'
   | 'published'
   | 'on_sale'
   | 'sold_out'
@@ -49,10 +50,20 @@ export type PublicEventState =
   | 'completed'
   | 'cancelled';
 
+/** States accepted by `ListPublicEventsQueryDto`; draft events are never public. */
+export type PublicEventQueryState = Exclude<PublicEventState, 'draft'>;
+
 /* ------------------------------------------------------------------ user */
 
 export interface Area {
   id: string;
+  code: string;
+  name: string;
+}
+
+/** `AppUserAreaResponseDto` as returned by the mobile API. */
+export interface LiveArea {
+  id: number;
   code: string;
   name: string;
 }
@@ -74,7 +85,7 @@ export interface CurrentUser {
   status: AppUserStatus;
 }
 
-/** `UpdateAppUserProfileRequestDto` — partial PATCH */
+/** App-facing profile update. The live adapter converts `areaId` to the numeric wire id. */
 export interface UpdateProfileInput {
   fullName?: string;
   email?: string;
@@ -97,13 +108,72 @@ export interface OtpRequested {
 export interface SessionTokens {
   accessToken: string;
   refreshToken: string;
-  expiresIn: number;
+  accessTokenExpiresInSeconds: number;
+  refreshTokenExpiresInSeconds: number;
+}
+
+/** `MobileCurrentUserResponseDto` as returned by the mobile API. */
+export interface LiveCurrentUser extends Omit<CurrentUser, 'area'> {
+  area: LiveArea | null;
+}
+
+/** `UpdateAppUserProfileRequestDto` on the wire. */
+export interface LiveUpdateProfileInput {
+  fullName?: string;
+  email?: string;
+  dateOfBirth?: string;
+  gender?: AppUserGender;
+  areaId?: number;
+  areaCode?: string;
+}
+
+/** `UserProjectionDto`, returned inside OTP authentication responses. */
+export interface UserProjection {
+  id: string;
+  phoneNumber: string;
+  status: AppUserStatus;
+  profileComplete: boolean;
+  emailVerified: boolean;
 }
 
 /** `MobileAuthenticatedResponseDto` */
 export interface Authenticated {
-  tokens: SessionTokens;
-  user: CurrentUser;
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresInSeconds: number;
+  refreshTokenExpiresInSeconds: number;
+  user: UserProjection;
+  isNewUser: boolean;
+}
+
+/** `AppUserSelfieResponseDto` */
+export interface SelfieResponse {
+  selfieUrl: string;
+  expiresAt: string;
+  selfieUploaded: boolean;
+  profileComplete: boolean;
+  status: AppUserStatus;
+}
+
+/** `SendEmailVerificationResponseDto` */
+export interface EmailVerificationSent {
+  queued: boolean;
+  expiresInSeconds: number;
+}
+
+/** `VerifyEmailResponseDto` */
+export interface EmailVerificationResult {
+  verified: boolean;
+}
+
+/** `PublicEventMetaResponseDto` */
+export interface EventMeta {
+  title: string;
+  tagline: string | null;
+  coverImageUrl: string | null;
+  startDate: string;
+  endDate: string;
+  venueName: string | null;
 }
 
 /* ---------------------------------------------------------------- events */
@@ -115,7 +185,7 @@ export interface EventListItem {
   title: string;
   tagline: string | null;
   coverImageUrl: string | null;
-  state: PublicEventState;
+  state: PublicEventQueryState;
   startDate: string;
   endDate: string;
   venueName: string | null;
@@ -147,7 +217,13 @@ export interface EventTier {
   name: string;
   description: string | null;
   priceEgp: string;
-  availabilityStatus: string;
+  availabilityStatus:
+    | 'available'
+    | 'expired'
+    | 'inactive'
+    | 'not_yet_open'
+    | 'quantity_limit_reached'
+    | 'sold_out';
   isPurchasable: boolean;
   available: number;
   quantityRemaining: number | null;
@@ -170,13 +246,6 @@ export interface EventGalleryItem {
   orderIndex: number;
 }
 
-export interface EventDocument {
-  id: string;
-  url: string;
-  label: string | null;
-  orderIndex: number;
-}
-
 /** `PublicEventDetailResponseDto` */
 export interface EventDetail {
   id: string;
@@ -188,7 +257,7 @@ export interface EventDetail {
   state: PublicEventState;
   startDate: string;
   endDate: string;
-  venue: EventVenue;
+  venue: EventVenue | null;
   tags: string[];
   whatToBring: string | null;
   terms: string | null;
@@ -199,7 +268,7 @@ export interface EventDetail {
   salesCloseAt: string | null;
   days: EventDay[];
   gallery: EventGalleryItem[];
-  documents: EventDocument[];
+  documents: { id: string; label: string | null; url: string; orderIndex: number }[];
   youtubeLinks: string[];
   tiers: EventTier[];
   priceFromEgp: string | null;
@@ -208,9 +277,29 @@ export interface EventDetail {
 export interface ListEventsQuery {
   cursor?: string | null;
   limit?: number;
-  state?: PublicEventState[];
+  state?: PublicEventQueryState[];
   tag?: string[];
   upcoming?: boolean;
+  startsFrom?: string;
+  startsTo?: string;
+  endsFrom?: string;
+  endsTo?: string;
+  salesCloseFrom?: string;
+  salesCloseTo?: string;
+}
+
+/** Wire DTO for `PublicEventDetailResponseDto`. */
+export interface LiveEventDetail extends Omit<EventDetail, 'tiers' | 'documents'> {
+  documents: { id: string; label: string | null; url: string; orderIndex: number }[];
+  tiers: (Omit<EventTier, 'availabilityStatus'> & {
+    availabilityStatus:
+      | 'available'
+      | 'expired'
+      | 'inactive'
+      | 'not_yet_open'
+      | 'quantity_limit_reached'
+      | 'sold_out';
+  })[];
 }
 
 /* ---------------------------------------------------------------- orders */
@@ -286,6 +375,21 @@ export interface OrderSummary {
 export interface GuestValidationIssue {
   guestIndex: number;
   error: string;
+}
+
+/** `GuestValidationIssueResponseDto` on the wire. */
+export interface LiveGuestValidationIssue {
+  guestIndex: number;
+  error:
+    | 'INVALID_PHONE_NUMBER'
+    | 'DUPLICATE_IN_ORDER'
+    | 'SAME_AS_BUYER'
+    | 'GUEST_ALREADY_HAS_TICKET';
+}
+
+/** `ValidateGuestRequestDto` */
+export interface GuestValidationInput {
+  phoneNumber: string;
 }
 
 /** `ValidateGuestsResponseDto` */
@@ -379,7 +483,7 @@ export interface EntryPass {
 /** `PaymentInitiateResponseDto` */
 export interface PaymentIntent {
   paymentId: string;
-  provider: string;
+  provider: 'paymob';
   presentationMode: string;
   clientSecret: string;
   publicKey: string;
@@ -410,13 +514,43 @@ export interface PaymentStatus {
 
 /** `AccountDeletionPreviewResponseDto` */
 export interface AccountDeletionPreview {
-  activeTicketCount: number;
   affectedEvents: { id: string; title: string; startsAt: string; ticketCount: number }[];
+  activeTicketCount: number;
   requiresForfeitConfirmation: boolean;
   pendingPaymentOrderCount: number;
   deletionBlockedByPendingPayment: boolean;
   dataRetainedDays: number;
   ticketsRestoredAfterAccountRestore: boolean;
+}
+
+/** Wire DTO for `MobileTicketResponseDto`, including its optional properties. */
+export interface LiveTicket {
+  id: string;
+  ticketNumber: string;
+  status: TicketStatus;
+  usageStatus: TicketUsageStatus;
+  source: TicketSource;
+  event: {
+    id: string;
+    slug: string;
+    title: string;
+    coverImageUrl: string | null;
+    venueName: string | null;
+    venueLat: number | null;
+    venueLng: number | null;
+  };
+  tier: { id: string; name: string };
+  days: { id: string; date: string; startsAt: string; gatesOpenAt: string | null }[];
+  holderName: string;
+  orderNumber: string | null;
+  purchasedBy: { name: string; isSelf: boolean } | null;
+  issuedAt: string;
+}
+
+/** `ConfirmAccountRestorationRequestDto` */
+export interface AccountRestorationInput {
+  phoneNumber: string;
+  otpCode: string;
 }
 
 /* ------------------------------------------------------------ pagination */

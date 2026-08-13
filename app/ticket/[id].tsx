@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { BackButton, BulletHeading, Screen, Text } from '../../src/components/ui';
-import { useEntryPass, useTicket } from '../../src/hooks/queries';
+import { BackButton, Button, BulletHeading, InlineError, ResourceState, Screen, Text } from '../../src/components/ui';
+import { useClaimTicket, useEntryPass, useTicket } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
+import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { colors } from '../../src/theme/tokens';
 
 const QR_SIZE = 200;
@@ -23,89 +24,145 @@ const QR_SIZE = 200;
 export default function EntryPassScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const ticketId = typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id) ? id : undefined;
 
-  const { data: ticket } = useTicket(id);
-  const { data: pass, error, isPending } = useEntryPass(id);
-
-  const rotation = pass?.refreshAfterSeconds ?? 30;
-
-  // The countdown is derived from the pass's own expiry rather than held in state, so it
-  // stays truthful across a refetch, a backgrounded app, or a slow network.
+  const ticketQuery = useTicket(ticketId);
+  const passQuery = useEntryPass(ticketId, {
+    enabled: Boolean(ticketId) && ticketQuery.data?.usageStatus === 'usable',
+  });
+  const claimTicket = useClaimTicket();
+  const user = useAuthStore((s) => s.user);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  const secondsLeft = pass
-    ? Math.max(0, Math.ceil((Date.parse(pass.expiresAt) - now) / 1000))
+  if (!ticketId) {
+    return <Screen contentStyle={styles.stateScreen}><ResourceState status="error" errorTitle="Ticket link is not valid" errorMessage="Open your ticket again from My tickets." /></Screen>;
+  }
+
+  if (ticketQuery.isPending) {
+    return <Screen contentStyle={styles.stateScreen}><ResourceState status="loading" loadingLabel="Loading ticket..." /></Screen>;
+  }
+
+  if (ticketQuery.isError || !ticketQuery.data) {
+    return <Screen contentStyle={styles.stateScreen}><ResourceState status="error" errorMessage={messageForError(ticketQuery.error)} onRetry={() => void ticketQuery.refetch()} /></Screen>;
+  }
+
+  const ticket = ticketQuery.data;
+  const usageStatus = ticket.usageStatus;
+  const needsClaim = usageStatus === 'pending_claim';
+  const needsSelfie = usageStatus === 'selfie_required';
+  const needsProfile = usageStatus === 'profile_incomplete';
+  const unusable = usageStatus === 'voided' || usageStatus === 'refunded';
+
+  const rotation = passQuery.data?.refreshAfterSeconds ?? 30;
+
+  // The countdown is derived from the pass's own expiry rather than held in state.
+
+  const secondsLeft = passQuery.data
+    ? Math.max(0, Math.ceil((Date.parse(passQuery.data.expiresAt) - now) / 1000))
     : rotation;
 
-  const venue = ticket?.event.venueName ?? '';
+  const venue = ticket.event.venueName ?? '';
   const progress = Math.max(0, Math.min(1, secondsLeft / rotation));
+
+  async function onClaim() {
+    setActionError(null);
+    try {
+      await claimTicket.mutateAsync(ticket.id);
+    } catch (err) {
+      setActionError(messageForError(err));
+    }
+  }
+
+  function onRemediate() {
+    if (needsSelfie) router.push('/(onboarding)/selfie');
+    else if (needsProfile || missingProfileFields(user).length > 0) router.push('/(onboarding)/profile');
+  }
 
   return (
     <Screen tone="inverse" contentStyle={styles.content}>
       <BackButton tone="inverse" onPress={() => router.back()} style={styles.back} />
 
-      <View style={styles.liveRow}>
+       <View style={styles.liveRow}>
         <View style={styles.liveDot} />
         <Text style={styles.liveLabel}>
-          {ticket?.event.title ?? 'Ticket'} · live entry pass
+           {ticket.event.title} · {needsClaim || needsSelfie || needsProfile || unusable ? 'ticket status' : 'live entry pass'}
         </Text>
       </View>
 
-      <View style={styles.heading}>
-        <BulletHeading title={ticket?.tier.name ?? 'Entry pass'} size="sm" tone="inverse" />
-      </View>
+       <View style={styles.heading}>
+         <BulletHeading title={ticket.tier.name} size="sm" tone="inverse" />
+       </View>
 
-      <View style={styles.qrPanel}>
-        {isPending ? (
-          <View style={styles.qrPlaceholder}>
-            <ActivityIndicator color={colors.textPrimary} />
-          </View>
-        ) : error ? (
-          <View style={styles.qrPlaceholder}>
-            <Text variant="meta" style={styles.qrError}>
-              {messageForError(error)}
-            </Text>
-          </View>
-        ) : (
-          <QRCode
-            value={pass?.payload ?? ''}
-            size={QR_SIZE}
-            color={colors.black}
-            backgroundColor={colors.creme}
-          />
-        )}
+       {needsClaim || needsSelfie || needsProfile || unusable ? (
+         <View style={styles.statusPanel}>
+           <Text variant="titleSm" style={styles.statusTitle}>
+             {needsClaim ? 'This ticket is waiting to bind' : needsSelfie ? 'Add your selfie to use this ticket' : needsProfile ? 'Finish your profile to use this ticket' : 'This ticket cannot be used'}
+           </Text>
+           <Text variant="bodyMuted" style={styles.statusCopy}>
+             {needsClaim ? 'Claim it to attach the ticket to your phone number.' : needsSelfie ? 'Gate staff use your selfie to verify you at entry.' : needsProfile ? 'Add the required profile details before opening the entry pass.' : 'This ticket has been voided or refunded.'}
+           </Text>
+           {actionError ? <InlineError message={actionError} style={styles.actionError} /> : null}
+           {needsClaim ? <Button label="Claim ticket" onPress={onClaim} loading={claimTicket.isPending} /> : null}
+           {needsSelfie || needsProfile ? <Button label={needsSelfie ? 'Add selfie' : 'Complete profile'} onPress={onRemediate} /> : null}
+         </View>
+       ) : null}
 
-        <View style={styles.refreshRow}>
-          <View style={styles.refreshTrack}>
-            <View style={[styles.refreshFill, { flex: progress }]} />
-            <View style={{ flex: 1 - progress }} />
-          </View>
-          <Text variant="metaSm">Refreshes in {secondsLeft}s</Text>
-        </View>
-      </View>
+       {!needsClaim && !needsSelfie && !needsProfile && !unusable ? (
+         <View style={styles.qrPanel}>
+           {passQuery.isPending ? (
+             <View style={styles.qrPlaceholder}>
+               <ResourceState status="loading" loadingLabel="Preparing entry pass..." style={styles.compactState} />
+             </View>
+           ) : passQuery.error ? (
+             <View style={styles.qrPlaceholder}>
+               <ResourceState status="error" errorMessage={messageForError(passQuery.error)} onRetry={() => void passQuery.refetch()} style={styles.compactState} />
+             </View>
+           ) : (
+             <QRCode
+               value={passQuery.data?.payload ?? ''}
+               size={QR_SIZE}
+               color={colors.black}
+               backgroundColor={colors.creme}
+             />
+           )}
+
+           <View style={styles.refreshRow}>
+             <View style={styles.refreshTrack}>
+               <View style={[styles.refreshFill, { flex: progress }]} />
+               <View style={{ flex: 1 - progress }} />
+             </View>
+             <Text variant="metaSm">Refreshes in {secondsLeft}s</Text>
+           </View>
+         </View>
+       ) : null}
 
       <View style={styles.detailRowFirst}>
         <Text style={styles.detailLabel}>Holder</Text>
-        <Text style={styles.detailValue}>{ticket?.holderName ?? '—'}</Text>
+       <Text style={styles.detailValue}>{ticket.holderName || '—'}</Text>
       </View>
       <View style={styles.detailRow}>
         <Text style={styles.detailLabel}>Venue</Text>
         <Text style={styles.detailValue}>{venue}</Text>
       </View>
 
-      <Text style={styles.footnote}>
-        This code regenerates every ~{rotation} seconds. A screenshot won&apos;t get anyone in.
-      </Text>
+       {!needsClaim && !needsSelfie && !needsProfile && !unusable ? <Text style={styles.footnote}>
+         This code regenerates every ~{rotation} seconds. A screenshot won&apos;t get anyone in.
+       </Text> : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
+    paddingHorizontal: 24,
+  },
+  stateScreen: {
     paddingHorizontal: 24,
   },
   back: {
@@ -149,6 +206,25 @@ const styles = StyleSheet.create({
   },
   qrError: {
     textAlign: 'center',
+  },
+  compactState: {
+    paddingVertical: 0,
+  },
+  statusPanel: {
+    backgroundColor: colors.creme,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 22,
+  },
+  statusTitle: {
+    color: colors.textPrimary,
+  },
+  statusCopy: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  actionError: {
+    marginBottom: 12,
   },
   refreshRow: {
     flexDirection: 'row',

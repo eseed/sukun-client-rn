@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import * as Contacts from 'expo-contacts';
+import { API_MODE } from '../api';
 import { fallbackContacts } from '../api/mock/fixtures';
 import { normalizeEgyptianPhone } from '../lib/phone';
 
@@ -10,7 +11,7 @@ export interface PhoneContact {
   phoneNumber: string;
 }
 
-export type ContactsPermission = 'granted' | 'denied';
+export type ContactsPermission = 'granted' | 'denied' | 'error';
 
 interface ContactsResult {
   contacts: PhoneContact[];
@@ -24,17 +25,18 @@ interface ContactsResult {
  * downstream — checks whether a number has a Sukun account: the picker looks identical for
  * registered and unregistered people (rule 4).
  *
- * On the simulator, on web, or when permission is refused, this falls back to sample
- * contacts so the flow stays demonstrable.
+ * If permission is refused or the address book cannot be read, no contacts are fabricated.
  *
  * Goes through TanStack Query like every other read, so there is no hand-rolled loading
  * state and the address book is read once per session rather than on every mount.
  */
 async function readContacts(): Promise<ContactsResult> {
+  const fallback = API_MODE === 'mock' ? fallbackContacts : [];
+
   try {
     const { status } = await Contacts.requestPermissionsAsync();
     if (status !== 'granted') {
-      return { contacts: fallbackContacts, permission: 'denied' };
+      return { contacts: fallback, permission: 'denied' };
     }
 
     const { data } = await Contacts.getContactsAsync({
@@ -58,12 +60,9 @@ async function readContacts(): Promise<ContactsResult> {
     }
 
     mapped.sort((a, b) => a.name.localeCompare(b.name));
-    return {
-      contacts: mapped.length > 0 ? mapped : fallbackContacts,
-      permission: 'granted',
-    };
+    return { contacts: mapped.length > 0 ? mapped : fallback, permission: 'granted' };
   } catch {
-    return { contacts: fallbackContacts, permission: 'denied' };
+    return { contacts: fallback, permission: 'error' };
   }
 }
 

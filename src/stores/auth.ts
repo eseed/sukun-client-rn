@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api';
+import { setAuthFailureHandler } from '../api/live/http';
 import type { CurrentUser } from '../api/types';
 import {
   deleteSecureItem,
@@ -18,6 +19,32 @@ import {
 
 export type AuthStatus = 'loading' | 'signed-out' | 'signed-in';
 
+let clearQueryCache: (() => void) | null = null;
+let sessionGeneration = 0;
+let secureTransition = Promise.resolve();
+
+function queueSecureTransition(operation: () => Promise<void>): Promise<void> {
+  const next = secureTransition.then(operation, operation);
+  secureTransition = next.catch(() => undefined);
+  return next;
+}
+
+export function getAuthSessionGeneration(): number {
+  return sessionGeneration;
+}
+
+export function isCurrentSignedInSession(generation?: number): boolean {
+  return (
+    useAuthStore.getState().status === 'signed-in' &&
+    (generation === undefined || generation === sessionGeneration)
+  );
+}
+
+/** Registered by the provider without making the store depend on TanStack Query. */
+export function setAuthQueryCacheClearHandler(handler: (() => void) | null): void {
+  clearQueryCache = handler;
+}
+
 interface AuthState {
   status: AuthStatus;
   user: CurrentUser | null;
@@ -27,7 +54,7 @@ interface AuthState {
   setPendingPhone: (phone: string | null) => void;
   signIn: (tokens: { accessToken: string; refreshToken: string }, user: CurrentUser) => Promise<void>;
   setUser: (user: CurrentUser) => void;
-  signOut: () => Promise<void>;
+  signOut: (options?: { remote?: boolean }) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -36,18 +63,25 @@ export const useAuthStore = create<AuthState>((set) => ({
   pendingPhone: null,
 
   async restore() {
-    const token = await getSecureItem(SECURE_KEYS.accessToken);
-    if (!token) {
+    const generation = ++sessionGeneration;
+    const [accessToken, refreshToken] = await Promise.all([
+      getSecureItem(SECURE_KEYS.accessToken),
+      getSecureItem(SECURE_KEYS.refreshToken),
+    ]);
+    if (generation !== sessionGeneration) return;
+    if (!accessToken && !refreshToken) {
       set({ status: 'signed-out', user: null });
       return;
     }
     try {
       const user = await api.auth.me();
+      if (generation !== sessionGeneration) return;
       set({ status: 'signed-in', user });
     } catch {
-      await deleteSecureItem(SECURE_KEYS.accessToken);
-      await deleteSecureItem(SECURE_KEYS.refreshToken);
-      set({ status: 'signed-out', user: null });
+      // Keep credentials for a later restore if this was a transient network/API failure.
+      if (generation !== sessionGeneration) return;
+      const currentUser = useAuthStore.getState().user;
+      set({ status: currentUser ? 'signed-in' : 'signed-out', user: currentUser });
     }
   },
 
@@ -56,8 +90,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   async signIn(tokens, user) {
-    await setSecureItem(SECURE_KEYS.accessToken, tokens.accessToken);
-    await setSecureItem(SECURE_KEYS.refreshToken, tokens.refreshToken);
+    const generation = ++sessionGeneration;
+    await queueSecureTransition(async () => {
+      await setSecureItem(SECURE_KEYS.accessToken, tokens.accessToken);
+      await setSecureItem(SECURE_KEYS.refreshToken, tokens.refreshToken);
+    });
+    if (generation !== sessionGeneration) return;
     set({ status: 'signed-in', user, pendingPhone: null });
   },
 
@@ -65,17 +103,32 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user });
   },
 
-  async signOut() {
-    try {
-      await api.auth.logout();
-    } catch {
-      // Signing out locally matters more than the server round-trip succeeding.
-    }
-    await deleteSecureItem(SECURE_KEYS.accessToken);
-    await deleteSecureItem(SECURE_KEYS.refreshToken);
+  async signOut(options) {
+    const generation = ++sessionGeneration;
+    clearQueryCache?.();
     set({ status: 'signed-out', user: null, pendingPhone: null });
+
+    await queueSecureTransition(async () => {
+      if (options?.remote !== false) {
+        try {
+          await api.auth.logout();
+        } catch {
+          // Signing out locally matters more than the server round-trip succeeding.
+        }
+      }
+      await deleteSecureItem(SECURE_KEYS.accessToken);
+      await deleteSecureItem(SECURE_KEYS.refreshToken);
+    });
+
+    // A newer sign-in owns the state and tokens now. Never let an older sign-out write it back.
+    if (generation !== sessionGeneration) return;
   },
 }));
+
+// Token recovery lives in the transport layer; auth owns the local relogin transition.
+setAuthFailureHandler(() => {
+  void useAuthStore.getState().signOut({ remote: false });
+});
 
 /**
  * The six fields that gate purchase (CLAUDE.md rule 8). Email *verification* is not one of

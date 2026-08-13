@@ -1,17 +1,28 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import {
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BackButton,
   Badge,
   Button,
   ImageSlot,
+  MarkdownText,
   PinIcon,
+  ResourceState,
   Text,
 } from '../../src/components/ui';
 import { useEvent } from '../../src/hooks/queries';
-import { formatDateRange, formatEgp, stripHtml } from '../../src/lib/format';
-import { useAuthStore } from '../../src/stores/auth';
+import { messageForError } from '../../src/lib/errors';
+import { formatDateRange, formatEgp } from '../../src/lib/format';
+import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
@@ -25,31 +36,56 @@ export default function EventDetailScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const startCheckout = useCheckoutStore((s) => s.start);
+  const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
+  const eventSlug = typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
-  const { data: event, isPending } = useEvent(slug);
+  const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
 
   if (isPending || !event) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator color={colors.textPrimary} />
+        <ResourceState
+          status={isError || !eventSlug ? 'error' : 'loading'}
+          loadingLabel="Loading event..."
+          errorTitle={!eventSlug ? 'Event link is not valid' : undefined}
+          errorMessage={!eventSlug ? 'Open the event again from Discover.' : messageForError(error)}
+          onRetry={eventSlug ? () => void refetch() : undefined}
+        />
       </View>
     );
   }
 
-  const cheapestTier =
-    [...event.tiers]
-      .filter((t) => t.isPurchasable)
-      .sort((a, b) => Number(a.priceEgp) - Number(b.priceEgp))[0] ?? event.tiers[0];
+  const firstPurchasableTier = event.tiers.find((tier) => tier.isPurchasable);
+  const availability = event.tiers.length === 0
+    ? 'Tickets are not available for this event.'
+    : firstPurchasableTier
+      ? 'Tickets are available now.'
+      : event.state === 'sold_out' || event.tiers.every((tier) => tier.availabilityStatus === 'sold_out')
+        ? 'This event is sold out.'
+        : event.state === 'sales_closed'
+          ? 'Sales for this event are closed.'
+          : 'Tickets are not on sale yet.';
+  const eventId = event.id;
 
   function onGetTickets() {
-    if (!event || !cheapestTier) return;
+    if (!firstPurchasableTier) return;
     // Purchase is app-only and gated on a complete profile (CLAUDE.md rules 5 and 8).
-    if (!user?.profileComplete) {
+    if (!user) {
+      router.push('/(onboarding)/welcome');
+      return;
+    }
+    const missing = missingProfileFields(user);
+    if (missing.length > 0) {
+      const profileMissing = missing.some((field) => field !== 'selfie');
+      router.push(profileMissing ? '/(onboarding)/profile' : '/(onboarding)/selfie');
+      return;
+    }
+    if (!user.profileComplete) {
       router.push('/(onboarding)/profile');
       return;
     }
-    startCheckout(event.id, cheapestTier.id);
-    router.push(`/checkout/pass?eventId=${event.id}`);
+    startCheckout(eventId, firstPurchasableTier.id);
+    router.push(`/checkout/pass?eventId=${eventId}`);
   }
 
   return (
@@ -61,7 +97,7 @@ export default function EventDetailScreen() {
       >
         <View style={styles.hero}>
           <ImageSlot
-            source={designAsset('eventHero')}
+            source={event.coverImageUrl ? { uri: event.coverImageUrl } : designAsset('eventHero')}
             height={HERO_HEIGHT}
             tint={colors.sage100}
           />
@@ -76,20 +112,46 @@ export default function EventDetailScreen() {
           <View style={styles.heroText}>
             <Text style={styles.heroEyebrow}>
               {formatDateRange(event.startDate, event.endDate, true)}
-              {event.venue.address ? ` · ${event.venue.address.split(',')[0]}` : ''}
+              {event.venue?.address ? ` · ${event.venue.address.split(',')[0]}` : ''}
             </Text>
             <Text variant="titleHero">{event.title}</Text>
           </View>
         </View>
 
         <View style={styles.body}>
-          <Text variant="bodyLead" style={styles.lead}>
-            {stripHtml(event.descriptionHtml)}
-          </Text>
+          <MarkdownText markdown={event.descriptionHtml} variant="bodyLead" style={styles.lead} />
+
+          {event.gallery.length > 0 ? (
+            <View style={styles.mediaSection}>
+              <Text variant="eyebrow" style={styles.sectionLabel}>
+                Event media
+              </Text>
+              <View style={styles.gallery}>
+                {[...event.gallery]
+                  .sort((a, b) => a.orderIndex - b.orderIndex)
+                  .map((item) => (
+                    <Pressable
+                      key={item.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open ${item.altText ?? item.label ?? 'event media'} full screen`}
+                      onPress={() => setSelectedMediaUrl(item.url)}
+                    >
+                      <ImageSlot
+                        source={{ uri: item.url }}
+                        height={180}
+                        tint={colors.sage100}
+                        label={item.altText ?? item.label ?? undefined}
+                        style={styles.galleryImage}
+                      />
+                    </Pressable>
+                  ))}
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.badges}>
             <Badge label={`${event.days.length} ${event.days.length === 1 ? 'day' : 'days'}`} tone="sky" />
-            {cheapestTier && cheapestTier.available < 100 ? (
+            {firstPurchasableTier && firstPurchasableTier.available < 100 ? (
               <Badge label="Early bird selling fast" tone="gold" />
             ) : null}
           </View>
@@ -102,10 +164,14 @@ export default function EventDetailScreen() {
               <PinIcon />
             </View>
             <View style={styles.flex}>
-              <Text style={styles.venueName}>{event.venue.name}</Text>
-              <Text style={styles.venueAddress}>{event.venue.address}</Text>
+              <Text style={styles.venueName}>{event.venue?.name ?? 'Venue details coming soon'}</Text>
+              {event.venue?.address ? <Text style={styles.venueAddress}>{event.venue.address}</Text> : null}
             </View>
           </View>
+
+          <Text variant="bodyMuted" style={styles.availability}>
+            {availability}
+          </Text>
 
           {event.whatToBring ? (
             <>
@@ -118,15 +184,61 @@ export default function EventDetailScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}> 
         <View>
           <Text style={styles.barLabel}>From</Text>
           <Text style={styles.barPrice}>
             {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
           </Text>
         </View>
-        <Button label="Get tickets" variant="accent" size="inline" onPress={onGetTickets} />
+        <Button
+          label={firstPurchasableTier ? 'Get tickets' : 'Not available'}
+          variant="accent"
+          size="inline"
+          onPress={onGetTickets}
+          disabled={!firstPurchasableTier}
+        />
       </View>
+
+      <Modal
+        visible={selectedMediaUrl !== null}
+        animationType="fade"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setSelectedMediaUrl(null)}
+      >
+        <View style={styles.viewer}>
+          {selectedMediaUrl ? (
+            <Image
+              source={{ uri: selectedMediaUrl }}
+              resizeMode="contain"
+              style={styles.viewerImage}
+              accessibilityLabel="Event media"
+            />
+          ) : null}
+
+          {event.terms || event.cancellationPolicy ? (
+            <View style={styles.disclosures}>
+              <Text variant="eyebrow" style={styles.sectionLabelSpaced}>
+                Before you book
+              </Text>
+              {event.terms ? <MarkdownText markdown={event.terms} variant="bodyMuted" /> : null}
+              {event.cancellationPolicy ? (
+                <Text variant="metaSm" style={styles.policy}>
+                  Cancellation: {event.cancellationPolicy}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close full-screen media"
+            onPress={() => setSelectedMediaUrl(null)}
+            style={[styles.viewerClose, { top: insets.top + 12 }]}
+          >
+            <Text style={styles.viewerCloseText}>×</Text>
+          </Pressable>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -181,6 +293,44 @@ const styles = StyleSheet.create({
   lead: {
     marginBottom: 18,
   },
+  availability: {
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  mediaSection: {
+    marginBottom: 20,
+  },
+  gallery: {
+    gap: 12,
+  },
+  galleryImage: {
+    borderRadius: 12,
+  },
+  viewer: {
+    flex: 1,
+    backgroundColor: colors.black,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  viewerClose: {
+    position: 'absolute',
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewerCloseText: {
+    color: colors.textPrimary,
+    fontSize: 28,
+    lineHeight: 30,
+  },
   badges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -222,6 +372,12 @@ const styles = StyleSheet.create({
   venueAddress: {
     fontSize: 12.5,
     color: colors.textMuted,
+  },
+  disclosures: {
+    marginTop: 2,
+  },
+  policy: {
+    marginTop: 10,
   },
   bar: {
     position: 'absolute',

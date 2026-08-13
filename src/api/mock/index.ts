@@ -8,13 +8,17 @@ import type {
   CurrentUser,
   CursorPage,
   EntryPass,
+  EmailVerificationResult,
+  EmailVerificationSent,
+  EventMeta,
   EventDetail,
   EventListItem,
   GuestValidationIssue,
+  GuestValidationInput,
   GuestValidationResult,
   ListEventsQuery,
+  OrderGuest,
   OrderDetail,
-  OrderGuestInput,
   OrderSummary,
   OtpRequested,
   PaymentIntent,
@@ -22,6 +26,7 @@ import type {
   PricePreview,
   PromoValidationResult,
   SessionTokens,
+  SelfieResponse,
   Ticket,
   UpdateProfileInput,
 } from '../types';
@@ -48,7 +53,9 @@ import { applyRate, clampDiscount, multiply, subtract, sum, toEgp, toPiastres } 
  */
 
 const OTP_CODE = '4242';
+const EMAIL_VERIFICATION_TOKEN = 'mock-email-verification-token';
 const HOLD_MINUTES = 15;
+const DEFAULT_PAGE_LIMIT = 20;
 
 /**
  * Test/dev seams. Tests set `latencyMs` to 0 and drive `now` themselves so they can assert
@@ -70,6 +77,13 @@ function delay<T>(value: T, factor = 1): Promise<T> {
 
 function iso(offsetMs = 0): string {
   return new Date(mockConfig.now() + offsetMs).toISOString();
+}
+
+function isoDateAfter(date: string): string {
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  parsed.setUTCDate(parsed.getUTCDate() + 1);
+  return parsed.toISOString().slice(0, 10);
 }
 
 let orderSeq = 482;
@@ -98,32 +112,69 @@ export class MockApiError extends Error {
 
 interface MockState {
   user: CurrentUser | null;
+  accounts: Map<string, CurrentUser>;
   pendingPhone: string | null;
+  pendingRestorationPhone: string | null;
+  pendingEmailVerificationToken: string | null;
   tickets: Ticket[];
   orders: OrderDetail[];
+  ticketOwnerPhones: Map<string, string>;
+  ticketBuyerPhones: Map<string, string>;
+  orderBuyerPhones: Map<string, string>;
+  orderBuyerNames: Map<string, string>;
   /** Order ids that the "webhook" has settled. */
   paidOrderIds: Set<string>;
+  paidAt: Map<string, string>;
   /** Wall-clock at which an initiated payment auto-settles, simulating the webhook. */
   settleAt: Map<string, number>;
+  deletedAccounts: Map<string, DeletedAccount>;
+}
+
+interface DeletedAccount {
+  user: CurrentUser;
+  tickets: Ticket[];
+  orders: OrderDetail[];
+  ticketOwnerPhones: Map<string, string>;
+  ticketBuyerPhones: Map<string, string>;
+  orderBuyerPhones: Map<string, string>;
+  orderBuyerNames: Map<string, string>;
 }
 
 const state: MockState = {
   user: null,
+  accounts: new Map(),
   pendingPhone: null,
+  pendingRestorationPhone: null,
+  pendingEmailVerificationToken: null,
   tickets: [],
   orders: [],
+  ticketOwnerPhones: new Map(),
+  ticketBuyerPhones: new Map(),
+  orderBuyerPhones: new Map(),
+  orderBuyerNames: new Map(),
   paidOrderIds: new Set(),
+  paidAt: new Map(),
   settleAt: new Map(),
+  deletedAccounts: new Map(),
 };
 
 /** Test/dev seam: reset the mock between runs. */
 export function resetMockState(): void {
   state.user = null;
+  state.accounts.clear();
   state.pendingPhone = null;
+  state.pendingRestorationPhone = null;
+  state.pendingEmailVerificationToken = null;
   state.tickets = [];
   state.orders = [];
+  state.ticketOwnerPhones.clear();
+  state.ticketBuyerPhones.clear();
+  state.orderBuyerPhones.clear();
+  state.orderBuyerNames.clear();
   state.paidOrderIds.clear();
+  state.paidAt.clear();
   state.settleAt.clear();
+  state.deletedAccounts.clear();
   orderSeq = 482;
   ticketSeq = 4821;
 }
@@ -147,6 +198,86 @@ function refreshUserStatus(user: CurrentUser): CurrentUser {
     profileComplete,
     status: profileComplete ? 'active' : 'pending_profile',
   };
+}
+
+function authenticated(user: CurrentUser, isNewUser: boolean): Authenticated {
+  return {
+    accessToken: `mock-access-${mockConfig.now()}`,
+    refreshToken: `mock-refresh-${mockConfig.now()}`,
+    accessTokenExpiresInSeconds: 900,
+    refreshTokenExpiresInSeconds: 7776000,
+    user: {
+      id: user.id,
+      phoneNumber: user.phoneNumber,
+      status: user.status,
+      profileComplete: user.profileComplete,
+      emailVerified: user.emailVerified,
+    },
+    isNewUser,
+  };
+}
+
+function ticketUsageStatus(ticket: Ticket, user: CurrentUser | null): Ticket['usageStatus'] {
+  if (ticket.status === 'pending_claim') return 'pending_claim';
+  if (ticket.status === 'voided') return 'voided';
+  if (ticket.status === 'refunded') return 'refunded';
+  if (!user?.selfieUploaded) return 'selfie_required';
+  if (!user.profileComplete) return 'profile_incomplete';
+  return 'usable';
+}
+
+function refreshTicketUsability(user: CurrentUser): void {
+  state.tickets = state.tickets.map((ticket) =>
+    state.ticketOwnerPhones.get(ticket.id) === user.phoneNumber && ticket.status === 'active'
+      ? { ...ticket, usageStatus: ticketUsageStatus(ticket, user) }
+      : ticket,
+  );
+}
+
+function ticketBelongsToUser(ticketId: string, user: CurrentUser): Ticket {
+  const ticket = state.tickets.find((item) => item.id === ticketId);
+  if (!ticket) throw new MockApiError('TICKET_NOT_FOUND', 'Ticket not found', 404);
+  if (state.ticketOwnerPhones.get(ticket.id) !== user.phoneNumber) {
+    throw new MockApiError('TICKET_FORBIDDEN', 'That ticket is not yours.', 403);
+  }
+  return ticket;
+}
+
+function cursorIndex(cursor: string | null | undefined): number {
+  if (!cursor) return 0;
+  const index = Number(cursor);
+  if (!Number.isInteger(index) || index < 0) {
+    throw new MockApiError('INVALID_CURSOR', 'Invalid cursor', 400);
+  }
+  return index;
+}
+
+function page<T>(data: T[], cursor: string | null | undefined, limit: number | undefined, maxLimit: number) {
+  const pageLimit = limit ?? DEFAULT_PAGE_LIMIT;
+  if (!Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > maxLimit) {
+    throw new MockApiError('INVALID_LIMIT', 'Invalid page limit', 400);
+  }
+  const start = cursorIndex(cursor);
+  const result = data.slice(start, start + pageLimit);
+  const next = start + result.length;
+  return {
+    data: result,
+    meta: {
+      limit: pageLimit,
+      hasNextPage: next < data.length,
+      nextCursor: next < data.length ? String(next) : null,
+    },
+  };
+}
+
+function transitionExpiredOrders(): void {
+  const now = mockConfig.now();
+  for (const order of state.orders) {
+    if (order.status !== 'awaiting_payment') continue;
+    if (Date.parse(order.holdExpiresAt) > now) continue;
+    order.status = 'expired';
+    state.settleAt.delete(order.id);
+  }
 }
 
 function findTier(eventId: string, tierId: string) {
@@ -174,6 +305,35 @@ function resolvePromo(code: string | undefined, subtotalEgp: string) {
   };
 }
 
+function findEvent(identifier: string): EventDetail {
+  const event = eventDetails[identifier] ?? Object.values(eventDetails).find((item) => item.slug === identifier);
+  if (!event) throw new MockApiError('EVENT_NOT_FOUND', 'Event not found', 404);
+  return event;
+}
+
+function promoApplies(code: string, tierIds: string[]): boolean {
+  const configured = promoCodes[code];
+  return !configured?.tierIds || tierIds.some((tierId) => configured.tierIds!.includes(tierId));
+}
+
+function promoDiscounts(
+  eventId: string,
+  items: { tierId: string; quantity: number }[],
+  discountEgp: string,
+): { tierId: string; discountAmountEgp: string }[] {
+  const discount = toPiastres(discountEgp);
+  const lineAmounts = items.map((item) => toPiastres(multiply(findTier(eventId, item.tierId).priceEgp, item.quantity)));
+  const subtotal = lineAmounts.reduce((total, amount) => total + amount, 0);
+  let allocated = 0;
+  return items.map((item, index) => {
+    const amount = index === items.length - 1
+      ? discount - allocated
+      : Math.floor((discount * (lineAmounts[index] ?? 0)) / subtotal);
+    allocated += amount;
+    return { tierId: item.tierId, discountAmountEgp: toEgp(amount) };
+  });
+}
+
 function priceOrder(
   eventId: string,
   items: { tierId: string; quantity: number }[],
@@ -181,7 +341,9 @@ function priceOrder(
 ): PricePreview {
   const subtotalEgp = priceItems(eventId, items);
   const promo = resolvePromo(promoCode, subtotalEgp);
-  const discountEgp = promo.valid ? promo.discountEgp : '0.00';
+  const discountEgp = promo.valid && promoApplies(promo.code ?? '', items.map((item) => item.tierId))
+    ? promo.discountEgp
+    : '0.00';
   const netEgp = subtract(subtotalEgp, discountEgp);
   const vatEnabled = eventDetails[eventId]?.vatEnabled ?? true;
   const vatEgp = vatEnabled ? applyRate(netEgp, VAT_RATE) : '0.00';
@@ -203,13 +365,15 @@ function priceOrder(
  * the server, never through a client redirect (CLAUDE.md rule 9).
  */
 function settleDuePayments(): void {
+  transitionExpiredOrders();
   const now = mockConfig.now();
   for (const [orderId, due] of state.settleAt.entries()) {
     if (now < due) continue;
     state.settleAt.delete(orderId);
     state.paidOrderIds.add(orderId);
+    state.paidAt.set(orderId, iso());
     const order = state.orders.find((o) => o.id === orderId);
-    if (!order) continue;
+    if (!order || order.status !== 'awaiting_payment') continue;
     order.status = 'paid';
     issueTicketsFor(order);
   }
@@ -218,17 +382,24 @@ function settleDuePayments(): void {
 function issueTicketsFor(order: OrderDetail): void {
   const event = eventDetails[order.eventId];
   if (!event) return;
-  const holder = state.user?.fullName ?? 'You';
-  const guestPhones = new Set(order.guests.map((g) => g.phoneNumber));
+  const buyerPhone = state.orderBuyerPhones.get(order.id);
+  const holder = state.orderBuyerNames.get(order.id) ?? 'You';
+  const guestsByTier = new Map<string, OrderGuest[]>();
+  for (const guest of order.guests) {
+    const guests = guestsByTier.get(guest.tierId) ?? [];
+    guests.push(guest);
+    guestsByTier.set(guest.tierId, guests);
+  }
+  let buyerIssued = false;
 
   const ticketEvent = {
     id: event.id,
     slug: event.slug,
     title: event.title,
     coverImageUrl: event.coverImageUrl,
-    venueName: event.venue.name,
-    venueLat: event.venue.latitude ? Number(event.venue.latitude) : null,
-    venueLng: event.venue.longitude ? Number(event.venue.longitude) : null,
+    venueName: event.venue?.name ?? null,
+    venueLat: event.venue?.latitude ? Number(event.venue.latitude) : null,
+    venueLng: event.venue?.longitude ? Number(event.venue.longitude) : null,
   };
 
   for (const item of order.items) {
@@ -245,15 +416,18 @@ function issueTicketsFor(order: OrderDetail): void {
     });
 
     for (let n = 0; n < item.quantity; n += 1) {
-      // The buyer's own ticket is the first of the tier; the rest go to attached guests.
-      const guest = n === 0 ? null : order.guests[n - 1];
-      state.tickets.unshift({
+      const tierGuests = guestsByTier.get(item.tierId) ?? [];
+      const guest = !buyerIssued && item.tierId === order.buyerTierId
+        ? null
+        : tierGuests.shift() ?? null;
+      if (!guest && buyerIssued && tierGuests.length === 0 && item.tierId !== order.buyerTierId) continue;
+      const ticket: Ticket = {
         id: `tk-${order.id}-${item.tierId}-${n}`,
         ticketNumber: nextTicketNumber(),
         // A guest's ticket exists before its owner does — it binds when that number
         // registers (CLAUDE.md rule 2). No claim codes.
         status: guest ? 'pending_claim' : 'active',
-        usageStatus: guest ? 'pending_claim' : 'usable',
+        usageStatus: guest ? 'pending_claim' : state.user?.selfieUploaded && state.user.profileComplete ? 'usable' : 'profile_incomplete',
         source: 'order',
         event: ticketEvent,
         tier: { id: tier.id, name: tier.name },
@@ -262,10 +436,13 @@ function issueTicketsFor(order: OrderDetail): void {
         orderNumber: order.orderNumber,
         purchasedBy: { name: holder, isSelf: !guest },
         issuedAt: iso(),
-      });
+      };
+      state.tickets.unshift(ticket);
+      state.ticketOwnerPhones.set(ticket.id, guest?.phoneNumber ?? buyerPhone ?? '');
+      state.ticketBuyerPhones.set(ticket.id, buyerPhone ?? '');
+      if (!guest) buyerIssued = true;
     }
   }
-  void guestPhones;
 }
 
 /* ------------------------------------------------------------------- api */
@@ -287,24 +464,57 @@ export const mockApi: SukunApi = {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
 
-      const user = state.user?.phoneNumber === e164 ? state.user : emptyUser(e164);
+      if (state.deletedAccounts.has(e164)) {
+        throw new MockApiError('ACCOUNT_DELETED', 'This account is deleted. Restore it to sign in.', 403);
+      }
+      const isNewUser = !state.accounts.has(e164);
+      if (state.pendingPhone !== e164) {
+        throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
+      }
+      const user = state.user?.phoneNumber === e164 ? state.user : state.accounts.get(e164) ?? emptyUser(e164);
       state.user = refreshUserStatus(user);
+      state.accounts.set(e164, state.user);
 
       // Any ticket already waiting on this number binds now (CLAUDE.md rule 2).
       state.tickets = state.tickets.map((t) =>
-        t.status === 'pending_claim' && t.holderName === state.user?.fullName
-          ? { ...t, status: 'active', usageStatus: 'usable' }
+        t.status === 'pending_claim' && state.ticketOwnerPhones.get(t.id) === e164
+          ? { ...t, status: 'active', usageStatus: ticketUsageStatus({ ...t, status: 'active' }, state.user) }
           : t,
       );
 
-      return delay({
-        tokens: {
-          accessToken: `mock-access-${Date.now()}`,
-          refreshToken: `mock-refresh-${Date.now()}`,
-          expiresIn: 900,
-        },
-        user: state.user,
-      });
+      state.pendingPhone = null;
+      return delay(authenticated(state.user, isNewUser));
+    },
+
+    async requestAccountRestorationOtp(phoneNumber: string): Promise<void> {
+      const e164 = normalizeEgyptianPhone(phoneNumber);
+      if (!e164) throw new MockApiError('INVALID_PHONE', 'Enter a valid Egyptian mobile number');
+      state.pendingRestorationPhone = e164;
+      return delay(undefined);
+    },
+
+    async confirmAccountRestoration(input): Promise<Authenticated> {
+      const e164 = normalizeEgyptianPhone(input.phoneNumber);
+      if (!e164 || e164 !== state.pendingRestorationPhone || input.otpCode !== OTP_CODE) {
+        throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
+      }
+      if (state.user?.phoneNumber === e164) {
+        throw new MockApiError('ACCOUNT_ALREADY_RESTORED', 'This account is already active.', 409);
+      }
+      const deleted = state.deletedAccounts.get(e164);
+      if (!deleted) {
+        throw new MockApiError('ACCOUNT_RESTORATION_NOT_ALLOWED', 'This account cannot be restored.', 403);
+      }
+      state.user = refreshUserStatus({ ...deleted.user, status: deleted.user.profileComplete ? 'active' : 'pending_profile' });
+      state.tickets = deleted.tickets;
+      state.orders = deleted.orders;
+      state.ticketOwnerPhones = new Map(deleted.ticketOwnerPhones);
+      state.ticketBuyerPhones = new Map(deleted.ticketBuyerPhones);
+      state.orderBuyerPhones = new Map(deleted.orderBuyerPhones);
+      state.orderBuyerNames = new Map(deleted.orderBuyerNames);
+      state.accounts.set(e164, state.user);
+      state.pendingRestorationPhone = null;
+      return delay(authenticated(state.user, false));
     },
 
     async refresh(): Promise<SessionTokens> {
@@ -312,7 +522,8 @@ export const mockApi: SukunApi = {
         {
           accessToken: `mock-access-${Date.now()}`,
           refreshToken: `mock-refresh-${Date.now()}`,
-          expiresIn: 900,
+          accessTokenExpiresInSeconds: 900,
+          refreshTokenExpiresInSeconds: 7776000,
         },
         0.25,
       );
@@ -345,13 +556,16 @@ export const mockApi: SukunApi = {
         ...user,
         fullName: input.fullName ?? user.fullName,
         email: input.email ?? user.email,
+        emailVerified: input.email && input.email !== user.email ? false : user.emailVerified,
         dateOfBirth: input.dateOfBirth ?? user.dateOfBirth,
         gender: input.gender ?? user.gender,
         area,
       });
 
+      state.accounts.set(state.user.phoneNumber, state.user);
       if (state.tickets.length === 0 && state.user.fullName) {
         state.tickets = seedTickets(state.user.fullName);
+        for (const ticket of state.tickets) state.ticketOwnerPhones.set(ticket.id, state.user.phoneNumber);
       }
       return delay(state.user);
     },
@@ -364,12 +578,42 @@ export const mockApi: SukunApi = {
         selfieUrl: uri,
         selfieExpiresAt: iso(15 * 60 * 1000),
       });
+      state.accounts.set(state.user.phoneNumber, state.user);
       return delay(state.user, 1.9);
     },
 
-    async sendEmailVerification(): Promise<void> {
-      requireUser();
-      return delay(undefined);
+    async getSelfie(): Promise<SelfieResponse> {
+      const user = requireUser();
+      if (!user.selfieUploaded || !user.selfieUrl || !user.selfieExpiresAt) {
+        throw new MockApiError('SELFIE_NOT_FOUND', 'No selfie uploaded', 404);
+      }
+      refreshTicketUsability(user);
+      return delay({
+        selfieUrl: user.selfieUrl,
+        expiresAt: user.selfieExpiresAt,
+        selfieUploaded: true,
+        profileComplete: user.profileComplete,
+        status: user.status,
+      });
+    },
+
+    async sendEmailVerification(): Promise<EmailVerificationSent> {
+      const user = requireUser();
+      if (!user.email) throw new MockApiError('EMAIL_REQUIRED', 'Add an email before verifying it.', 400);
+      state.pendingEmailVerificationToken = EMAIL_VERIFICATION_TOKEN;
+      return delay({ queued: true, expiresInSeconds: 86400 });
+    },
+
+    async verifyEmail(token: string): Promise<EmailVerificationResult> {
+      const user = requireUser();
+      if (user.emailVerified) return delay({ verified: true });
+      if (token !== state.pendingEmailVerificationToken) {
+        throw new MockApiError('EMAIL_VERIFICATION_TOKEN_INVALID', 'That verification link is not valid.');
+      }
+      state.user = { ...user, emailVerified: true };
+      state.accounts.set(user.phoneNumber, state.user);
+      state.pendingEmailVerificationToken = null;
+      return delay({ verified: true });
     },
   },
 
@@ -388,18 +632,36 @@ export const mockApi: SukunApi = {
       if (query?.state?.length) {
         data = data.filter((e) => query.state?.includes(e.state));
       }
-      return delay({
-        data,
-        meta: { limit: query?.limit ?? 20, hasNextPage: false, nextCursor: null },
-      });
+      if (query?.upcoming) {
+        data = data.filter((e) => e.startDate > new Date(mockConfig.now()).toISOString().slice(0, 10));
+      }
+      const dateFilter = (value: string, from?: string, to?: string) =>
+        (!from || value >= from) && (!to || value < isoDateAfter(to));
+      if (query?.startsFrom || query?.startsTo) data = data.filter((e) => dateFilter(e.startDate, query.startsFrom, query.startsTo));
+      if (query?.endsFrom || query?.endsTo) data = data.filter((e) => dateFilter(e.endDate, query.endsFrom, query.endsTo));
+      if (query?.salesCloseFrom || query?.salesCloseTo) {
+        data = data.filter((e) => {
+          const closeDate = findEvent(e.id).salesCloseAt?.slice(0, 10) ?? '';
+          return dateFilter(closeDate, query.salesCloseFrom, query.salesCloseTo);
+        });
+      }
+      return delay(page(data, query?.cursor, query?.limit, 50));
     },
 
     async detail(identifier: string): Promise<EventDetail> {
-      const found =
-        eventDetails[identifier] ??
-        Object.values(eventDetails).find((e) => e.slug === identifier);
-      if (!found) throw new MockApiError('EVENT_NOT_FOUND', 'Event not found', 404);
-      return delay(found);
+      return delay(findEvent(identifier));
+    },
+
+    async meta(identifier: string): Promise<EventMeta> {
+      const event = await this.detail(identifier);
+      return delay({
+        title: event.title,
+        tagline: event.tagline,
+        coverImageUrl: event.coverImageUrl,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        venueName: event.venue?.name ?? null,
+      });
     },
   },
 
@@ -410,36 +672,39 @@ export const mockApi: SukunApi = {
 
     async validateGuests(
       eventId: string,
-      guests: OrderGuestInput[],
+      guests: GuestValidationInput[],
     ): Promise<GuestValidationResult> {
       const buyer = requireUser();
+      const event = findEvent(eventId);
       const issues: GuestValidationIssue[] = [];
       const seen = new Set<string>();
-      const maxTickets = eventDetails[eventId]?.maxTicketsPerOrder ?? 6;
+      if (guests.length + 1 > event.maxTicketsPerOrder) {
+        throw new MockApiError('MAX_TICKETS_PER_ORDER_EXCEEDED', 'That is more tickets than this event allows in one order.', 400);
+      }
 
       guests.forEach((guest, guestIndex) => {
         const e164 = normalizeEgyptianPhone(guest.phoneNumber);
         if (!e164) {
-          issues.push({ guestIndex, error: 'GUEST_PHONE_INVALID' });
+          issues.push({ guestIndex, error: 'INVALID_PHONE_NUMBER' });
           return;
         }
         if (e164 === buyer.phoneNumber) {
-          issues.push({ guestIndex, error: 'GUEST_IS_BUYER' });
+          issues.push({ guestIndex, error: 'SAME_AS_BUYER' });
           return;
         }
         if (seen.has(e164)) {
-          issues.push({ guestIndex, error: 'GUEST_DUPLICATE' });
+          issues.push({ guestIndex, error: 'DUPLICATE_IN_ORDER' });
+          return;
+        }
+        if ([...state.ticketOwnerPhones.entries()].some(([ticketId, phone]) =>
+          phone === e164 && state.tickets.find((ticket) => ticket.id === ticketId)?.status === 'active',
+        )) {
+          issues.push({ guestIndex, error: 'GUEST_ALREADY_HAS_TICKET' });
           return;
         }
         seen.add(e164);
       });
-
-      if (guests.length + 1 > maxTickets) {
-        issues.push({ guestIndex: guests.length - 1, error: 'MAX_TICKETS_EXCEEDED' });
-      }
-
-      // Deliberately no "already has a ticket" / "is registered" signal: the response shape
-      // is identical for registered and unregistered numbers (CLAUDE.md rule 4).
+      // Registration is never exposed. An existing ticket is allocation state, not account state.
       return delay({ valid: issues.length === 0, issues }, 0.7);
     },
 
@@ -452,7 +717,10 @@ export const mockApi: SukunApi = {
       const promo = resolvePromo(promoCode, subtotal);
 
       if (!promo.valid) {
-        throw new MockApiError('PROMO_CODE_INVALID', 'That promo code is not valid.');
+        throw new MockApiError('PROMO_CODE_NOT_FOUND', 'That promo code is not valid.', 404);
+      }
+      if (!promoApplies(promo.code ?? '', items.map((item) => item.tierId))) {
+        throw new MockApiError('PROMO_CODE_NOT_APPLICABLE_TO_TIER', 'That promo code does not apply to these tickets.', 400);
       }
 
       return delay({
@@ -461,19 +729,36 @@ export const mockApi: SukunApi = {
         discountAmountEgp: promo.configured ?? promo.discountEgp,
         discountAppliedEgp: promo.discountEgp,
         fullyApplied: promo.fullyApplied,
-        items: items.map((i) => ({ tierId: i.tierId, discountAmountEgp: promo.discountEgp })),
+        items: promoDiscounts(eventId, items, promo.discountEgp),
       });
     },
 
     async create(input: CreateOrderInput): Promise<OrderDetail> {
       const user = requireUser();
+      transitionExpiredOrders();
       if (!user.profileComplete) {
         throw new MockApiError('PROFILE_INCOMPLETE', 'Complete your profile to buy tickets', 403);
       }
 
+      const event = findEvent(input.eventId);
+      const totalQuantity = input.items.reduce((total, item) => total + item.quantity, 0);
+      if (!input.items.length || input.items.some((item) => item.quantity < 1)) {
+        throw new MockApiError('VALIDATION_ERROR', 'Add at least one ticket.', 400);
+      }
+      if (totalQuantity !== input.guests.length + 1) {
+        throw new MockApiError('GUEST_ALLOCATION_INVALID', 'Attach one guest for each additional ticket.', 400);
+      }
+      if (totalQuantity > event.maxTicketsPerOrder) {
+        throw new MockApiError('MAX_TICKETS_PER_ORDER_EXCEEDED', 'That is more tickets than this event allows in one order.', 400);
+      }
+      const guestValidation = await mockApi.orders.validateGuests(input.eventId, input.guests);
+      if (!guestValidation.valid) {
+        throw new MockApiError('GUEST_VALIDATION_FAILED', 'Check the guest details and try again.', 400);
+      }
+
       const pricing = priceOrder(input.eventId, input.items, input.promoCode);
       const order: OrderDetail = {
-        id: `ord-${mockConfig.now()}-${orderSeq}`,
+        id: `ord-${mockConfig.now()}-${orderSeq + 1}`,
         orderNumber: nextOrderNumber(),
         eventId: input.eventId,
         status: 'awaiting_payment',
@@ -504,6 +789,8 @@ export const mockApi: SukunApi = {
       };
 
       state.orders.unshift(order);
+      state.orderBuyerPhones.set(order.id, user.phoneNumber);
+      state.orderBuyerNames.set(order.id, user.fullName ?? 'You');
       return delay(order, 1.6);
     },
 
@@ -511,13 +798,16 @@ export const mockApi: SukunApi = {
       settleDuePayments();
       const order = state.orders.find((o) => o.id === orderId);
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
+      if (state.orderBuyerPhones.get(orderId) !== requireUser().phoneNumber) {
+        throw new MockApiError('ORDER_FORBIDDEN', 'That order is not yours.', 403);
+      }
       return delay(order, 0.5);
     },
 
     async list(cursor?: string | null, limit = 20): Promise<CursorPage<OrderSummary>> {
       settleDuePayments();
-      return delay({
-        data: state.orders.map((o) => ({
+      const user = requireUser();
+      const data = state.orders.filter((order) => state.orderBuyerPhones.get(order.id) === user.phoneNumber).map((o) => ({
           id: o.id,
           orderNumber: o.orderNumber,
           eventId: o.eventId,
@@ -526,14 +816,18 @@ export const mockApi: SukunApi = {
           currency: o.currency,
           holdExpiresAt: o.holdExpiresAt,
           createdAt: o.createdAt,
-        })),
-        meta: { limit, hasNextPage: false, nextCursor: null },
-      });
+        }));
+      return delay(page(data, cursor, limit, 100));
     },
 
     async cancel(orderId: string): Promise<OrderDetail> {
+      const user = requireUser();
+      transitionExpiredOrders();
       const order = state.orders.find((o) => o.id === orderId);
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
+      if (state.orderBuyerPhones.get(orderId) !== user.phoneNumber) {
+        throw new MockApiError('ORDER_FORBIDDEN', 'That order is not yours.', 403);
+      }
       if (order.status === 'awaiting_payment') order.status = 'cancelled';
       state.settleAt.delete(orderId);
       return delay(order, 0.6);
@@ -542,8 +836,16 @@ export const mockApi: SukunApi = {
 
   payments: {
     async initiate(orderId: string): Promise<PaymentIntent> {
+      const user = requireUser();
       const order = state.orders.find((o) => o.id === orderId);
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
+      if (state.orderBuyerPhones.get(orderId) !== user.phoneNumber) {
+        throw new MockApiError('ORDER_FORBIDDEN', 'That order is not yours.', 403);
+      }
+      transitionExpiredOrders();
+      if (order.status !== 'awaiting_payment') {
+        throw new MockApiError('ORDER_NOT_PAYABLE', 'This order is no longer payable.', 409);
+      }
       // Simulated provider webhook lands a few seconds after the sheet opens.
       state.settleAt.set(orderId, mockConfig.now() + mockConfig.settleDelayMs);
       return delay({
@@ -564,58 +866,90 @@ export const mockApi: SukunApi = {
       settleDuePayments();
       const order = state.orders.find((o) => o.id === orderId);
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
+      if (state.orderBuyerPhones.get(orderId) !== requireUser().phoneNumber) {
+        throw new MockApiError('ORDER_FORBIDDEN', 'That order is not yours.', 403);
+      }
       const paid = state.paidOrderIds.has(orderId);
       return delay(
         {
           orderStatus: order.status,
-          paymentStatus: paid ? 'captured' : 'pending',
+          paymentStatus: paid
+            ? 'captured'
+            : order.status === 'expired'
+              ? 'expired'
+              : order.status === 'cancelled'
+                ? 'voided'
+                : 'pending',
           ticketsIssued: paid
             ? order.items.reduce((acc, i) => acc + i.quantity, 0)
             : 0,
-          paidAt: paid ? iso() : null,
+          paidAt: paid ? state.paidAt.get(orderId) ?? null : null,
         },
         0.5,
       );
     },
 
     async retry(orderId: string): Promise<PaymentIntent> {
+      const order = state.orders.find((item) => item.id === orderId);
+      if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
+      if (order.status === 'expired') {
+        order.status = 'awaiting_payment';
+        order.holdExpiresAt = iso(HOLD_MINUTES * 60 * 1000);
+      }
       return mockApi.payments.initiate(orderId);
     },
   },
 
   tickets: {
     async list(params): Promise<CursorPage<Ticket>> {
-      requireUser();
+      const user = requireUser();
       settleDuePayments();
       const statuses = params?.statuses ?? ['active', 'pending_claim'];
-      return delay({
-        data: state.tickets.filter((t) => statuses.includes(t.status)),
-        meta: { limit: params?.limit ?? 20, hasNextPage: false, nextCursor: null },
-      });
+      const data = state.tickets
+        .filter((ticket) =>
+          state.ticketOwnerPhones.get(ticket.id) === user.phoneNumber ||
+          state.ticketBuyerPhones.get(ticket.id) === user.phoneNumber,
+        )
+        .filter((ticket) => statuses.includes(ticket.status));
+      return delay(page(data, params?.cursor, params?.limit, 100));
     },
 
     async detail(ticketId: string): Promise<Ticket> {
-      requireUser();
-      const ticket = state.tickets.find((t) => t.id === ticketId);
-      if (!ticket) throw new MockApiError('TICKET_NOT_FOUND', 'Ticket not found', 404);
+      const ticket = ticketBelongsToUser(ticketId, requireUser());
       return delay(ticket, 0.5);
     },
 
     async claim(ticketId: string): Promise<Ticket> {
-      requireUser();
+      const user = requireUser();
       const ticket = state.tickets.find((t) => t.id === ticketId);
       if (!ticket) throw new MockApiError('TICKET_NOT_FOUND', 'Ticket not found', 404);
+      if (state.ticketOwnerPhones.get(ticket.id) !== user.phoneNumber) {
+        throw new MockApiError('TICKET_FORBIDDEN', 'That ticket is not yours.', 403);
+      }
+      if (ticket.status === 'voided' || ticket.status === 'refunded') {
+        throw new MockApiError('TICKET_NOT_CLAIMABLE', 'That ticket cannot be claimed.', 409);
+      }
+      if (ticket.status === 'active') {
+        ticket.usageStatus = ticketUsageStatus(ticket, user);
+        return delay(ticket, 0.6);
+      }
       ticket.status = 'active';
-      ticket.usageStatus = 'usable';
+      ticket.usageStatus = ticketUsageStatus(ticket, user);
       return delay(ticket, 0.6);
     },
 
     async entryPass(ticketId: string): Promise<EntryPass> {
       const user = requireUser();
-      const ticket = state.tickets.find((t) => t.id === ticketId);
-      if (!ticket) throw new MockApiError('TICKET_NOT_FOUND', 'Ticket not found', 404);
-      if (!user.selfieUploaded) {
+      const ticket = ticketBelongsToUser(ticketId, user);
+      ticket.usageStatus = ticketUsageStatus(ticket, user);
+      if (ticket.usageStatus === 'pending_claim') {
+        throw new MockApiError('TICKET_NOT_CLAIMED', 'Claim this ticket before entry.', 403);
+      }
+      if (ticket.usageStatus === 'selfie_required') {
         throw new MockApiError('SELFIE_REQUIRED', 'A selfie is required for entry', 403);
+      }
+      if (ticket.usageStatus !== 'usable') {
+        throw new MockApiError('TICKET_NOT_USABLE', 'This ticket cannot be used for entry.', 403);
       }
       const rotation = 30;
       const window = Math.floor(mockConfig.now() / (rotation * 1000));
@@ -653,7 +987,8 @@ export const mockApi: SukunApi = {
       return delay({
         activeTicketCount: active.length,
         affectedEvents: [...byEvent.values()],
-        requiresForfeitConfirmation: active.length > 0,
+        activeTicketCount: active.length,
+        requiresForfeitConfirmation: false,
         pendingPaymentOrderCount: 0,
         deletionBlockedByPendingPayment: false,
         dataRetainedDays: 30,
@@ -661,17 +996,39 @@ export const mockApi: SukunApi = {
       });
     },
 
-    async requestDeletionOtp(): Promise<OtpRequested> {
+    async requestDeletionOtp(): Promise<void> {
       requireUser();
-      return delay({ sent: true, expiresInSeconds: 300, resendAfterSeconds: 30 });
+      return delay(undefined);
     },
 
     async delete(code: string): Promise<void> {
-      requireUser();
+      const user = requireUser();
       if (code !== OTP_CODE) {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
-      resetMockState();
+      transitionExpiredOrders();
+      state.deletedAccounts.set(user.phoneNumber, {
+        user: { ...user, status: 'deleted' },
+        tickets: state.tickets.map((ticket) => ({ ...ticket })),
+        orders: state.orders.map((order) => ({ ...order })),
+        ticketOwnerPhones: new Map(state.ticketOwnerPhones),
+        ticketBuyerPhones: new Map(state.ticketBuyerPhones),
+        orderBuyerPhones: new Map(state.orderBuyerPhones),
+        orderBuyerNames: new Map(state.orderBuyerNames),
+      });
+      state.user = null;
+      state.pendingPhone = null;
+      state.pendingRestorationPhone = null;
+      state.pendingEmailVerificationToken = null;
+      state.tickets = [];
+      state.orders = [];
+      state.ticketOwnerPhones.clear();
+      state.ticketBuyerPhones.clear();
+      state.orderBuyerPhones.clear();
+      state.orderBuyerNames.clear();
+      state.paidOrderIds.clear();
+      state.paidAt.clear();
+      state.settleAt.clear();
       return delay(undefined, 1.25);
     },
   },
@@ -688,4 +1045,5 @@ function hash(input: string): number {
 
 /** Exposed for tests and the dev menu. */
 export const MOCK_OTP_CODE = OTP_CODE;
+export const MOCK_EMAIL_VERIFICATION_TOKEN = EMAIL_VERIFICATION_TOKEN;
 export { toEgp };

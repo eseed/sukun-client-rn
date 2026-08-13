@@ -21,6 +21,9 @@ export interface ScreenProps {
   edges?: { top?: boolean; bottom?: boolean };
   style?: ViewStyle;
   contentStyle?: ViewStyle;
+  /** Called once the scroll position reaches the bottom threshold. */
+  onEndReached?: () => void;
+  onEndReachedThreshold?: number;
 }
 
 /**
@@ -35,6 +38,8 @@ export function Screen({
   edges,
   style,
   contentStyle,
+  onEndReached,
+  onEndReachedThreshold = 160,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const top = edges?.top === false ? 0 : insets.top;
@@ -53,6 +58,20 @@ export function Screen({
       style={styles.flex}
       contentContainerStyle={[inner, contentStyle]}
       keyboardShouldPersistTaps="handled"
+      onScroll={
+        onEndReached
+          ? (event) => {
+              const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+              if (
+                contentOffset.y + layoutMeasurement.height >=
+                contentSize.height - onEndReachedThreshold
+              ) {
+                onEndReached();
+              }
+            }
+          : undefined
+      }
+      scrollEventThrottle={100}
       showsVerticalScrollIndicator={false}
     >
       {children}

@@ -7,18 +7,24 @@ import {
   Button,
   Card,
   Checkbox,
+  ResourceState,
   Screen,
   StepLabel,
   SummaryRow,
   Text,
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
-import { useCreateOrder, useEvent, useValidatePromoCode } from '../../src/hooks/queries';
+import {
+  useCreateOrder,
+  useEvent,
+  usePricePreview,
+  useValidatePromoCode,
+} from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { colors, fontFamily } from '../../src/theme/tokens';
-import type { OrderDetail } from '../../src/api/types';
+import { useCheckoutAccess } from './_guard';
 
 /**
  * Design screen 10 · Checkout, review & pay.
@@ -34,6 +40,8 @@ import type { OrderDetail } from '../../src/api/types';
 export default function ReviewScreen() {
   const router = useRouter();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
+  const validEventId = typeof eventId === 'string' && eventId.length > 0 ? eventId : undefined;
+  const access = useCheckoutAccess();
 
   const tierId = useCheckoutStore((s) => s.tierId);
   const quantity = useCheckoutStore((s) => s.quantity);
@@ -48,20 +56,52 @@ export default function ReviewScreen() {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: event } = useEvent(eventId);
+  const eventQuery = useEvent(validEventId);
+  const { data: event } = eventQuery;
   const items = tierId ? [{ tierId, quantity }] : [];
+  const priceQuery = usePricePreview({
+    eventId: validEventId,
+    items,
+    promoCode,
+  });
+  const { data: price, isPending: pricePending } = priceQuery;
   const createOrder = useCreateOrder();
-  const validatePromoCode = useValidatePromoCode();
+  const validatePromo = useValidatePromoCode();
 
   const tier = event?.tiers.find((t) => t.id === tierId);
-  const vatPercent = order ? Math.round(Number(order.vatRate) * 100) : 0;
+  const vatPercent = price ? Math.round(Number(price.vatRate) * 100) : 0;
+  const invalidSelection = !event || !tier || !tier.isPurchasable;
 
-  async function placeHold(promo: string | undefined) {
-    if (!eventId || !tierId) return;
+  async function applyPromo() {
     setError(null);
+    const code = promoDraft.trim().toUpperCase();
+    if (!code) return;
+    if (!items.length) {
+      setError('Choose a pass before applying a promo code.');
+      return;
+    }
     try {
-      const created = await createOrder.mutateAsync({
-        eventId,
+      const result = await validatePromo.mutateAsync({ items, promoCode: code });
+      if (!result.valid) {
+        setError('That promo code is not valid.');
+        return;
+      }
+      setPromoCode(result.code);
+      setPromoDraft('');
+    } catch (err) {
+      setError(messageForError(err));
+    }
+  }
+
+  async function onContinue() {
+    setError(null);
+    if (!validEventId || !tierId || invalidSelection || !price) {
+      setError('Choose an available pass before continuing.');
+      return;
+    }
+    try {
+      const order = await createOrder.mutateAsync({
+        eventId: validEventId,
         buyerTierId: tierId,
         items,
         guests: guests.map((g) => ({ phoneNumber: g.phoneNumber, name: g.name, tierId })),
@@ -74,39 +114,44 @@ export default function ReviewScreen() {
     }
   }
 
-  const holding = useRef(false);
-  useEffect(() => {
-    if (!eventId || !tierId || holding.current) return;
-    holding.current = true;
-    void placeHold(promoCode ?? undefined);
-    // Runs once, when the screen has what it needs to place the initial hold. Later promo
-    // changes go through `applyPromo` / the remove-promo handler below, not this effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId, tierId]);
-
-  async function applyPromo() {
-    setError(null);
-    const code = promoDraft.trim().toUpperCase();
-    if (!code) return;
-    try {
-      await validatePromoCode.mutateAsync({ items, promoCode: code });
-    } catch (err) {
-      setError(messageForError(err));
-      return;
-    }
-    setPromoDraft('');
-    setPromoCode(code);
-    await placeHold(code);
+  if (access.loading) {
+    return (
+      <Screen>
+        <ResourceState status="loading" loadingLabel="Checking your account..." />
+      </Screen>
+    );
   }
-
-  async function removePromo() {
-    setPromoCode(null);
-    await placeHold(undefined);
+  if (access.blocked) return <Screen><View /></Screen>;
+  if (!validEventId) {
+    return (
+      <Screen>
+        <ResourceState
+          status="empty"
+          emptyTitle="Checkout link is incomplete"
+          emptyMessage="Go back and choose an event again."
+          style={styles.state}
+        />
+      </Screen>
+    );
   }
-
-  function onContinue() {
-    if (!order) return;
-    router.push(`/checkout/payment?orderId=${order.id}`);
+  if (eventQuery.isPending) {
+    return (
+      <Screen>
+        <ResourceState status="loading" loadingLabel="Loading your order..." />
+      </Screen>
+    );
+  }
+  if (eventQuery.isError || !event) {
+    return (
+      <Screen>
+        <ResourceState
+          status="error"
+          errorMessage={messageForError(eventQuery.error)}
+          onRetry={() => void eventQuery.refetch()}
+          style={styles.state}
+        />
+      </Screen>
+    );
   }
 
   return (
@@ -170,7 +215,8 @@ export default function ReviewScreen() {
           />
           <Pressable
             accessibilityRole="button"
-            onPress={applyPromo}
+            onPress={() => void applyPromo()}
+            disabled={validatePromo.isPending || pricePending}
             style={({ pressed }) => [styles.promoButton, pressed && styles.pressed]}
           >
             <Text style={styles.promoButtonLabel}>Apply</Text>
@@ -199,13 +245,19 @@ export default function ReviewScreen() {
         </Text>
       ) : null}
 
+      {priceQuery.isError ? (
+        <Text variant="metaSm" color={colors.rose700} style={styles.error}>
+          {messageForError(priceQuery.error)}
+        </Text>
+      ) : null}
+
       <View style={styles.spacer} />
 
       <Button
         label="Continue to payment"
         onPress={onContinue}
-        disabled={!termsAccepted || !order}
-        loading={createOrder.isPending}
+        disabled={!termsAccepted || pricePending || !price || invalidSelection}
+        loading={createOrder.isPending || validatePromo.isPending}
       />
     </Screen>
   );
@@ -281,5 +333,8 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
     minHeight: 12,
+  },
+  state: {
+    flex: 1,
   },
 });

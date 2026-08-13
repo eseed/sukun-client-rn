@@ -1,20 +1,28 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Platform, StyleSheet, View } from 'react-native';
+import { WebView } from 'react-native-webview';
 import {
   BackButton,
   BulletHeading,
   Button,
   FieldBox,
   FieldLabel,
+  ResourceState,
   Screen,
   StepLabel,
   Text,
 } from '../../src/components/ui';
-import { useInitiatePayment, useOrder, usePaymentStatus } from '../../src/hooks/queries';
+import {
+  useInitiatePayment,
+  useOrder,
+  usePaymentStatus,
+  useRetryPayment,
+} from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
+import type { PaymentIntent } from '../../src/api/types';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 
@@ -34,46 +42,53 @@ const PaymentStatus = paymob?.PaymentStatus ?? null;
  * Design screen 11 · Payment.
  *
  * PENDING BACKEND — Paymob is not wired on staging; the mock settles a simulated webhook a
- * few seconds after the sheet opens.
+ * few seconds after the hosted checkout opens.
  *
  * The design draws card number / expiry / CVV fields inline. Those are rendered here as a
- * non-editable preview of what Paymob's own sheet will ask for, and never collect input: the
- * app hands card entry to `Paymob.presentPayVC`, and the SDK's result is UI feedback only —
- * the order is paid only once the server confirms the webhook (CLAUDE.md rule 9). Taking card
- * details in-process would put the app in PCI scope, and trusting the SDK's own status would
- * let a client-side result stand in for settlement, same as trusting a redirect would.
+ * non-editable preview only. Card entry is handed to Paymob's hosted checkout; the order is
+ * paid only when the server confirms the webhook (CLAUDE.md rule 9).
  */
 export default function PaymentScreen() {
   const router = useRouter();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const validOrderId = typeof orderId === 'string' && orderId.length > 0 ? orderId : undefined;
 
   const reset = useCheckoutStore((s) => s.reset);
-  const { data: order } = useOrder(orderId);
+  const orderQuery = useOrder(validOrderId);
+  const { data: order } = orderQuery;
   const initiate = useInitiatePayment();
+  const retry = useRetryPayment();
 
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentIntent, setPaymentIntent] = useState<PaymentIntent | null>(null);
 
-  const { data: status } = usePaymentStatus(orderId, { poll: polling });
+  const statusQuery = usePaymentStatus(validOrderId, { poll: polling });
+  const { data: status } = statusQuery;
 
   // `usePaymentStatus` stops its own interval once the order settles either way, so there is
   // no polling flag to unwind here — the only side effect is leaving for the confirmation.
   const settled = status?.orderStatus === 'paid';
-  const failed = status?.paymentStatus === 'failed';
+  const terminal = Boolean(
+    status &&
+      (['paid', 'failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
+        ['captured', 'failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)),
+  );
+  const failed = Boolean(
+    status &&
+      (['failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
+        ['failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)),
+  );
+  const providerCaptured = status?.paymentStatus === 'captured' && !settled && !failed;
 
   useEffect(() => {
     if (!settled) return;
     reset();
-    router.replace(`/checkout/confirmation?orderId=${orderId}`);
-  }, [settled, orderId, router, reset]);
-
-  useEffect(() => {
-    if (!Paymob) return;
-    return () => Paymob.removeSdkListener();
-  }, []);
+    router.replace(`/checkout/confirmation?orderId=${validOrderId}`);
+  }, [reset, router, settled, validOrderId]);
 
   async function onPay() {
-    if (!orderId) return;
+    if (!validOrderId) return;
     setError(null);
 
     if (!Paymob) {
@@ -82,32 +97,74 @@ export default function PaymentScreen() {
     }
 
     try {
-      const intent = await initiate.mutateAsync(orderId);
-
-      // Branding must be set before `presentPayVC` — the SDK ignores changes made after.
-      Paymob.setAppName('Sukun');
-      Paymob.setButtonBackgroundColor(colors.gold500);
-      Paymob.setButtonTextColor(colors.creme);
-
-      // Feedback only, not settlement: `usePaymentStatus` polling the webhook decides that.
-      Paymob.setSdkListener((result: string) => {
-        if (result === PaymentStatus.FAIL || result === PaymentStatus.CANCELLED) {
-          setPolling(false);
-          setError('The payment did not go through. Nothing was charged.');
-        }
-      });
-
-      Paymob.presentPayVC(intent.clientSecret, intent.publicKey);
+      const intent = await initiate.mutateAsync(validOrderId);
       setPolling(true);
+      await openHostedCheckout(intent);
     } catch (err) {
       setPolling(false);
       setError(messageForError(err));
     }
   }
 
+  async function onRetry() {
+    if (!validOrderId) return;
+    setError(null);
+    try {
+      const intent = await retry.mutateAsync(validOrderId);
+      setPolling(true);
+      await openHostedCheckout(intent);
+    } catch (err) {
+      setPolling(false);
+      setError(messageForError(err));
+    }
+  }
+
+  async function openHostedCheckout(intent: PaymentIntent) {
+    const url = paymobCheckoutUrl(intent);
+    if (Platform.OS === 'web') {
+      // WebView is not consistently implemented by react-native-webview on web. The browser
+      // fallback still returns to this screen, where status polling remains authoritative.
+      await WebBrowser.openBrowserAsync(url).catch(() => undefined);
+      return;
+    }
+    setPaymentIntent(intent);
+  }
+
+  if (!validOrderId) {
+    return (
+      <Screen>
+        <ResourceState
+          status="empty"
+          emptyTitle="Payment link is incomplete"
+          emptyMessage="Return to checkout and try again."
+        />
+      </Screen>
+    );
+  }
+
+  if (orderQuery.isPending) {
+    return (
+      <Screen>
+        <ResourceState status="loading" loadingLabel="Loading payment..." />
+      </Screen>
+    );
+  }
+
+  if (orderQuery.isError || !order) {
+    return (
+      <Screen>
+        <ResourceState
+          status="error"
+          errorMessage={messageForError(orderQuery.error)}
+          onRetry={() => void orderQuery.refetch()}
+        />
+      </Screen>
+    );
+  }
+
   const card = designAsset('cardSukunOrange');
   const amount = order ? formatEgp(order.totalEgp) : '—';
-  const busy = initiate.isPending || polling;
+  const busy = initiate.isPending || retry.isPending || polling;
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -160,15 +217,40 @@ export default function PaymentScreen() {
         Card details are entered in Paymob&apos;s secure sheet, not in Sukun.
       </Text>
 
+      {paymentIntent ? (
+        <View style={styles.checkout}>
+          <WebView
+            source={{ uri: paymobCheckoutUrl(paymentIntent) }}
+            style={styles.webView}
+            startInLoadingState
+          />
+          <Button
+            label="Return to Sukun"
+            variant="secondary"
+            onPress={() => setPaymentIntent(null)}
+            style={styles.returnButton}
+          />
+        </View>
+      ) : null}
+
       {polling && !failed && !settled ? (
         <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
-          Waiting for the payment to confirm…
+          {providerCaptured
+            ? 'Payment received. Waiting for the server to finish confirming it…'
+            : 'Waiting for the server to confirm payment…'}
         </Text>
       ) : null}
 
       {failed || error ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.note}>
-          {error ?? 'The payment did not go through. Nothing was charged.'}
+          {error ??
+            (status?.orderStatus === 'expired'
+              ? 'This payment hold expired. You can try again.'
+              : status?.orderStatus === 'cancelled'
+                ? 'This order was cancelled and cannot be paid.'
+                : status?.orderStatus === 'refunded'
+                  ? 'This order has been refunded and cannot be paid.'
+                  : 'The payment did not go through. Nothing was charged.')}
         </Text>
       ) : null}
 
@@ -179,8 +261,19 @@ export default function PaymentScreen() {
         variant="accent"
         onPress={onPay}
         loading={busy}
-        disabled={!order}
+        disabled={terminal}
       />
+
+      {failed && status?.orderStatus !== 'cancelled' && status?.orderStatus !== 'refunded' ? (
+        <Button
+          label="Try payment again"
+          variant="secondary"
+          onPress={() => void onRetry()}
+          loading={retry.isPending}
+          disabled={busy}
+          style={styles.retryButton}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -234,8 +327,32 @@ const styles = StyleSheet.create({
   note: {
     marginBottom: 8,
   },
+  checkout: {
+    height: 420,
+    marginTop: 8,
+    marginBottom: 12,
+    gap: 12,
+  },
+  webView: {
+    flex: 1,
+    minHeight: 320,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  returnButton: {
+    flexShrink: 0,
+  },
+  retryButton: {
+    marginTop: 12,
+  },
   spacer: {
     flex: 1,
     minHeight: 12,
   },
 });
+
+function paymobCheckoutUrl(intent: PaymentIntent): string {
+  const publicKey = encodeURIComponent(intent.publicKey);
+  const clientSecret = encodeURIComponent(intent.clientSecret);
+  return `https://accept.paymob.com/unifiedcheckout/?publicKey=${publicKey}&clientSecret=${clientSecret}`;
+}

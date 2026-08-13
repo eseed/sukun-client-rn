@@ -1,8 +1,10 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, ImageSlot, Text } from '../../src/components/ui';
+import { Button, ImageSlot, ResourceState, Text } from '../../src/components/ui';
 import { useEvent, useOrder, useTickets } from '../../src/hooks/queries';
+import { messageForError } from '../../src/lib/errors';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 
@@ -17,14 +19,72 @@ export default function ConfirmationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
+  const validOrderId = typeof orderId === 'string' && orderId.length > 0 ? orderId : undefined;
 
-  const { data: order } = useOrder(orderId);
-  const { data: event } = useEvent(order?.eventId);
-  const { data: tickets } = useTickets();
+  const orderQuery = useOrder(validOrderId);
+  const eventQuery = useEvent(orderQuery.data?.eventId);
+  const ticketsQuery = useTickets();
+  const { refetch: refetchOrder } = orderQuery;
+  const { refetch: refetchTickets } = ticketsQuery;
 
-  const ticketCount = order?.items.reduce((acc, item) => acc + item.quantity, 0) ?? 0;
-  const guestCount = order?.guests.length ?? 0;
-  const firstTicket = tickets?.data.find((t) => t.orderNumber === order?.orderNumber);
+  useEffect(() => {
+    if (!validOrderId) return;
+    void refetchOrder();
+    void refetchTickets();
+  }, [refetchOrder, refetchTickets, validOrderId]);
+
+  if (!validOrderId) {
+    return (
+      <View style={styles.resourceRoot}>
+        <ResourceState
+          status="empty"
+          emptyTitle="Confirmation link is incomplete"
+          emptyMessage="Return to your orders and try again."
+        />
+      </View>
+    );
+  }
+
+  if (orderQuery.isPending) {
+    return (
+      <View style={styles.resourceRoot}>
+        <ResourceState status="loading" loadingLabel="Loading your confirmation..." />
+      </View>
+    );
+  }
+
+  if (orderQuery.isError || !orderQuery.data) {
+    return (
+      <View style={styles.resourceRoot}>
+        <ResourceState
+          status="error"
+          errorMessage={messageForError(orderQuery.error)}
+          onRetry={() => void orderQuery.refetch()}
+        />
+      </View>
+    );
+  }
+
+  const order = orderQuery.data;
+  const event = eventQuery.data;
+  if (eventQuery.isError || ticketsQuery.isError) {
+    return (
+      <View style={styles.resourceRoot}>
+        <ResourceState
+          status="error"
+          errorMessage={messageForError(eventQuery.error ?? ticketsQuery.error)}
+          onRetry={() => {
+            void eventQuery.refetch();
+            void ticketsQuery.refetch();
+          }}
+        />
+      </View>
+    );
+  }
+
+  const ticketCount = order.items.reduce((acc, item) => acc + item.quantity, 0);
+  const guestCount = order.guests.length;
+  const firstTicket = ticketsQuery.data?.data.find((t) => t.orderNumber === order.orderNumber);
 
   return (
     <View style={styles.root}>
@@ -38,7 +98,7 @@ export default function ConfirmationScreen() {
         <Text style={styles.headline}>
           {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'} to {event?.title ?? 'your event'}{' '}
           {ticketCount === 1 ? 'is' : 'are'} on their way.
-          {order ? ` Order ${order.orderNumber}.` : ''}
+          {` Order ${order.orderNumber}.`}
         </Text>
 
         {guestCount > 0 ? (
@@ -68,6 +128,10 @@ export default function ConfirmationScreen() {
 
 const styles = StyleSheet.create({
   root: {
+    flex: 1,
+    backgroundColor: colors.bgPage,
+  },
+  resourceRoot: {
     flex: 1,
     backgroundColor: colors.bgPage,
   },

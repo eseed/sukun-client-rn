@@ -27,6 +27,11 @@ export default function WelcomeScreen() {
           variant="accent"
           onPress={() => router.push('/(onboarding)/phone')}
         />
+        <Button
+          label="Restore account"
+          variant="secondary"
+          onPress={() => router.push('/account/restore-phone')}
+        />
         <Text style={styles.terms}>
           By continuing you agree to our terms &amp; privacy policy
         </Text>

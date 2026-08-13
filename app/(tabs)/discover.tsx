@@ -1,10 +1,12 @@
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, TextInput, View } from 'react-native';
 import type { DesignAssetKey } from '../../src/theme/assets';
-import { Avatar, Screen, SearchIcon, Tag, Text } from '../../src/components/ui';
+import { Avatar, ResourceState, Screen, SearchIcon, Tag, Text } from '../../src/components/ui';
 import { EventListRow, FeaturedEventCard } from '../../src/components/events/EventCards';
 import { useEvents } from '../../src/hooks/queries';
+import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
+import { messageForError } from '../../src/lib/errors';
 import { useAuthStore } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
@@ -18,24 +20,48 @@ export default function DiscoverScreen() {
 
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
 
-  const { data, isPending } = useEvents(filter === 'All' ? undefined : { tag: [filter] });
+  const { data, isPending, isError, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useEvents(
+    filter === 'All' ? undefined : { tag: [filter] },
+  );
 
   const events = useMemo(() => {
-    const all = data?.data ?? [];
-    const term = search.trim().toLowerCase();
+    const all = data?.pages.flatMap((page) => page.data) ?? [];
+    const term = debouncedSearch.trim().toLowerCase();
     if (!term) return all;
     return all.filter(
       (e) =>
         e.title.toLowerCase().includes(term) ||
-        (e.venueName ?? '').toLowerCase().includes(term),
+        (e.tagline ?? '').toLowerCase().includes(term) ||
+        (e.venueName ?? '').toLowerCase().includes(term) ||
+        e.tags.some((tag) => tag.toLowerCase().includes(term)),
     );
-  }, [data, search]);
+  }, [data, debouncedSearch]);
+
+  useEffect(() => {
+    if (
+      debouncedSearch.trim() &&
+      events.length === 0 &&
+      hasNextPage &&
+      !isFetchingNextPage
+    ) {
+      void fetchNextPage();
+    }
+  }, [debouncedSearch, events.length, fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const [featured, ...rest] = events;
 
   return (
-    <Screen scroll padded={false} edges={{ bottom: false }} contentStyle={styles.content}>
+    <Screen
+      scroll
+      padded={false}
+      edges={{ bottom: false }}
+      contentStyle={styles.content}
+      onEndReached={() => {
+        if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      }}
+    >
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <View style={styles.ring} />
@@ -72,13 +98,13 @@ export default function DiscoverScreen() {
         ))}
       </View>
 
-      {isPending ? (
-        <ActivityIndicator color={colors.textPrimary} style={styles.loading} />
-      ) : events.length === 0 ? (
-        <Text variant="bodyMuted" style={styles.empty}>
-          Nothing here yet. Try another filter.
-        </Text>
-      ) : (
+      <ResourceState
+        status={isPending ? 'loading' : isError ? 'error' : events.length === 0 ? 'empty' : 'success'}
+        loadingLabel="Loading gatherings..."
+        emptyMessage="Nothing here yet. Try another filter."
+        errorMessage={messageForError(error)}
+        onRetry={() => void refetch()}
+      >
         <>
           {featured ? (
             <View style={styles.featuredWrap}>
@@ -105,7 +131,8 @@ export default function DiscoverScreen() {
             </>
           ) : null}
         </>
-      )}
+      </ResourceState>
+      {isFetchingNextPage ? <Text variant="meta" style={styles.loadingMore}>Loading more gatherings...</Text> : null}
     </Screen>
   );
 }
@@ -169,6 +196,9 @@ const styles = StyleSheet.create({
   },
   loading: {
     marginTop: 40,
+  },
+  loadingMore: {
+    marginVertical: 20,
   },
   empty: {
     marginTop: 24,

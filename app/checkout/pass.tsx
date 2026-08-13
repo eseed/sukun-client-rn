@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
 import {
   BackButton,
   BulletHeading,
@@ -8,15 +9,18 @@ import {
   RadioDot,
   Screen,
   SelectableCard,
+  ResourceState,
   StepLabel,
   Text,
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
-import { useEvent } from '../../src/hooks/queries';
+import { messageForError } from '../../src/lib/errors';
+import { useEvent, usePricePreview } from '../../src/hooks/queries';
 import { formatEgp } from '../../src/lib/format';
 import { multiplyEgp } from '../../src/lib/money';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { colors } from '../../src/theme/tokens';
+import { useCheckoutAccess } from './_guard';
 
 /**
  * Design screen 08 · Checkout, choose your pass.
@@ -28,25 +32,79 @@ import { colors } from '../../src/theme/tokens';
 export default function ChoosePassScreen() {
   const router = useRouter();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
+  const validEventId =
+    typeof eventId === 'string' && /^[A-Za-z0-9_-]+$/.test(eventId) ? eventId : undefined;
+  const access = useCheckoutAccess();
 
   const tierId = useCheckoutStore((s) => s.tierId);
   const quantity = useCheckoutStore((s) => s.quantity);
   const setTier = useCheckoutStore((s) => s.setTier);
   const setQuantity = useCheckoutStore((s) => s.setQuantity);
 
-  const { data: event, isPending } = useEvent(eventId);
+  const eventQuery = useEvent(validEventId);
+  const { data: event } = eventQuery;
+  const items = tierId ? [{ tierId, quantity }] : [];
+  const priceQuery = usePricePreview({ eventId: validEventId, items });
+  const { data: price } = priceQuery;
 
-  if (isPending || !event) {
+  useEffect(() => {
+    if (!event || !tierId) return;
+    const tier = event.tiers.find((item) => item.id === tierId);
+    if (!tier?.isPurchasable) setTier('');
+  }, [event, setTier, tierId]);
+
+  if (access.loading) {
     return (
       <Screen>
-        <ActivityIndicator color={colors.textPrimary} />
+        <ResourceState status="loading" loadingLabel="Checking your account..." />
+      </Screen>
+    );
+  }
+
+  if (access.blocked) return <Screen><View /></Screen>;
+
+  if (!validEventId) {
+    return (
+      <Screen>
+        <ResourceState
+          status="empty"
+          emptyTitle="Checkout link is incomplete"
+          emptyMessage="Choose an event again to start checkout."
+          style={styles.state}
+        />
+      </Screen>
+    );
+  }
+
+  if (eventQuery.isPending) {
+    return (
+      <Screen>
+        <ResourceState status="loading" loadingLabel="Loading passes..." />
+      </Screen>
+    );
+  }
+
+  if (eventQuery.isError || !event) {
+    return (
+      <Screen>
+        <ResourceState
+          status="error"
+          errorMessage={messageForError(eventQuery.error)}
+          onRetry={() => void eventQuery.refetch()}
+          style={styles.state}
+        />
       </Screen>
     );
   }
 
   const maxPerOrder = event.maxTicketsPerOrder;
-  const selectedTier = event.tiers.find((t) => t.id === tierId);
-  const subtotal = selectedTier ? multiplyEgp(selectedTier.priceEgp, quantity) : null;
+  const selectedTier = event.tiers.find((tier) => tier.id === tierId);
+  const tierLimit = selectedTier?.quantityRemaining ?? maxPerOrder;
+  const quantityLimit = Math.min(maxPerOrder, tierLimit);
+  const eventUnavailable = event.state !== 'on_sale';
+  const canContinue = Boolean(
+    selectedTier?.isPurchasable && quantity <= quantityLimit && !eventUnavailable && price,
+  );
 
   return (
     <Screen contentStyle={styles.content}>
@@ -64,7 +122,11 @@ export default function ChoosePassScreen() {
           <SelectableCard
             key={tier.id}
             selected={tier.id === tierId}
-            disabled={!tier.isPurchasable}
+            disabled={
+              !tier.isPurchasable ||
+              eventUnavailable ||
+              (tier.quantityRemaining !== null && tier.quantityRemaining < 1)
+            }
             onPress={() => setTier(tier.id)}
           >
             <RadioDot selected={tier.id === tierId} />
@@ -76,6 +138,9 @@ export default function ChoosePassScreen() {
               {tier.description ? (
                 <Text style={styles.tierDescription}>{tier.description}</Text>
               ) : null}
+              {!tier.isPurchasable ? (
+                <Text style={styles.unavailable}>{tier.availabilityStatus.replaceAll('_', ' ')}</Text>
+              ) : null}
             </View>
           </SelectableCard>
         ))}
@@ -86,7 +151,7 @@ export default function ChoosePassScreen() {
       </Text>
 
       <View style={styles.quantityRow}>
-        <QuantityStepper value={quantity} min={1} max={maxPerOrder} onChange={setQuantity} />
+        <QuantityStepper value={quantity} min={1} max={quantityLimit} onChange={setQuantity} />
         <View style={styles.subtotal}>
           <Text style={styles.subtotalLabel}>Subtotal</Text>
           <Text style={styles.subtotalValue}>
@@ -95,12 +160,30 @@ export default function ChoosePassScreen() {
         </View>
       </View>
 
+      {eventUnavailable ? (
+        <Text variant="metaSm" color={colors.rose700} style={styles.notice}>
+          This event is not currently available for purchase.
+        </Text>
+      ) : null}
+
+      {priceQuery.isError ? (
+        <Text variant="metaSm" color={colors.rose700} style={styles.notice}>
+          {messageForError(priceQuery.error)}
+        </Text>
+      ) : null}
+
+      {priceQuery.isPending ? (
+        <Text variant="metaSm" style={styles.notice}>
+          Checking the current price...
+        </Text>
+      ) : null}
+
       <View style={styles.spacer} />
 
       <Button
         label="Continue"
-        disabled={!tierId}
-        onPress={() => router.push(`/checkout/guests?eventId=${event.id}`)}
+        disabled={!canContinue}
+        onPress={() => router.push(`/checkout/guests?eventId=${validEventId}`)}
       />
     </Screen>
   );
@@ -168,5 +251,17 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
+  },
+  state: {
+    flex: 1,
+  },
+  unavailable: {
+    marginTop: 5,
+    fontSize: 11,
+    color: colors.rose700,
+    textTransform: 'capitalize',
+  },
+  notice: {
+    marginBottom: 12,
   },
 });
