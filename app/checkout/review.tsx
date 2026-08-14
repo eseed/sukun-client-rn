@@ -154,7 +154,10 @@ export default function ReviewScreen() {
       setOrder(created);
       setOrderId(created.id);
 
-      const intent = await initiatePayment.mutateAsync(created.id);
+      // Creating the order already opened the Paymob intention, so the sheet can go up straight
+      // away. Only fall back to `initiate` when the response carries no intent — asking for one
+      // while that intention is live is rejected with PAYMENT_CONFIRMATION_PENDING.
+      const intent = created.payment ?? (await initiatePayment.mutateAsync(created.id));
       sheet.present(intent);
     } catch (err) {
       setError(messageForError(err));

@@ -353,6 +353,12 @@ export interface OrderDetail {
   createdAt: string;
   items: OrderItem[];
   guests: OrderGuest[];
+  /**
+   * Present only on the create response. Creating an order already opens a Paymob intention, so
+   * the sheet can be presented straight from here; calling `payments.initiate` for the same order
+   * is rejected with `PAYMENT_CONFIRMATION_PENDING` because that intention is already active.
+   */
+  payment?: PaymentIntent | null;
 }
 
 /** `MobileOrderSummaryResponseDto` */
