@@ -5,13 +5,14 @@ import {
   useQueryClient,
   type UseQueryOptions,
 } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { api, API_MODE } from '../api';
 import type {
   AccountRestorationInput,
   CreateOrderInput,
   CurrentUser,
   EntryPass,
+  EventListItem,
   GuestValidationInput,
   ListEventsQuery,
   PaymentStatus,
@@ -175,14 +176,53 @@ export function useVerifyEmail() {
 
 /* ---------------------------------------------------------------- events */
 
+/**
+ * Paginated events.
+ *
+ * The backend's timeline cursor is not a stable sequence: at the future→past handoff it
+ * re-emits the boundary page, then resets to the very first page, and `hasNextPage` stays
+ * `true` forever. Left alone that yields duplicate React keys and an infinite scroll that
+ * never ends, so the pages are flattened here — deduplicated by id, and `hasNextPage` is
+ * withdrawn as soon as a page contributes nothing new.
+ */
 export function useEvents(query?: ListEventsQuery) {
-  return useInfiniteQuery({
+  const result = useInfiniteQuery({
     queryKey: queryKeys.events(query),
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => api.events.list({ ...query, cursor: pageParam }),
     getNextPageParam: (lastPage) =>
       lastPage.meta.hasNextPage ? lastPage.meta.nextCursor ?? undefined : undefined,
   });
+
+  const pages = result.data?.pages;
+
+  const { events, exhausted } = useMemo(() => {
+    const seen = new Set<string>();
+    const unique: EventListItem[] = [];
+    let addedByLastPage = 0;
+
+    (pages ?? []).forEach((page, pageIndex) => {
+      const isLastPage = pageIndex === (pages?.length ?? 0) - 1;
+      for (const event of page.data) {
+        if (seen.has(event.id)) continue;
+        seen.add(event.id);
+        unique.push(event);
+        if (isLastPage) addedByLastPage += 1;
+      }
+    });
+
+    // A page that repeated only what we already had means the cursor has wrapped.
+    return {
+      events: unique,
+      exhausted: (pages?.length ?? 0) > 1 && addedByLastPage === 0,
+    };
+  }, [pages]);
+
+  return {
+    ...result,
+    events,
+    hasNextPage: result.hasNextPage && !exhausted,
+  };
 }
 
 export function useRequestAccountRestorationOtp() {
@@ -284,10 +324,40 @@ export function useValidatePromoCode() {
   });
 }
 
+/** Order states that still hold capacity, so the backend refuses a second order for the event. */
+const ACTIVE_ORDER_STATUSES = ['awaiting_payment', 'processing', 'paid'];
+
+/**
+ * Creates the order, recovering the one that already exists when the backend refuses.
+ *
+ * The backend allows a single active order per event per user and answers a second attempt with
+ * `409 DUPLICATE_ACTIVE_ORDER`. Surfacing that as an error stranded the buyer: their held order
+ * was real and payable, but checkout could neither create a new one nor reach the old one. So a
+ * duplicate is resolved by returning the existing active order for the event — which is what
+ * "continue" meant anyway. Any other failure propagates untouched.
+ */
 export function useCreateOrder() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateOrderInput) => api.orders.create(input),
+    mutationFn: async (input: CreateOrderInput) => {
+      try {
+        return await api.orders.create(input);
+      } catch (error) {
+        const code =
+          typeof error === 'object' && error !== null && 'code' in error
+            ? (error as { code?: unknown }).code
+            : undefined;
+        if (code !== 'DUPLICATE_ACTIVE_ORDER') throw error;
+
+        const page = await api.orders.list(undefined, 20);
+        const existing = page.data.find(
+          (order) =>
+            order.eventId === input.eventId && ACTIVE_ORDER_STATUSES.includes(order.status),
+        );
+        if (!existing) throw error;
+        return api.orders.detail(existing.id);
+      }
+    },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: queryKeys.orders });
     },

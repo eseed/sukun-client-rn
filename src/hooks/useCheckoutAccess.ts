@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, useAuthStore } from '../stores/auth';
 
 export function useCheckoutAccess() {
   const router = useRouter();

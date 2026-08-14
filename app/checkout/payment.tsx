@@ -5,8 +5,6 @@ import {
   BackButton,
   BulletHeading,
   Button,
-  FieldBox,
-  FieldLabel,
   ResourceState,
   Screen,
   StepLabel,
@@ -21,6 +19,7 @@ import {
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { getPaymob } from '../../src/lib/paymob';
+import { readPaymobOutcome } from '../../src/lib/paymob-outcome';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
@@ -28,17 +27,18 @@ import { colors } from '../../src/theme/tokens';
 /** Paymob is resolved through a platform-specific adapter so Metro can bundle the web app. */
 const paymob = getPaymob();
 const Paymob = paymob?.default ?? null;
-const PaymentStatus = paymob?.PaymentStatus ?? null;
 
 /**
  * Design screen 11 · Payment.
  *
- * PENDING BACKEND — Paymob is not wired on staging; the mock settles a simulated webhook a
- * few seconds after the hosted checkout opens.
+ * The design draws card number / expiry / CVV fields inline, but the SDK owns card entry
+ * entirely: `presentPayVC` opens Paymob's own sheet. Rendering dead look-alike fields here only
+ * invited people to type into boxes that do nothing, so the screen goes straight from the
+ * amount to the pay button.
  *
- * The design draws card number / expiry / CVV fields inline. Those are rendered here as a
- * non-editable preview only. Card entry is handed to Paymob's hosted checkout; the order is
- * paid only when the server confirms the webhook (CLAUDE.md rule 9).
+ * The payment outcome comes from `Paymob.setSdkListener`, per the SDK documentation:
+ * SUCCESS / FAIL / PENDING / CANCELLED. The order status query still runs so a PENDING
+ * transaction can resolve and so the screen reflects orders that settled elsewhere.
  */
 export default function PaymentScreen() {
   const router = useRouter();
@@ -53,24 +53,34 @@ export default function PaymentScreen() {
 
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The SDK's own verdict — `null` until the sheet reports back. */
+  const [sdkResult, setSdkResult] = useState<'success' | 'fail' | 'pending' | 'cancelled' | null>(
+    null,
+  );
 
   const statusQuery = usePaymentStatus(validOrderId, { poll: polling });
   const { data: status } = statusQuery;
 
-  // `usePaymentStatus` stops its own interval once the order settles either way, so there is
-  // no polling flag to unwind here — the only side effect is leaving for the confirmation.
-  const settled = status?.orderStatus === 'paid';
+  const settled = sdkResult === 'success' || status?.orderStatus === 'paid';
   const terminal = Boolean(
-    status &&
-      (['paid', 'failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
-        ['captured', 'failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)),
+    settled ||
+      (status &&
+        (['paid', 'failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
+          ['captured', 'failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus))),
   );
   const failed = Boolean(
-    status &&
-      (['failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
-        ['failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)),
+    !settled &&
+      (sdkResult === 'fail' ||
+        sdkResult === 'cancelled' ||
+        (status &&
+          (['failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
+            ['failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)))),
   );
-  const providerCaptured = status?.paymentStatus === 'captured' && !settled && !failed;
+  /** SDK reported PENDING: the transaction is still being processed on Paymob's side. */
+  const pending = sdkResult === 'pending' && !settled && !failed;
+
+  // The SDK listener is a native event subscription; it outlives the screen unless removed.
+  useEffect(() => () => Paymob?.removeSdkListener(), []);
 
   useEffect(() => {
     if (!settled) return;
@@ -110,15 +120,39 @@ export default function PaymentScreen() {
 
   function presentPaymob(intent: { clientSecret: string; publicKey: string }) {
     if (!Paymob) return;
+    setSdkResult(null);
+
+    // All customization must happen before presentPayVC — changes after it are ignored.
     Paymob.setAppName('Sukun');
     Paymob.setButtonBackgroundColor(colors.gold500);
     Paymob.setButtonTextColor(colors.creme);
-    Paymob.setSdkListener((result: string) => {
-      if (result === PaymentStatus?.FAIL || result === PaymentStatus?.CANCELLED) {
-        setPolling(false);
-        setError('The payment did not go through. Nothing was charged.');
+
+    Paymob.setSdkListener((result: unknown) => {
+      // The SDK emits `{ status, details? }`, not the bare status string its typings describe.
+      switch (readPaymobOutcome(result)) {
+        case 'success':
+          setPolling(false);
+          setError(null);
+          setSdkResult('success');
+          break;
+        case 'fail':
+          setPolling(false);
+          setError('The payment did not go through. Nothing was charged.');
+          setSdkResult('fail');
+          break;
+        case 'pending':
+          // Still processing on Paymob's side — keep polling until the order resolves.
+          setError(null);
+          setSdkResult('pending');
+          break;
+        case 'cancelled':
+          setPolling(false);
+          setError('Payment was cancelled. Nothing was charged.');
+          setSdkResult('cancelled');
+          break;
       }
     });
+
     Paymob.presentPayVC(intent.clientSecret, intent.publicKey);
     setPolling(true);
   }
@@ -135,7 +169,7 @@ export default function PaymentScreen() {
     );
   }
 
-  if (orderQuery.isPending) {
+  if (orderQuery.isLoading) {
     return (
       <Screen>
         <ResourceState status="loading" loadingLabel="Loading payment..." />
@@ -176,45 +210,15 @@ export default function PaymentScreen() {
         <Image source={card} style={styles.cardImage} />
       </View>
 
-      <View style={styles.fields} pointerEvents="none">
-        <View style={styles.field}>
-          <FieldLabel>Card number</FieldLabel>
-          <FieldBox style={styles.disabledBox}>
-            <Text variant="bodyValue" color={colors.textMuted}>
-              •••• •••• •••• ••••
-            </Text>
-          </FieldBox>
-        </View>
-
-        <View style={styles.row}>
-          <View style={styles.rowItem}>
-            <FieldLabel>Expiry</FieldLabel>
-            <FieldBox style={styles.disabledBox}>
-              <Text variant="bodyValue" color={colors.textMuted}>
-                MM/YY
-              </Text>
-            </FieldBox>
-          </View>
-          <View style={styles.rowItem}>
-            <FieldLabel>CVV</FieldLabel>
-            <FieldBox style={styles.disabledBox}>
-              <Text variant="bodyValue" color={colors.textMuted}>
-                •••
-              </Text>
-            </FieldBox>
-          </View>
-        </View>
-      </View>
-
       <Text variant="metaSm" style={styles.note}>
-        Card details are entered in Paymob&apos;s secure sheet, not in Sukun.
+        Tapping pay opens Paymob&apos;s secure sheet, where you enter your card.
       </Text>
 
       {polling && !failed && !settled ? (
         <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
-          {providerCaptured
-            ? 'Payment received. Waiting for the server to finish confirming it…'
-            : 'Waiting for the server to confirm payment…'}
+          {pending
+            ? 'Your payment is still being processed. This can take a moment…'
+            : 'Waiting for the payment to complete…'}
         </Text>
       ) : null}
 

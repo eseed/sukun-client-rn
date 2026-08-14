@@ -22,22 +22,28 @@ export default function DiscoverScreen() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 250);
 
-  const { data, isPending, isError, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useEvents(
-    filter === 'All' ? undefined : { tag: [filter] },
-  );
+  const {
+    events: allEvents,
+    isPending,
+    isError,
+    error,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useEvents(filter === 'All' ? undefined : { tag: [filter] });
 
   const events = useMemo(() => {
-    const all = data?.pages.flatMap((page) => page.data) ?? [];
     const term = debouncedSearch.trim().toLowerCase();
-    if (!term) return all;
-    return all.filter(
+    if (!term) return allEvents;
+    return allEvents.filter(
       (e) =>
         e.title.toLowerCase().includes(term) ||
         (e.tagline ?? '').toLowerCase().includes(term) ||
         (e.venueName ?? '').toLowerCase().includes(term) ||
         e.tags.some((tag) => tag.toLowerCase().includes(term)),
     );
-  }, [data, debouncedSearch]);
+  }, [allEvents, debouncedSearch]);
 
   useEffect(() => {
     if (

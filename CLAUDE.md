@@ -23,9 +23,11 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    `src/api/mock/`, never in a screen or component.
 8. **Profile completeness gates purchase** — full name, email, date of birth, gender, area,
    and selfie. Email _verification_ gates nothing.
-9. **Payments (P1):** open Paymob's native SDK sheet (`paymob-reactnative`, via
-   `Paymob.presentPayVC`) and poll status. An order is `paid` only via the server webhook —
-   never trust a client redirect, and never trust the SDK's own success/fail callback either.
+9. **Payments (P1):** follow the Paymob React Native SDK documentation exactly. Customize the
+   sheet (`setAppName`, `setButtonBackgroundColor`, `setButtonTextColor`, …) _before_ calling
+   `Paymob.presentPayVC(clientSecret, publicKey)`, and drive the payment outcome from
+   `Paymob.setSdkListener` — `SUCCESS`, `FAIL`, `PENDING`, `CANCELLED`. Do not add behaviour
+   the SDK docs do not describe.
 
 ### Out of scope
 

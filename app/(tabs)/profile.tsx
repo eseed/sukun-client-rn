@@ -13,7 +13,8 @@ export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const ticketsQuery = useTickets();
-  const { data, isPending, isError, refetch } = ticketsQuery;
+  // See tickets.tsx: a disabled (signed-out) query is `isPending` forever, so gate on `isLoading`.
+  const { data, isLoading, isError, refetch } = ticketsQuery;
 
   const tickets = data?.data ?? [];
   const eventCount = new Set(tickets.map((t) => t.event.id)).size;
@@ -44,7 +45,7 @@ export default function ProfileScreen() {
         </View>
 
         <ResourceState
-          status={isPending ? 'loading' : isError ? 'error' : 'success'}
+          status={isLoading ? 'loading' : isError ? 'error' : 'success'}
           loadingLabel="Loading your ticket stats..."
           errorMessage="We couldn't load your ticket stats."
           onRetry={() => void refetch()}

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { API_MODE } from '../../src/api';
 import {
@@ -18,26 +18,32 @@ import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
 import {
   useCreateOrder,
   useEvent,
+  useInitiatePayment,
   usePricePreview,
   useValidatePromoCode,
 } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
+import { addEgp, multiplyEgp, vatOnEgp, VAT_RATE } from '../../src/lib/money';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import type { OrderDetail } from '../../src/api/types';
 import { colors, fontFamily } from '../../src/theme/tokens';
-import { useCheckoutAccess } from './_guard';
+import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
+import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
 
 /**
  * Design screen 10 · Checkout, review & pay.
  *
  * There is no price-preview endpoint on the backend — it prices only at order creation, which
- * also places the capacity hold. So this screen creates the real order as soon as it has
- * enough to (on mount, and again whenever the promo code changes) and renders its authoritative
- * totals; nothing here is computed (CLAUDE.md rule 7). "Continue to payment" reuses that same
- * held order rather than creating another one. Applying a different promo code holds a new
- * order rather than mutating the old one (there's no update endpoint) — the abandoned hold just
- * expires at its own `holdExpiresAt`.
+ * also places the capacity hold. Creating that order is therefore deferred to "Continue to
+ * payment" rather than done on mount, so merely opening this screen does not consume capacity.
+ *
+ * Until that order exists the screen still shows a full subtotal / VAT / total, estimated from
+ * the tier's server-provided unit price and the standard VAT rate — see `src/lib/money.ts` for
+ * why that is a sanctioned exception to CLAUDE.md rule 7. The VAT rate stays dynamic: whenever
+ * the backend has supplied one (on the created order, or a price preview in mock mode) that
+ * rate and its figures win, and `VAT_RATE` is only the fallback so the total is never blank.
+ * Promo discounts are never estimated — they are priced server-side only.
  */
 export default function ReviewScreen() {
   const router = useRouter();
@@ -69,10 +75,32 @@ export default function ReviewScreen() {
   const { data: price, isPending: previewPending } = priceQuery;
   const pricePending = API_MODE !== 'live' && previewPending;
   const createOrder = useCreateOrder();
+  const initiatePayment = useInitiatePayment();
   const validatePromo = useValidatePromoCode();
+  const sheet = usePaymobSheet();
+  const reset = useCheckoutStore((s) => s.reset);
+
+  // The sheet's verdict drives what happens next. Only the two outcomes that navigate live in an
+  // effect; the two that just report back are derived at render, so no state is set from here.
+  useEffect(() => {
+    if (!order) return;
+    if (sheet.outcome === 'success') {
+      reset();
+      router.replace(`/checkout/confirmation?orderId=${order.id}`);
+    } else if (sheet.outcome === 'pending') {
+      // Still settling on Paymob's side — the payment screen polls until the order resolves.
+      router.replace(`/checkout/payment?orderId=${order.id}`);
+    }
+  }, [order, reset, router, sheet.outcome]);
+
+  const sheetError =
+    sheet.outcome === 'fail'
+      ? 'The payment did not go through. Nothing was charged.'
+      : sheet.outcome === 'cancelled'
+        ? 'Payment was cancelled. Nothing was charged.'
+        : null;
 
   const tier = event?.tiers.find((t) => t.id === tierId);
-  const vatPercent = Math.round(Number(order?.vatRate ?? price?.vatRate ?? 0) * 100);
   const invalidSelection = !event || !tier || !tier.isPurchasable;
   async function applyPromo() {
     setError(null);
@@ -95,23 +123,39 @@ export default function ReviewScreen() {
     }
   }
 
+  /**
+   * Creates the order (the server's authoritative pricing + capacity hold) and hands straight
+   * off to Paymob's sheet. There is no intermediate card screen: the SDK owns card entry, so
+   * one tap goes from review to the sheet.
+   */
   async function onContinue() {
     setError(null);
     if (!validEventId || !tierId || invalidSelection) {
       setError('Choose an available pass before continuing.');
       return;
     }
+
+    if (!sheet.available) {
+      setError('Payment needs the Sukun app — it isn’t available here.');
+      return;
+    }
+
     try {
-      const created = await createOrder.mutateAsync({
-        eventId: validEventId,
-        buyerTierId: tierId,
-        items,
-        guests: guests.map((g) => ({ phoneNumber: g.phoneNumber, name: g.name, tierId })),
-        ...(promoCode ? { promoCode } : {}),
-      });
+      // Reuse the order already held for this exact selection rather than holding another.
+      const created =
+        order ??
+        (await createOrder.mutateAsync({
+          eventId: validEventId,
+          buyerTierId: tierId,
+          items,
+          guests: guests.map((g) => ({ phoneNumber: g.phoneNumber, name: g.name, tierId })),
+          ...(promoCode ? { promoCode } : {}),
+        }));
       setOrder(created);
       setOrderId(created.id);
-      router.push(`/checkout/payment?orderId=${created.id}`);
+
+      const intent = await initiatePayment.mutateAsync(created.id);
+      sheet.present(intent);
     } catch (err) {
       setError(messageForError(err));
     }
@@ -122,11 +166,27 @@ export default function ReviewScreen() {
     setOrder(null);
   }
 
-  const displayedSubtotal = order?.subtotalEgp ?? price?.subtotalEgp;
-  const displayedVat = order?.vatEgp ?? price?.vatEgp;
-  const displayedTotal = order?.totalEgp ?? price?.totalEgp;
+  // Before the order exists the backend has priced nothing, so the screen estimates from the
+  // tier's server-provided unit price and the standard VAT rate (see `src/lib/money.ts`). The
+  // created order's own figures replace all of these the moment it exists, and it stays the
+  // authority on what is charged — a promo code, for instance, is only ever priced server-side.
+  const previewSubtotal = tier ? multiplyEgp(tier.priceEgp, quantity) : undefined;
+  const previewVat =
+    previewSubtotal && event?.vatEnabled ? vatOnEgp(previewSubtotal, VAT_RATE) : undefined;
+  const previewTotal = previewSubtotal
+    ? previewVat
+      ? addEgp(previewSubtotal, previewVat)
+      : previewSubtotal
+    : undefined;
+
+  const displayedSubtotal = order?.subtotalEgp ?? price?.subtotalEgp ?? previewSubtotal;
+  const displayedVat = order?.vatEgp ?? price?.vatEgp ?? previewVat;
+  const displayedTotal = order?.totalEgp ?? price?.totalEgp ?? previewTotal;
   const displayedDiscount = order?.discountEgp ?? price?.discountEgp;
-  const displayedVatRate = order?.vatRate ?? price?.vatRate;
+  const displayedVatRate = order?.vatRate ?? price?.vatRate ?? (previewVat ? VAT_RATE : undefined);
+  // Label the VAT row with the same rate the amount was derived from — reading the rate from a
+  // separate expression is how this row ended up showing a 14% amount under a "VAT (0%)" label.
+  const vatPercent = Math.round(Number(displayedVatRate ?? 0) * 100);
 
   if (access.loading) {
     return (
@@ -253,9 +313,9 @@ export default function ReviewScreen() {
         />
       </View>
 
-      {error ? (
+      {error ?? sheetError ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
-          {error}
+          {error ?? sheetError}
         </Text>
       ) : null}
 
@@ -271,7 +331,7 @@ export default function ReviewScreen() {
         label="Continue to payment"
         onPress={onContinue}
         disabled={!termsAccepted || pricePending || invalidSelection}
-        loading={createOrder.isPending || validatePromo.isPending}
+        loading={createOrder.isPending || initiatePayment.isPending || validatePromo.isPending}
       />
     </Screen>
   );

@@ -50,7 +50,7 @@ export default function OrderDetailScreen() {
       />
 
       <ResourceState
-        status={order.isPending ? 'loading' : order.isError || !data ? 'error' : 'success'}
+        status={order.isLoading ? 'loading' : order.isError || !data ? 'error' : 'success'}
         loadingLabel="Loading order..."
         errorMessage="We couldn't load this order."
         onRetry={() => void order.refetch()}

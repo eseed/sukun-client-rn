@@ -26,6 +26,11 @@ export interface ScreenProps {
   onEndReachedThreshold?: number;
 }
 
+/** Only numeric padding participates in the inset maths; percentages fall back to the default. */
+function toPadding(value: ViewStyle['paddingTop'], fallback: number): number {
+  return typeof value === 'number' ? value : fallback;
+}
+
 /**
  * The screen frame. The design's phone frame is 402×874 with 26–28px horizontal padding and
  * a 26px top / 32px bottom rhythm; safe-area insets are added on top of that.
@@ -47,16 +52,30 @@ export function Screen({
 
   const background = tone === 'inverse' ? colors.black : colors.bgPage;
 
+  // `contentStyle` is merged here rather than layered after `inner`, because a screen that sets
+  // its own `paddingTop` would otherwise replace the safe-area inset outright and render under
+  // the status bar (as the Discover header did on iOS, where insets are non-zero — on web they
+  // are 0, which hid it). Insets are *added to* the screen's padding, per this component's
+  // contract above.
+  const content = (StyleSheet.flatten(contentStyle) ?? {}) as ViewStyle;
+  const {
+    paddingTop: contentTop,
+    paddingBottom: contentBottom,
+    paddingHorizontal: contentHorizontal,
+    ...restContent
+  } = content;
+
   const inner: ViewStyle = {
-    paddingTop: top + (padded ? 26 : 0),
-    paddingBottom: bottom + (padded ? 32 : 0),
-    paddingHorizontal: padded ? 24 : 0,
+    ...restContent,
+    paddingTop: top + toPadding(contentTop, padded ? 26 : 0),
+    paddingBottom: bottom + toPadding(contentBottom, padded ? 32 : 0),
+    paddingHorizontal: toPadding(contentHorizontal, padded ? 24 : 0),
   };
 
   const body = scroll ? (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[inner, contentStyle]}
+      contentContainerStyle={inner}
       keyboardShouldPersistTaps="handled"
       onScroll={
         onEndReached
@@ -77,7 +96,7 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.flex, inner, contentStyle]}>{children}</View>
+    <View style={[styles.flex, inner]}>{children}</View>
   );
 
   return (

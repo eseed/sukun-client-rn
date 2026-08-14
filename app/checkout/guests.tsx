@@ -18,7 +18,7 @@ import { messageForCode, messageForError } from '../../src/lib/errors';
 import { formatNationalInput, normalizeEgyptianPhone, formatPhoneLocal, sanitizeNationalInput } from '../../src/lib/phone';
 import { guestSlots, useCheckoutStore } from '../../src/stores/checkout';
 import { colors, fontFamily } from '../../src/theme/tokens';
-import { useCheckoutAccess } from './_guard';
+import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 
 /**
  * Design screen 09 · Checkout, guests.

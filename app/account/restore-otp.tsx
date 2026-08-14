@@ -39,8 +39,11 @@ export default function RestoreOtpScreen() {
   }, [secondsLeft]);
 
   useEffect(() => {
+    // Confirming restoration signs the user in, which clears pendingPhone — that clear must
+    // not be mistaken for arriving here out of order.
+    if (status === 'signed-in') return;
     if (!pendingPhone) router.replace('/account/restore-phone');
-  }, [pendingPhone, router]);
+  }, [pendingPhone, router, status]);
 
   if (status === 'signed-in') return <Redirect href="/(tabs)/discover" />;
   if (!pendingPhone) return <Redirect href="/account/restore-phone" />;

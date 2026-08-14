@@ -44,7 +44,7 @@ export default function EntryPassScreen() {
     return <Screen contentStyle={styles.stateScreen}><ResourceState status="error" errorTitle="Ticket link is not valid" errorMessage="Open your ticket again from My tickets." /></Screen>;
   }
 
-  if (ticketQuery.isPending) {
+  if (ticketQuery.isLoading) {
     return <Screen contentStyle={styles.stateScreen}><ResourceState status="loading" loadingLabel="Loading ticket..." /></Screen>;
   }
 

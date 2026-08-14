@@ -24,6 +24,7 @@ const RESEND_SECONDS = 30;
 export default function OtpScreen() {
   const router = useRouter();
   const pendingPhone = useAuthStore((s) => s.pendingPhone);
+  const status = useAuthStore((s) => s.status);
   const verifyOtp = useVerifyOtp();
   const requestOtp = useRequestOtp();
 
@@ -38,12 +39,16 @@ export default function OtpScreen() {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  // A missing pending number means this screen was opened out of order.
+  // A missing pending number means this screen was opened out of order — but `signIn` also
+  // clears it on success, so a signed-in user here is finishing verification, not arriving
+  // out of order. Without this check that clear bounces them back to the phone screen and a
+  // successful sign-in looks like a rejection.
   useEffect(() => {
+    if (status === 'signed-in') return;
     if (!pendingPhone || !isValidEgyptianPhone(pendingPhone)) {
       router.replace('/(onboarding)/phone');
     }
-  }, [pendingPhone, router]);
+  }, [pendingPhone, router, status]);
 
   const ready = code.length === CODE_LENGTH && !verifyOtp.isPending;
 

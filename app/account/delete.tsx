@@ -40,7 +40,7 @@ export default function DeleteAccountScreen() {
   const authStatus = useAuthStore((s) => s.status);
 
   const previewQuery = useDeletionPreview(Boolean(user));
-  const { data: preview, isPending, isError } = previewQuery;
+  const { data: preview, isLoading, isError } = previewQuery;
   const requestOtp = useRequestDeletionOtp();
   const deleteAccount = useDeleteAccount();
 
@@ -72,7 +72,7 @@ export default function DeleteAccountScreen() {
 
   const blocked = Boolean(preview?.deletionBlockedByPendingPayment);
   const needsForfeit = Boolean(preview?.requiresForfeitConfirmation);
-  const canRequestCode = Boolean(preview) && !isPending && !isError && !blocked && (!needsForfeit || confirmForfeit);
+  const canRequestCode = Boolean(preview) && !isLoading && !isError && !blocked && (!needsForfeit || confirmForfeit);
 
   if (authStatus === 'loading') {
     return <ResourceState status="loading" loadingLabel="Loading your account..." />;
@@ -98,9 +98,9 @@ export default function DeleteAccountScreen() {
             tickets are non-refundable.
           </Text>
 
-          {isPending || isError ? (
+          {isLoading || isError ? (
             <ResourceState
-              status={isPending ? 'loading' : 'error'}
+              status={isLoading ? 'loading' : 'error'}
               loadingLabel="Checking your account..."
               errorMessage="We couldn't check whether your account can be deleted."
               onRetry={() => void previewQuery.refetch()}
@@ -160,7 +160,7 @@ export default function DeleteAccountScreen() {
             variant="danger"
             onPress={onRequestCode}
             disabled={!canRequestCode}
-            loading={requestOtp.isPending || isPending}
+            loading={requestOtp.isPending || isLoading}
           />
           <Button label="Keep my account" variant="secondary" onPress={() => router.back()} style={styles.secondary} />
         </>

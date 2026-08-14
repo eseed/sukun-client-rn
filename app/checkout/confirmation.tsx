@@ -45,7 +45,7 @@ export default function ConfirmationScreen() {
     );
   }
 
-  if (orderQuery.isPending) {
+  if (orderQuery.isLoading) {
     return (
       <View style={styles.resourceRoot}>
         <ResourceState status="loading" loadingLabel="Loading your confirmation..." />

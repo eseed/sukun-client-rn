@@ -39,3 +39,8 @@ yarn-error.*
 
 # testing
 coverage/
+
+# Claude Code local tooling (agent config, MCP servers, session settings).
+# CLAUDE.md stays tracked — it is project documentation, not tooling state.
+.claude/
+.mcp.json

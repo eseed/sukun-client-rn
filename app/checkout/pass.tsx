@@ -20,7 +20,7 @@ import { useEvent, usePricePreview } from '../../src/hooks/queries';
 import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { colors } from '../../src/theme/tokens';
-import { useCheckoutAccess } from './_guard';
+import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 
 /**
  * Design screen 08 · Checkout, choose your pass.

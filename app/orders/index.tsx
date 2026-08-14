@@ -29,7 +29,7 @@ export default function OrdersScreen() {
       />
 
       <ResourceState
-        status={orders.isPending ? 'loading' : orders.isError ? 'error' : items.length === 0 ? 'empty' : 'success'}
+        status={orders.isLoading ? 'loading' : orders.isError ? 'error' : items.length === 0 ? 'empty' : 'success'}
         loadingLabel="Loading your orders..."
         emptyTitle="No orders yet"
         emptyMessage="Orders you place will appear here."

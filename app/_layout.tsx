@@ -61,7 +61,7 @@ export default function RootLayout() {
             <Stack.Screen name="account/restore-phone" />
             <Stack.Screen name="account/restore-otp" />
             <Stack.Screen name="account/delete" />
-            <Stack.Screen name="legal" />
+            <Stack.Screen name="legal/terms" />
           </Stack>
         </QueryProvider>
       </SafeAreaProvider>

@@ -2,7 +2,7 @@ import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/ap
 import { TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
 import { useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
-import { renderWithProviders, screen, waitFor } from '../../src/test-utils';
+import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
 
 import WelcomeScreen from '../(onboarding)/welcome';
 import OtpScreen from '../(onboarding)/otp';
@@ -28,6 +28,8 @@ import GalleryScreen from '../gallery';
  * simulator click-through: no iOS runtime is installed on this machine (Xcode ships without
  * one until a multi-GB runtime is downloaded), so the walk is done here instead.
  */
+
+const mockPaymob = jest.requireMock('paymob-reactnative').default as Record<string, jest.Mock>;
 
 const mockParams: Record<string, string> = {};
 const mockRouter = {
@@ -212,10 +214,45 @@ describe('10 Review & pay', () => {
     ).toBeTruthy();
     expect(screen.getByText('Continue to payment')).toBeTruthy();
   });
+
+  /**
+   * Card entry belongs to Paymob's sheet, so "Continue to payment" holds the order and calls
+   * `presentPayVC` itself — there is no intermediate card screen between review and the sheet.
+   */
+  it('opens the Paymob sheet directly and confirms on SUCCESS', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    // Quantity 1 = buyer only; the api requires one guest per extra ticket.
+    useCheckoutStore.getState().setQuantity(1);
+    useCheckoutStore.getState().setTermsAccepted(true);
+
+    renderWithProviders(<ReviewScreen />);
+    // The button stays disabled until the mock price preview settles.
+    await waitFor(() => expect(screen.getByText('Full Weekend Pass × 1')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('1,824.00 EGP')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('Continue to payment'));
+
+    await waitFor(() => expect(mockPaymob.presentPayVC!).toHaveBeenCalled());
+    // Customisation must be registered before the sheet is presented, per the SDK docs.
+    expect(mockPaymob.setAppName!).toHaveBeenCalledWith('Sukun');
+
+    const listener = mockPaymob.setSdkListener!.mock.calls.at(-1)?.[0] as (r: unknown) => void;
+    act(() => listener({ status: 'Success' }));
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(
+        expect.stringContaining('/checkout/confirmation?orderId='),
+      ),
+    );
+  });
 });
 
 describe('11 Payment', () => {
-  it('shows the Paymob amount and says card entry happens there, not here', async () => {
+  // The screen used to draw dead look-alike card fields. Card entry belongs to Paymob's sheet,
+  // so the screen now shows the amount and hands straight off — no inputs of its own.
+  it('shows the Paymob amount and no card fields of its own', async () => {
     await signInAndComplete();
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
@@ -230,9 +267,10 @@ describe('11 Payment', () => {
     await waitFor(() => expect(screen.getByText('Payment')).toBeTruthy());
     expect(screen.getByText('Secured by Paymob · charged in EGP')).toBeTruthy();
     await waitFor(() => expect(screen.getAllByText('Pay 3,648.00 EGP').length).toBe(2));
-    expect(screen.getByText('Card number')).toBeTruthy();
+    expect(screen.queryByText('Card number')).toBeNull();
+    expect(screen.queryByText('CVV')).toBeNull();
     expect(
-      screen.getByText("Card details are entered in Paymob's secure sheet, not in Sukun."),
+      screen.getByText("Tapping pay opens Paymob's secure sheet, where you enter your card."),
     ).toBeTruthy();
   });
 
@@ -269,6 +307,18 @@ describe('13 My tickets', () => {
     expect(screen.getByText('Tulua · 23–24 Oct')).toBeTruthy();
     expect(screen.getByText('Paid')).toBeTruthy();
     expect(screen.getByText('View entry pass →')).toBeTruthy();
+  });
+
+  // Regression: the tickets query is disabled while signed out, and a disabled TanStack query
+  // reports `isPending: true` with `fetchStatus: 'idle'` forever. Gating the spinner on
+  // `isPending` left a signed-out user staring at "Loading your tickets..." with no request
+  // ever in flight. The screen must settle on the empty state instead.
+  it('settles on the empty state when signed out instead of spinning forever', async () => {
+    useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
+    renderWithProviders(<TicketsScreen />);
+
+    await waitFor(() => expect(screen.getByText('No tickets yet')).toBeTruthy());
+    expect(screen.queryByText('Loading your tickets...')).toBeNull();
   });
 });
 
