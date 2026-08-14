@@ -18,15 +18,10 @@ import {
 } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
-import { getPaymob } from '../../src/lib/paymob';
-import { readPaymobOutcome } from '../../src/lib/paymob-outcome';
+import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
-
-/** Paymob is resolved through a platform-specific adapter so Metro can bundle the web app. */
-const paymob = getPaymob();
-const Paymob = paymob?.default ?? null;
 
 /**
  * Design screen 11 · Payment.
@@ -53,10 +48,13 @@ export default function PaymentScreen() {
 
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** The SDK's own verdict — `null` until the sheet reports back. */
-  const [sdkResult, setSdkResult] = useState<'success' | 'fail' | 'pending' | 'cancelled' | null>(
-    null,
-  );
+  /**
+   * The SDK's own verdict — `null` until the sheet reports back. Owned by `usePaymobSheet`, which
+   * latches the first verdict of a session so the CANCELLED the sheet emits when it is dismissed
+   * cannot overwrite the SUCCESS that preceded it.
+   */
+  const sheet = usePaymobSheet();
+  const sdkResult = sheet.outcome;
 
   const statusQuery = usePaymentStatus(validOrderId, { poll: polling });
   const { data: status } = statusQuery;
@@ -79,9 +77,6 @@ export default function PaymentScreen() {
   /** SDK reported PENDING: the transaction is still being processed on Paymob's side. */
   const pending = sdkResult === 'pending' && !settled && !failed;
 
-  // The SDK listener is a native event subscription; it outlives the screen unless removed.
-  useEffect(() => () => Paymob?.removeSdkListener(), []);
-
   useEffect(() => {
     if (!settled) return;
     reset();
@@ -92,7 +87,7 @@ export default function PaymentScreen() {
     if (!validOrderId) return;
     setError(null);
 
-    if (!Paymob) {
+    if (!sheet.available) {
       setError('Payment needs the Sukun app — it isn’t available here.');
       return;
     }
@@ -119,41 +114,8 @@ export default function PaymentScreen() {
   }
 
   function presentPaymob(intent: { clientSecret: string; publicKey: string }) {
-    if (!Paymob) return;
-    setSdkResult(null);
-
-    // All customization must happen before presentPayVC — changes after it are ignored.
-    Paymob.setAppName('Sukun');
-    Paymob.setButtonBackgroundColor(colors.gold500);
-    Paymob.setButtonTextColor(colors.creme);
-
-    Paymob.setSdkListener((result: unknown) => {
-      // The SDK emits `{ status, details? }`, not the bare status string its typings describe.
-      switch (readPaymobOutcome(result)) {
-        case 'success':
-          setPolling(false);
-          setError(null);
-          setSdkResult('success');
-          break;
-        case 'fail':
-          setPolling(false);
-          setError('The payment did not go through. Nothing was charged.');
-          setSdkResult('fail');
-          break;
-        case 'pending':
-          // Still processing on Paymob's side — keep polling until the order resolves.
-          setError(null);
-          setSdkResult('pending');
-          break;
-        case 'cancelled':
-          setPolling(false);
-          setError('Payment was cancelled. Nothing was charged.');
-          setSdkResult('cancelled');
-          break;
-      }
-    });
-
-    Paymob.presentPayVC(intent.clientSecret, intent.publicKey);
+    if (!sheet.available) return;
+    sheet.present(intent);
     setPolling(true);
   }
 
@@ -225,7 +187,9 @@ export default function PaymentScreen() {
       {failed || error ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.note}>
           {error ??
-            (status?.orderStatus === 'expired'
+            (sdkResult === 'cancelled'
+              ? 'Payment was cancelled. Nothing was charged.'
+              : status?.orderStatus === 'expired'
               ? 'This payment hold expired. You can try again.'
               : status?.orderStatus === 'cancelled'
                 ? 'This order was cancelled and cannot be paid.'
