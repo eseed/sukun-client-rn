@@ -37,6 +37,9 @@ export function usePaymobSheet() {
       // save-card option is hidden rather than shown unchecked.
       sdk.setShowSaveCard(false);
       sdk.setSaveCardDefault(false);
+      // Turns off the SDK's own keyboard handling, whose floating "Done" pill sits over the
+      // sheet. iOS dismisses the keyboard on its own here.
+      sdk.setKeyboardHandlingEnabled(false);
 
       sdk.setSdkListener((result: unknown) => {
         const next = readPaymobOutcome(result);

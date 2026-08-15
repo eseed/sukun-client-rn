@@ -12,6 +12,8 @@ export interface PaymobSdk {
   setButtonTextColor: (color: string) => void;
   setShowSaveCard: (isVisible: boolean) => void;
   setSaveCardDefault: (isEnabled: boolean) => void;
+  /** Off hides the SDK's floating "Done" keyboard pill; iOS still dismisses the keyboard. */
+  setKeyboardHandlingEnabled: (isEnabled: boolean) => void;
   /** See `readPaymobOutcome` — the emitted value is an object, not the documented bare string. */
   setSdkListener: (listener: (result: unknown) => void) => void;
   removeSdkListener: () => void;

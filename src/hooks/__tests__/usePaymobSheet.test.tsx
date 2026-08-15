@@ -27,6 +27,8 @@ describe('usePaymobSheet', () => {
     // Sukun stores no cards, so the save-card option is hidden entirely.
     expect(mockPaymob.setShowSaveCard!).toHaveBeenCalledWith(false);
     expect(mockPaymob.setSaveCardDefault!).toHaveBeenCalledWith(false);
+    // The SDK's own keyboard handling draws a floating "Done" pill over the sheet.
+    expect(mockPaymob.setKeyboardHandlingEnabled!).toHaveBeenCalledWith(false);
     expect(mockPaymob.presentPayVC!).toHaveBeenCalledWith('sec_test', 'pk_test');
 
     // Every customisation call must precede presentPayVC — later ones are ignored by the SDK.
@@ -35,6 +37,7 @@ describe('usePaymobSheet', () => {
       mockPaymob.setAppName!,
       mockPaymob.setShowSaveCard!,
       mockPaymob.setSaveCardDefault!,
+      mockPaymob.setKeyboardHandlingEnabled!,
       mockPaymob.setSdkListener!,
     ]) {
       expect(fn.mock.invocationCallOrder[0]!).toBeLessThan(presentOrder);
