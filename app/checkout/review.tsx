@@ -19,6 +19,7 @@ import {
   useCreateOrder,
   useEvent,
   useInitiatePayment,
+  usePaymentStatus,
   usePricePreview,
   useValidatePromoCode,
 } from '../../src/hooks/queries';
@@ -80,25 +81,40 @@ export default function ReviewScreen() {
   const sheet = usePaymobSheet();
   const reset = useCheckoutStore((s) => s.reset);
 
-  // The sheet's verdict drives what happens next. Only the two outcomes that navigate live in an
-  // effect; the two that just report back are derived at render, so no state is set from here.
+  /**
+   * The sheet's verdict is a hint, not the truth. Paymob's own SDK reports CANCELLED when the
+   * buyer closes a sheet that has already charged the card, so trusting it outright told people
+   * "Nothing was charged" over a completed payment. The server is the authority — the webhook
+   * settles the order — so a non-success verdict is checked against payment status before any
+   * such claim is made.
+   */
+  const awaitingVerdict = sheet.outcome !== null && sheet.outcome !== 'pending';
+  const paymentStatusQuery = usePaymentStatus(order?.id, { poll: awaitingVerdict });
+  const serverSaysPaid = paymentStatusQuery.data?.orderStatus === 'paid';
+  const rejectedByServer =
+    paymentStatusQuery.data != null &&
+    ['failed', 'expired', 'cancelled', 'refunded'].includes(
+      paymentStatusQuery.data.orderStatus,
+    );
+
   useEffect(() => {
     if (!order) return;
-    if (sheet.outcome === 'success') {
+    if (sheet.outcome === 'success' || serverSaysPaid) {
       reset();
       router.replace(`/checkout/confirmation?orderId=${order.id}`);
     } else if (sheet.outcome === 'pending') {
       // Still settling on Paymob's side — the payment screen polls until the order resolves.
       router.replace(`/checkout/payment?orderId=${order.id}`);
     }
-  }, [order, reset, router, sheet.outcome]);
+  }, [order, reset, router, serverSaysPaid, sheet.outcome]);
 
+  // Only claim nothing was charged once the server has actually said so.
   const sheetError =
-    sheet.outcome === 'fail'
-      ? 'The payment did not go through. Nothing was charged.'
-      : sheet.outcome === 'cancelled'
-        ? 'Payment was cancelled. Nothing was charged.'
-        : null;
+    !awaitingVerdict || serverSaysPaid || !rejectedByServer
+      ? null
+      : sheet.outcome === 'fail'
+        ? 'The payment did not go through. Nothing was charged.'
+        : 'Payment was cancelled. Nothing was charged.';
 
   const tier = event?.tiers.find((t) => t.id === tierId);
   const invalidSelection = !event || !tier || !tier.isPurchasable;

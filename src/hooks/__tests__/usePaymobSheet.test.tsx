@@ -29,6 +29,10 @@ describe('usePaymobSheet', () => {
     expect(mockPaymob.setSaveCardDefault!).toHaveBeenCalledWith(false);
     // The SDK's own keyboard handling draws a floating "Done" pill over the sheet.
     expect(mockPaymob.setKeyboardHandlingEnabled!).toHaveBeenCalledWith(false);
+    // Sukun shows design screen 18, so the SDK's own confirmation and "Approved" pages are off —
+    // the result page in particular parks the sheet and reports CANCELLED on an approved payment.
+    expect(mockPaymob.setShowConfirmationPage!).toHaveBeenCalledWith(false);
+    expect(mockPaymob.setShowTransactionResult!).toHaveBeenCalledWith(false);
     expect(mockPaymob.presentPayVC!).toHaveBeenCalledWith('sec_test', 'pk_test');
 
     // Every customisation call must precede presentPayVC — later ones are ignored by the SDK.
@@ -38,6 +42,7 @@ describe('usePaymobSheet', () => {
       mockPaymob.setShowSaveCard!,
       mockPaymob.setSaveCardDefault!,
       mockPaymob.setKeyboardHandlingEnabled!,
+      mockPaymob.setShowTransactionResult!,
       mockPaymob.setSdkListener!,
     ]) {
       expect(fn.mock.invocationCallOrder[0]!).toBeLessThan(presentOrder);

@@ -14,6 +14,10 @@ export interface PaymobSdk {
   setSaveCardDefault: (isEnabled: boolean) => void;
   /** Off hides the SDK's floating "Done" keyboard pill; iOS still dismisses the keyboard. */
   setKeyboardHandlingEnabled: (isEnabled: boolean) => void;
+  /** Off skips the SDK's own pre-payment confirmation page. */
+  setShowConfirmationPage: (isVisible: boolean) => void;
+  /** Off skips the SDK's "Approved" result page, so the sheet returns instead of parking. */
+  setShowTransactionResult: (isVisible: boolean) => void;
   /** See `readPaymobOutcome` — the emitted value is an object, not the documented bare string. */
   setSdkListener: (listener: (result: unknown) => void) => void;
   removeSdkListener: () => void;

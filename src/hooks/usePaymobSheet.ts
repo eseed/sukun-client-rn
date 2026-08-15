@@ -40,6 +40,11 @@ export function usePaymobSheet() {
       // Turns off the SDK's own keyboard handling, whose floating "Done" pill sits over the
       // sheet. iOS dismisses the keyboard on its own here.
       sdk.setKeyboardHandlingEnabled(false);
+      // Sukun shows its own confirmation (design screen 18), so the SDK's confirmation and
+      // "Approved" result pages are both redundant — and worse, the sheet parks on the result
+      // page until the buyer closes it, which reports CANCELLED for a payment that was approved.
+      sdk.setShowConfirmationPage(false);
+      sdk.setShowTransactionResult(false);
 
       sdk.setSdkListener((result: unknown) => {
         const next = readPaymobOutcome(result);
