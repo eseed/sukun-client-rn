@@ -2,7 +2,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { BackButton, Button, BulletHeading, InlineError, ResourceState, Screen, Text } from '../../src/components/ui';
+import {
+  BackButton,
+  Button,
+  BulletHeading,
+  InlineError,
+  ResourceState,
+  Screen,
+  Text,
+} from '../../src/components/ui';
+import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useClaimTicket, useEntryPass, useTicket } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
@@ -41,15 +50,35 @@ export default function EntryPassScreen() {
   }, []);
 
   if (!ticketId) {
-    return <Screen contentStyle={styles.stateScreen}><ResourceState status="error" errorTitle="Ticket link is not valid" errorMessage="Open your ticket again from My tickets." /></Screen>;
+    return (
+      <Screen contentStyle={styles.stateScreen}>
+        <ResourceState
+          status="error"
+          errorTitle="Ticket link is not valid"
+          errorMessage="Open your ticket again from My tickets."
+        />
+      </Screen>
+    );
   }
 
   if (ticketQuery.isLoading) {
-    return <Screen contentStyle={styles.stateScreen}><ResourceState status="loading" loadingLabel="Loading ticket..." /></Screen>;
+    return (
+      <Screen contentStyle={styles.stateScreen}>
+        <ResourceState status="loading" loadingLabel="Loading ticket..." />
+      </Screen>
+    );
   }
 
   if (ticketQuery.isError || !ticketQuery.data) {
-    return <Screen contentStyle={styles.stateScreen}><ResourceState status="error" errorMessage={messageForError(ticketQuery.error)} onRetry={() => void ticketQuery.refetch()} /></Screen>;
+    return (
+      <Screen contentStyle={styles.stateScreen}>
+        <ResourceState
+          status="error"
+          errorMessage={messageForError(ticketQuery.error)}
+          onRetry={() => void ticketQuery.refetch()}
+        />
+      </Screen>
+    );
   }
 
   const ticket = ticketQuery.data;
@@ -81,84 +110,125 @@ export default function EntryPassScreen() {
 
   function onRemediate() {
     if (needsSelfie) router.push('/(onboarding)/selfie');
-    else if (needsProfile || missingProfileFields(user).length > 0) router.push('/(onboarding)/profile');
+    else if (needsProfile || missingProfileFields(user).length > 0)
+      router.push('/(onboarding)/profile');
   }
 
   return (
-    <Screen tone="inverse" contentStyle={styles.content}>
-      <BackButton tone="inverse" onPress={() => router.back()} style={styles.back} />
+    <View style={styles.root}>
+      <Screen tone="inverse" edges={{ bottom: false }} contentStyle={styles.content}>
+        <BackButton tone="inverse" onPress={() => router.back()} style={styles.back} />
 
-       <View style={styles.liveRow}>
-        <View style={styles.liveDot} />
-        <Text style={styles.liveLabel}>
-           {ticket.event.title} · {needsClaim || needsSelfie || needsProfile || unusable ? 'ticket status' : 'live entry pass'}
-        </Text>
-      </View>
+        <View style={styles.liveRow}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveLabel}>
+            {ticket.event.title} ·{' '}
+            {needsClaim || needsSelfie || needsProfile || unusable
+              ? 'ticket status'
+              : 'live entry pass'}
+          </Text>
+        </View>
 
-       <View style={styles.heading}>
-         <BulletHeading title={ticket.tier.name} size="sm" tone="inverse" />
-       </View>
+        <View style={styles.heading}>
+          <BulletHeading title={ticket.tier.name} size="sm" tone="inverse" />
+        </View>
 
-       {needsClaim || needsSelfie || needsProfile || unusable ? (
-         <View style={styles.statusPanel}>
-           <Text variant="titleSm" style={styles.statusTitle}>
-             {needsClaim ? 'This ticket is waiting to bind' : needsSelfie ? 'Add your selfie to use this ticket' : needsProfile ? 'Finish your profile to use this ticket' : 'This ticket cannot be used'}
-           </Text>
-           <Text variant="bodyMuted" style={styles.statusCopy}>
-             {needsClaim ? 'Claim it to attach the ticket to your phone number.' : needsSelfie ? 'Gate staff use your selfie to verify you at entry.' : needsProfile ? 'Add the required profile details before opening the entry pass.' : 'This ticket has been voided or refunded.'}
-           </Text>
-           {actionError ? <InlineError message={actionError} style={styles.actionError} /> : null}
-           {needsClaim ? <Button label="Claim ticket" onPress={onClaim} loading={claimTicket.isPending} /> : null}
-           {needsSelfie || needsProfile ? <Button label={needsSelfie ? 'Add selfie' : 'Complete profile'} onPress={onRemediate} /> : null}
-         </View>
-       ) : null}
+        {needsClaim || needsSelfie || needsProfile || unusable ? (
+          <View style={styles.statusPanel}>
+            <Text variant="titleSm" style={styles.statusTitle}>
+              {needsClaim
+                ? 'This ticket is waiting to bind'
+                : needsSelfie
+                  ? 'Add your selfie to use this ticket'
+                  : needsProfile
+                    ? 'Finish your profile to use this ticket'
+                    : 'This ticket cannot be used'}
+            </Text>
+            <Text variant="bodyMuted" style={styles.statusCopy}>
+              {needsClaim
+                ? 'Claim it to attach the ticket to your phone number.'
+                : needsSelfie
+                  ? 'Gate staff use your selfie to verify you at entry.'
+                  : needsProfile
+                    ? 'Add the required profile details before opening the entry pass.'
+                    : 'This ticket has been voided or refunded.'}
+            </Text>
+            {actionError ? <InlineError message={actionError} style={styles.actionError} /> : null}
+            {needsClaim ? (
+              <Button label="Claim ticket" onPress={onClaim} loading={claimTicket.isPending} />
+            ) : null}
+            {needsSelfie || needsProfile ? (
+              <Button
+                label={needsSelfie ? 'Add selfie' : 'Complete profile'}
+                onPress={onRemediate}
+              />
+            ) : null}
+          </View>
+        ) : null}
 
-       {!needsClaim && !needsSelfie && !needsProfile && !unusable ? (
-         <View style={styles.qrPanel}>
-           {passQuery.isPending ? (
-             <View style={styles.qrPlaceholder}>
-               <ResourceState status="loading" loadingLabel="Preparing entry pass..." style={styles.compactState} />
-             </View>
-           ) : passQuery.error ? (
-             <View style={styles.qrPlaceholder}>
-               <ResourceState status="error" errorMessage={messageForError(passQuery.error)} onRetry={() => void passQuery.refetch()} style={styles.compactState} />
-             </View>
-           ) : (
-             <QRCode
-               value={passQuery.data?.payload ?? ''}
-               size={QR_SIZE}
-               color={colors.black}
-               backgroundColor={colors.creme}
-             />
-           )}
+        {!needsClaim && !needsSelfie && !needsProfile && !unusable ? (
+          <View style={styles.qrPanel}>
+            {passQuery.isPending ? (
+              <View style={styles.qrPlaceholder}>
+                <ResourceState
+                  status="loading"
+                  loadingLabel="Preparing entry pass..."
+                  style={styles.compactState}
+                />
+              </View>
+            ) : passQuery.error ? (
+              <View style={styles.qrPlaceholder}>
+                <ResourceState
+                  status="error"
+                  errorMessage={messageForError(passQuery.error)}
+                  onRetry={() => void passQuery.refetch()}
+                  style={styles.compactState}
+                />
+              </View>
+            ) : (
+              <QRCode
+                value={passQuery.data?.payload ?? ''}
+                size={QR_SIZE}
+                color={colors.black}
+                backgroundColor={colors.creme}
+              />
+            )}
 
-           <View style={styles.refreshRow}>
-             <View style={styles.refreshTrack}>
-               <View style={[styles.refreshFill, { flex: progress }]} />
-               <View style={{ flex: 1 - progress }} />
-             </View>
-             <Text variant="metaSm">Refreshes in {secondsLeft}s</Text>
-           </View>
-         </View>
-       ) : null}
+            <View style={styles.refreshRow}>
+              <View style={styles.refreshTrack}>
+                <View style={[styles.refreshFill, { flex: progress }]} />
+                <View style={{ flex: 1 - progress }} />
+              </View>
+              <Text variant="metaSm">Refreshes in {secondsLeft}s</Text>
+            </View>
+          </View>
+        ) : null}
 
-      <View style={styles.detailRowFirst}>
-        <Text style={styles.detailLabel}>Holder</Text>
-       <Text style={styles.detailValue}>{ticket.holderName || '—'}</Text>
-      </View>
-      <View style={styles.detailRow}>
-        <Text style={styles.detailLabel}>Venue</Text>
-        <Text style={styles.detailValue}>{venue}</Text>
-      </View>
+        <View style={styles.detailRowFirst}>
+          <Text style={styles.detailLabel}>Holder</Text>
+          <Text style={styles.detailValue}>{ticket.holderName || '—'}</Text>
+        </View>
+        <View style={styles.detailRow}>
+          <Text style={styles.detailLabel}>Venue</Text>
+          <Text style={styles.detailValue}>{venue}</Text>
+        </View>
 
-       {!needsClaim && !needsSelfie && !needsProfile && !unusable ? <Text style={styles.footnote}>
-         This code regenerates every ~{rotation} seconds. A screenshot won&apos;t get anyone in.
-       </Text> : null}
-    </Screen>
+        {!needsClaim && !needsSelfie && !needsProfile && !unusable ? (
+          <Text style={styles.footnote}>
+            This code regenerates every ~{rotation} seconds. A screenshot won&apos;t get anyone in.
+          </Text>
+        ) : null}
+      </Screen>
+      <BottomNav tone="inverse" />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.black,
+  },
   content: {
     paddingHorizontal: 24,
   },

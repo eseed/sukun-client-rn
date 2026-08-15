@@ -11,11 +11,7 @@ export { Card, ImageSlot, ListRow, SummaryRow } from './Surfaces';
 export { ConicRing } from './ConicRing';
 export { Text, textStyles, type TextProps } from './Text';
 export { MarkdownText, type MarkdownTextProps } from './MarkdownText';
-export {
-  ResourceState,
-  type ResourceStateProps,
-  type ResourceStatus,
-} from './ResourceState';
+export { ResourceState, type ResourceStateProps, type ResourceStatus } from './ResourceState';
 export { InlineError, type InlineErrorProps } from './InlineError';
 export { PageHeader, type PageHeaderProps } from './PageHeader';
 export {

@@ -10,6 +10,7 @@ import {
   SummaryRow,
   Text,
 } from '../../src/components/ui';
+import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useCancelOrder, useEvent, useOrder } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatDate, formatDateRange, formatEgp } from '../../src/lib/format';
@@ -42,95 +43,107 @@ export default function OrderDetailScreen() {
   const canCancel = data?.status === 'awaiting_payment';
 
   return (
-    <Screen scroll contentStyle={styles.content}>
-      <PageHeader
-        title="Order details"
-        subtitle={data ? `Order ${data.orderNumber}` : undefined}
-        onBack={() => router.back()}
-      />
+    <View style={styles.root}>
+      <Screen scroll edges={{ bottom: false }} contentStyle={styles.content}>
+        <PageHeader
+          title="Order details"
+          subtitle={data ? `Order ${data.orderNumber}` : undefined}
+          onBack={() => router.back()}
+        />
 
-      <ResourceState
-        status={order.isLoading ? 'loading' : order.isError || !data ? 'error' : 'success'}
-        loadingLabel="Loading order..."
-        errorMessage="We couldn't load this order."
-        onRetry={() => void order.refetch()}
-      >
-        {data ? (
-          <View style={styles.body}>
-            <Card style={styles.eventCard}>
-              <Text variant="titleSm">{eventTitle}</Text>
-              {event.data ? (
-                <Text variant="bodyMuted">
-                  {formatDateRange(event.data.startDate, event.data.endDate)}
-                  {event.data.venue?.name ? ` · ${event.data.venue.name}` : ''}
+        <ResourceState
+          status={order.isLoading ? 'loading' : order.isError || !data ? 'error' : 'success'}
+          loadingLabel="Loading order..."
+          errorMessage="We couldn't load this order."
+          onRetry={() => void order.refetch()}
+        >
+          {data ? (
+            <View style={styles.body}>
+              <Card style={styles.eventCard}>
+                <Text variant="titleSm">{eventTitle}</Text>
+                {event.data ? (
+                  <Text variant="bodyMuted">
+                    {formatDateRange(event.data.startDate, event.data.endDate)}
+                    {event.data.venue?.name ? ` · ${event.data.venue.name}` : ''}
+                  </Text>
+                ) : null}
+                <Text variant="eyebrow" style={styles.status}>
+                  {statusLabel(data.status)}
+                </Text>
+              </Card>
+
+              <Text variant="eyebrow">Passes</Text>
+              <Card style={styles.itemsCard}>
+                {data.items.map((item) => (
+                  <View key={item.tierId} style={styles.item}>
+                    <View style={styles.itemText}>
+                      <Text variant="bodyValue">
+                        {event.data?.tiers.find((tier) => tier.id === item.tierId)?.name ?? 'Pass'}
+                      </Text>
+                      <Text variant="meta">Quantity {item.quantity}</Text>
+                    </View>
+                    <Text variant="bodyValue">{formatEgp(item.lineTotalEgp)}</Text>
+                  </View>
+                ))}
+              </Card>
+
+              {data.guests.length > 0 ? (
+                <>
+                  <Text variant="eyebrow">Guests</Text>
+                  <Card style={styles.itemsCard}>
+                    {data.guests.map((guest, index) => (
+                      <View key={`${guest.phoneNumber}-${index}`} style={styles.guest}>
+                        <Text variant="bodyValue">{guest.name}</Text>
+                        <Text variant="meta">Ticket for the number you selected</Text>
+                      </View>
+                    ))}
+                  </Card>
+                </>
+              ) : null}
+
+              <Card style={styles.summary}>
+                <SummaryRow label="Subtotal" value={formatEgp(data.subtotalEgp)} />
+                {data.discountEgp !== '0.00' ? (
+                  <SummaryRow
+                    label="Discount"
+                    value={`−${formatEgp(data.discountEgp)}`}
+                    tone="positive"
+                  />
+                ) : null}
+                {data.vatEgp !== '0.00' ? (
+                  <SummaryRow label="VAT" value={formatEgp(data.vatEgp)} tone="muted" />
+                ) : null}
+                <View style={styles.divider} />
+                <SummaryRow label="Total" value={formatEgp(data.totalEgp)} emphasis />
+                <Text variant="metaSm">Placed {formatDate(data.createdAt)}</Text>
+              </Card>
+
+              {error ? (
+                <Text variant="metaSm" color={colors.rose700} style={styles.error}>
+                  {error}
                 </Text>
               ) : null}
-              <Text variant="eyebrow" style={styles.status}>
-                {statusLabel(data.status)}
-              </Text>
-            </Card>
-
-            <Text variant="eyebrow">Passes</Text>
-            <Card style={styles.itemsCard}>
-              {data.items.map((item) => (
-                <View key={item.tierId} style={styles.item}>
-                  <View style={styles.itemText}>
-                    <Text variant="bodyValue">
-                      {event.data?.tiers.find((tier) => tier.id === item.tierId)?.name ?? 'Pass'}
-                    </Text>
-                    <Text variant="meta">Quantity {item.quantity}</Text>
-                  </View>
-                  <Text variant="bodyValue">{formatEgp(item.lineTotalEgp)}</Text>
-                </View>
-              ))}
-            </Card>
-
-            {data.guests.length > 0 ? (
-              <>
-                <Text variant="eyebrow">Guests</Text>
-                <Card style={styles.itemsCard}>
-                  {data.guests.map((guest, index) => (
-                    <View key={`${guest.phoneNumber}-${index}`} style={styles.guest}>
-                      <Text variant="bodyValue">{guest.name}</Text>
-                      <Text variant="meta">Ticket for the number you selected</Text>
-                    </View>
-                  ))}
-                </Card>
-              </>
-            ) : null}
-
-            <Card style={styles.summary}>
-              <SummaryRow label="Subtotal" value={formatEgp(data.subtotalEgp)} />
-              {data.discountEgp !== '0.00' ? (
-                <SummaryRow label="Discount" value={`−${formatEgp(data.discountEgp)}`} tone="positive" />
+              {canCancel ? (
+                <Button
+                  label="Cancel order"
+                  variant="secondary"
+                  onPress={onCancel}
+                  loading={cancelOrder.isPending}
+                />
               ) : null}
-              {data.vatEgp !== '0.00' ? <SummaryRow label="VAT" value={formatEgp(data.vatEgp)} tone="muted" /> : null}
-              <View style={styles.divider} />
-              <SummaryRow label="Total" value={formatEgp(data.totalEgp)} emphasis />
-              <Text variant="metaSm">Placed {formatDate(data.createdAt)}</Text>
-            </Card>
-
-            {error ? (
-              <Text variant="metaSm" color={colors.rose700} style={styles.error}>
-                {error}
-              </Text>
-            ) : null}
-            {canCancel ? (
-              <Button
-                label="Cancel order"
-                variant="secondary"
-                onPress={onCancel}
-                loading={cancelOrder.isPending}
-              />
-            ) : null}
-          </View>
-        ) : null}
-      </ResourceState>
-    </Screen>
+            </View>
+          ) : null}
+        </ResourceState>
+      </Screen>
+      <BottomNav />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   content: {
     paddingHorizontal: space.s5,
   },

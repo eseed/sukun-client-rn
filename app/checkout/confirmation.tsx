@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, ImageSlot, ResourceState, Text } from '../../src/components/ui';
+import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useEvent, useOrder, useTickets } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { designAsset } from '../../src/theme/assets';
@@ -103,14 +104,13 @@ export default function ConfirmationScreen() {
 
         {guestCount > 0 ? (
           <Text style={styles.blurb}>
-            We&apos;ve sent your {guestCount === 1 ? 'guest' : 'guests'} a WhatsApp message.
-            Their {guestCount === 1 ? 'ticket appears' : 'tickets appear'} the moment they
-            verify their number.
+            We&apos;ve sent your {guestCount === 1 ? 'guest' : 'guests'} a WhatsApp message. Their{' '}
+            {guestCount === 1 ? 'ticket appears' : 'tickets appear'} the moment they verify their
+            number.
           </Text>
         ) : (
           <Text style={styles.blurb}>
-            Your entry pass is ready. Bring your face — gate staff check it against your
-            selfie.
+            Your entry pass is ready. Bring your face — gate staff check it against your selfie.
           </Text>
         )}
 
@@ -118,10 +118,14 @@ export default function ConfirmationScreen() {
           label="See my ticket"
           size="inline"
           onPress={() =>
-            firstTicket ? router.replace(`/ticket/${firstTicket.id}`) : router.replace('/(tabs)/tickets')
+            firstTicket
+              ? router.replace(`/ticket/${firstTicket.id}`)
+              : router.replace('/(tabs)/tickets')
           }
         />
       </View>
+
+      <BottomNav style={styles.nav} />
     </View>
   );
 }
@@ -138,6 +142,12 @@ const styles = StyleSheet.create({
   background: {
     ...StyleSheet.absoluteFill,
     height: undefined,
+  },
+  nav: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   panel: {
     position: 'absolute',
