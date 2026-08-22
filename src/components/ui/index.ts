@@ -6,6 +6,8 @@ export { BackButton, BulletHeading, StepLabel } from './Heading';
 export { OtpInput } from './OtpInput';
 export { OptionSheet, type SheetOption } from './OptionSheet';
 export { Screen, type ScreenProps } from './Screen';
+export { DateField } from './DateField';
+export { SelectField, type SelectOption } from './SelectField';
 export { Checkbox, CheckCircle, QuantityStepper, RadioDot, SelectableCard } from './Selection';
 export { Card, ImageSlot, ListRow, SummaryRow } from './Surfaces';
 export { ConicRing } from './ConicRing';

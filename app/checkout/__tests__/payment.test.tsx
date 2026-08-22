@@ -50,7 +50,7 @@ async function signInAndComplete() {
     email: 'yasmin@email.com',
     dateOfBirth: '1994-03-12',
     gender: 'female',
-    areaId: 'ar-cairo',
+    areaId: 'ar-maadi',
   });
   const complete = await mockApi.profile.uploadSelfie('file:///selfie.jpg');
   useAuthStore.setState({ status: 'signed-in', user: complete, pendingPhone: null });

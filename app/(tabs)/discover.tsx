@@ -7,10 +7,10 @@ import { EventListRow, FeaturedEventCard } from '../../src/components/events/Eve
 import { useEvents } from '../../src/hooks/queries';
 import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
 import { messageForError } from '../../src/lib/errors';
+import { formatTagLabel } from '../../src/lib/format';
 import { useAuthStore } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
-const FILTERS = ['All', 'Festivals', 'Sound'] as const;
 const THUMBS: DesignAssetKey[] = ['eventThumb1', 'eventThumb2', 'eventThumb3'];
 
 /** Design screen 06 · Discover (home). */
@@ -18,9 +18,25 @@ export default function DiscoverScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>('All');
+  const [tag, setTag] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 250);
+
+  /**
+   * The chip vocabulary, taken from the events themselves rather than a hardcoded list — the
+   * old one offered "Festivals" and "Sound", neither of which is a tag any event carries, so
+   * both chips filtered to nothing.
+   *
+   * Deliberately the *unfiltered* query: selecting a tag narrows the listing, and deriving the
+   * vocabulary from that narrowed set would delete every other chip from the row. With no tag
+   * selected this shares its query key with the listing below, so it costs no extra request.
+   */
+  const vocabulary = useEvents();
+  const tags = useMemo(() => {
+    const seen = new Set<string>();
+    for (const event of vocabulary.events) for (const item of event.tags) seen.add(item);
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [vocabulary.events]);
 
   const {
     events: allEvents,
@@ -31,7 +47,7 @@ export default function DiscoverScreen() {
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
-  } = useEvents(filter === 'All' ? undefined : { tag: [filter] });
+  } = useEvents(tag ? { tag: [tag] } : undefined);
 
   const events = useMemo(() => {
     const term = debouncedSearch.trim().toLowerCase();
@@ -93,16 +109,21 @@ export default function DiscoverScreen() {
         />
       </View>
 
-      <View style={styles.filters}>
-        {FILTERS.map((item) => (
-          <Tag
-            key={item}
-            label={item}
-            selected={filter === item}
-            onPress={() => setFilter(item)}
-          />
-        ))}
-      </View>
+      {tags.length > 0 ? (
+        <View style={styles.filters}>
+          <Tag label="All" selected={tag === null} onPress={() => setTag(null)} />
+          {tags.map((item) => (
+            <Tag
+              key={item}
+              // The stored tag is what gets sent; only the label is prettied up, so the value
+              // the server matches on is the exact one it gave us.
+              label={formatTagLabel(item)}
+              selected={tag === item}
+              onPress={() => setTag(item)}
+            />
+          ))}
+        </View>
+      ) : null}
 
       <ResourceState
         status={isPending ? 'loading' : isError ? 'error' : events.length === 0 ? 'empty' : 'success'}
@@ -191,6 +212,8 @@ const styles = StyleSheet.create({
   },
   filters: {
     flexDirection: 'row',
+    // The row is as long as the vocabulary now, so it wraps rather than running off-screen.
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 22,
   },

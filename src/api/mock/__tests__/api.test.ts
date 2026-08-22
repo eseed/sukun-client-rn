@@ -29,7 +29,7 @@ async function completeProfile() {
     email: 'yasmin@email.com',
     dateOfBirth: '1994-03-12',
     gender: 'female',
-    areaId: 'ar-cairo',
+    areaId: 'ar-maadi',
   });
   return mockApi.profile.uploadSelfie('file:///selfie.jpg');
 }
@@ -98,7 +98,7 @@ describe('profile completeness gates purchase', () => {
       email: 'yasmin@email.com',
       dateOfBirth: '1994-03-12',
       gender: 'female',
-      areaId: 'ar-cairo',
+      areaId: 'ar-maadi',
     });
     expect(withoutSelfie.profileComplete).toBe(false);
 
@@ -309,7 +309,7 @@ describe('entry pass', () => {
       email: 'yasmin@email.com',
       dateOfBirth: '1994-03-12',
       gender: 'female',
-      areaId: 'ar-cairo',
+      areaId: 'ar-maadi',
     });
     const { data } = await mockApi.tickets.list();
     const ticket = data[0];

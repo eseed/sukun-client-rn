@@ -8,7 +8,10 @@ import {
   BackButton,
   BulletHeading,
   Button,
+  Checkbox,
+  DateField,
   PickerField,
+  SelectField,
   ResourceState,
   Screen,
   StepLabel,
@@ -18,10 +21,9 @@ import {
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
-import { formatDateOfBirth, parseDateOfBirth } from '../../src/lib/format';
+import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
-import type { AppUserGender } from '../../src/api/types';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 
 /**
@@ -31,10 +33,13 @@ import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
  * verification is deliberately not required here.
  */
 
-const GENDERS: { value: AppUserGender; label: string }[] = [
-  { value: 'female', label: 'Woman' },
-  { value: 'male', label: 'Man' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+/** Meta requires the consent wording to name the sender and what is being sent. */
+const CONSENT_LABEL =
+  "WhatsApp me updates from Sukun about events, offers, and things I'll actually care about.";
+
+const GENDERS: { value: 'male' | 'female'; label: string }[] = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
 ];
 
 const schema = z.object({
@@ -43,9 +48,13 @@ const schema = z.object({
   dateOfBirth: z
     .string()
     .trim()
-    .refine((value) => parseDateOfBirth(value) !== null, 'Use DD/MM/YYYY'),
-  gender: z.enum(['male', 'female', 'prefer_not_to_say']),
+    .min(1, 'Pick your date of birth')
+    .refine((value) => ageOn(value, new Date()) >= MINIMUM_AGE, `You must be ${MINIMUM_AGE} or over`),
+  gender: z.enum(['male', 'female']),
   areaId: z.string().min(1, 'Pick your area'),
+  // Consent, so it is never required and never pre-ticked — Meta only accepts marketing
+  // messages sent on an explicit opt-in, and a default-on box is not one.
+  marketingOptIn: z.boolean(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -77,7 +86,14 @@ export default function ProfileFormScreen() {
 
   const { control, handleSubmit, formState, reset } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { fullName: '', email: '', dateOfBirth: '', gender: undefined, areaId: '' },
+    defaultValues: {
+      fullName: '',
+      email: '',
+      dateOfBirth: '',
+      gender: undefined,
+      areaId: '',
+      marketingOptIn: false,
+    },
     mode: 'onBlur',
   });
 
@@ -85,9 +101,12 @@ export default function ProfileFormScreen() {
     reset({
       fullName: user?.fullName ?? '',
       email: user?.email ?? '',
-      dateOfBirth: user?.dateOfBirth ? formatDateOfBirth(user.dateOfBirth) : '',
-      gender: user?.gender ?? undefined,
+      dateOfBirth: user?.dateOfBirth ?? '',
+      // The server still stores `prefer_not_to_say` for anyone who chose it before it was
+      // withdrawn; the form no longer offers it, so those users pick again.
+      gender: user?.gender === 'male' || user?.gender === 'female' ? user.gender : undefined,
       areaId: user?.area?.id ?? '',
+      marketingOptIn: user?.marketingOptIn ?? false,
     });
   }, [reset, user]);
 
@@ -97,9 +116,10 @@ export default function ProfileFormScreen() {
       await updateProfile.mutateAsync({
         fullName: values.fullName,
         email: values.email,
-        dateOfBirth: parseDateOfBirth(values.dateOfBirth) ?? undefined,
+        dateOfBirth: values.dateOfBirth,
         gender: values.gender,
         areaId: values.areaId,
+        marketingOptIn: values.marketingOptIn,
       });
       router.push('/(onboarding)/selfie');
     } catch (err) {
@@ -182,15 +202,13 @@ export default function ProfileFormScreen() {
             control={control}
             name="dateOfBirth"
             render={({ field, fieldState }) => (
-              <TextField
+              <DateField
                 containerStyle={styles.rowItem}
                 label="Date of birth"
                 value={field.value}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                placeholder="DD/MM/YYYY"
-                keyboardType="number-pad"
-                maxLength={10}
+                onChange={field.onChange}
+                placeholder="Select"
+                format={formatDateOfBirth}
                 error={fieldState.error?.message ?? null}
               />
             )}
@@ -200,12 +218,13 @@ export default function ProfileFormScreen() {
             control={control}
             name="gender"
             render={({ field, fieldState }) => (
-              <PickerField
+              <SelectField
                 containerStyle={styles.rowItem}
                 label="Gender"
                 placeholder="Select"
-                value={GENDERS.find((g) => g.value === field.value)?.label ?? null}
-                onPress={() => setSheet('gender')}
+                value={field.value ?? null}
+                options={GENDERS}
+                onChange={field.onChange}
                 error={fieldState.error?.message ?? null}
               />
             )}
@@ -219,7 +238,7 @@ export default function ProfileFormScreen() {
             <>
               <PickerField
                 label="Living area"
-                placeholder="Cairo, Egypt"
+                placeholder="Select"
                 value={areas.find((a) => a.id === field.value)?.name ?? null}
                 onPress={() => setSheet('area')}
                 error={fieldState.error?.message ?? null}
@@ -238,18 +257,18 @@ export default function ProfileFormScreen() {
 
         <Controller
           control={control}
-          name="gender"
+          name="marketingOptIn"
           render={({ field }) => (
-            <OptionSheet
-              visible={sheet === 'gender'}
-              title="Gender"
-              options={GENDERS}
-              selectedValue={field.value ?? null}
-              onSelect={field.onChange}
-              onClose={() => setSheet(null)}
+            <Checkbox
+              checked={field.value}
+              onToggle={() => field.onChange(!field.value)}
+              label={CONSENT_LABEL}
+              pulse
+              prominent
             />
           )}
         />
+
       </View>
 
       {submitError ? (

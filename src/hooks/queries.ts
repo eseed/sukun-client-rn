@@ -15,6 +15,7 @@ import type {
   EventListItem,
   GuestValidationInput,
   ListEventsQuery,
+  OrderStatus,
   PaymentStatus,
   TicketStatus,
   UpdateProfileInput,
@@ -24,6 +25,7 @@ import {
   isCurrentSignedInSession,
   useAuthStore,
 } from '../stores/auth';
+import { HeldOrderError } from '../lib/errors';
 
 /**
  * The only data surface screens are allowed to touch. Each hook wraps one api method, so
@@ -93,6 +95,9 @@ export function useVerifyOtp() {
         selfieUploaded: false,
         selfieUrl: null,
         selfieExpiresAt: null,
+        // The verify/restore projections do not carry consent; the `me` fetch that follows
+        // replaces this placeholder with the stored value.
+        marketingOptIn: false,
         profileComplete: result.user.profileComplete,
         status: result.user.status,
       };
@@ -250,6 +255,9 @@ export function useConfirmAccountRestoration() {
         selfieUploaded: false,
         selfieUrl: null,
         selfieExpiresAt: null,
+        // The verify/restore projections do not carry consent; the `me` fetch that follows
+        // replaces this placeholder with the stored value.
+        marketingOptIn: false,
         profileComplete: result.user.profileComplete,
         status: result.user.status,
       };
@@ -324,17 +332,35 @@ export function useValidatePromoCode() {
   });
 }
 
-/** Order states that still hold capacity, so the backend refuses a second order for the event. */
-const ACTIVE_ORDER_STATUSES = ['awaiting_payment', 'processing', 'paid'];
+/**
+ * The one order state that still holds capacity. `awaiting_payment` is also the only status the
+ * backend's duplicate guard looks at, so it is the only one worth searching for here.
+ *
+ * This used to read `['awaiting_payment', 'processing', 'paid']`. `processing` is not a member
+ * of the backend's `order_status` enum at all, and `paid` meant an already-paid order could be
+ * picked up and handed back to be paid a second time.
+ */
+const HELD_ORDER_STATUS: OrderStatus = 'awaiting_payment';
 
 /**
- * Creates the order, recovering the one that already exists when the backend refuses.
+ * A held order is minutes old by construction — the hold expires in about a quarter of an hour
+ * — and the list is newest-first, so one generous page always covers it.
+ */
+const HELD_ORDER_SEARCH_LIMIT = 50;
+
+/**
+ * Creates the order, and on refusal identifies the order already holding the capacity.
  *
- * The backend allows a single active order per event per user and answers a second attempt with
- * `409 DUPLICATE_ACTIVE_ORDER`. Surfacing that as an error stranded the buyer: their held order
- * was real and payable, but checkout could neither create a new one nor reach the old one. So a
- * duplicate is resolved by returning the existing active order for the event — which is what
- * "continue" meant anyway. Any other failure propagates untouched.
+ * The backend refuses a second order for an event only while an earlier one is still
+ * `awaiting_payment`, and when that order is semantically identical to the request it returns
+ * the order with a 200 rather than an error. So `409 DUPLICATE_ACTIVE_ORDER` carries a precise
+ * meaning: *you are holding an order that is not what you just asked for.*
+ *
+ * This used to answer that by silently substituting the held order and handing it straight to
+ * the payment sheet — charging for a basket the buyer never chose. It now surfaces a
+ * `HeldOrderError` carrying that order's id so the screen can name the situation and offer to
+ * continue it. The id has to be looked up: the server puts `existingOrderId` in the exception's
+ * `messageArgs`, which the error envelope does not emit.
  */
 export function useCreateOrder() {
   const client = useQueryClient();
@@ -349,13 +375,11 @@ export function useCreateOrder() {
             : undefined;
         if (code !== 'DUPLICATE_ACTIVE_ORDER') throw error;
 
-        const page = await api.orders.list(undefined, 20);
-        const existing = page.data.find(
-          (order) =>
-            order.eventId === input.eventId && ACTIVE_ORDER_STATUSES.includes(order.status),
+        const page = await api.orders.list(undefined, HELD_ORDER_SEARCH_LIMIT);
+        const held = page.data.find(
+          (order) => order.eventId === input.eventId && order.status === HELD_ORDER_STATUS,
         );
-        if (!existing) throw error;
-        return api.orders.detail(existing.id);
+        throw new HeldOrderError(held?.id ?? null);
       }
     },
     onSuccess: () => {

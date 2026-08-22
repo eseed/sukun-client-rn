@@ -167,7 +167,7 @@ export default function DeleteAccountScreen() {
       ) : (
         <>
           <Text variant="bodyMuted" style={styles.blurb}>
-            We sent a code to{' '}
+            We sent a code on WhatsApp to{' '}
             <Text variant="bodyMuted" color={colors.textPrimary} style={styles.strong}>
               {user?.phoneNumber ? formatPhoneForDisplay(user.phoneNumber) : 'your number'}
             </Text>

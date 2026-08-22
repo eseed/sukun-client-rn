@@ -1,6 +1,6 @@
-import { type ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { colors, radius } from '../../theme/tokens';
+import { useEffect, useState, type ReactNode } from 'react';
+import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { colors, fontSize, lineHeightRatio, radius } from '../../theme/tokens';
 import { Text } from './Text';
 
 /** The filled/outlined radio dot used by the pass selector and the contact list. */
@@ -44,16 +44,76 @@ export function CheckCircle({ selected, size = 24 }: { selected: boolean; size?:
   );
 }
 
-/** The square checkbox on the review screen's terms line. */
+/**
+ * The square checkbox on the review screen's terms line.
+ *
+ * `pulse` breathes the box until it is ticked, for the one case where the box is easy to scroll
+ * past and worth noticing. It never blocks anything — the pulse stops the moment `checked` turns
+ * true, and honours the system's reduce-motion setting.
+ *
+ * `prominent` moves the label one step up the type scale, for a line the reader is agreeing to
+ * rather than merely acknowledging.
+ */
 export function Checkbox({
   checked,
   onToggle,
   label,
+  pulse = false,
+  prominent = false,
 }: {
   checked: boolean;
   onToggle: () => void;
   label: string;
+  pulse?: boolean;
+  prominent?: boolean;
 }) {
+  // `useState` rather than `useRef`, so the Animated.Value is constructed once without the
+  // render-time ref read that the lint rule (rightly) forbids.
+  const [scale] = useState(() => new Animated.Value(1));
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+      if (active) setReduceMotion(enabled);
+    });
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pulse || checked || reduceMotion) {
+      scale.stopAnimation();
+      scale.setValue(1);
+      return;
+    }
+
+    const beat = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, {
+          toValue: 1.18,
+          duration: 620,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scale, {
+          toValue: 1,
+          duration: 620,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    beat.start();
+
+    return () => beat.stop();
+  }, [checked, pulse, reduceMotion, scale]);
+
   return (
     <Pressable
       accessibilityRole="checkbox"
@@ -61,10 +121,12 @@ export function Checkbox({
       onPress={onToggle}
       style={styles.checkboxRow}
     >
-      <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+      <Animated.View
+        style={[styles.checkbox, checked && styles.checkboxChecked, { transform: [{ scale }] }]}
+      >
         {checked ? <Text style={styles.checkGlyph}>✓</Text> : null}
-      </View>
-      <Text variant="metaSm" style={styles.checkboxLabel}>
+      </Animated.View>
+      <Text variant="metaSm" style={[styles.checkboxLabel, prominent && styles.checkboxLabelLarge]}>
         {label}
       </Text>
     </Pressable>
@@ -182,8 +244,12 @@ const styles = StyleSheet.create({
   },
   checkboxLabel: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 13 * 1.5,
+    fontSize: fontSize.bodySm,
+    lineHeight: fontSize.bodySm * lineHeightRatio.normal,
+  },
+  checkboxLabelLarge: {
+    fontSize: fontSize.bodyMd,
+    lineHeight: fontSize.bodyMd * lineHeightRatio.normal,
   },
   selectable: {
     flexDirection: 'row',

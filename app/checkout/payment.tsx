@@ -46,7 +46,11 @@ export default function PaymentScreen() {
   const initiate = useInitiatePayment();
   const retry = useRetryPayment();
 
-  const [polling, setPolling] = useState(false);
+  /**
+   * Whether a sheet has been presented at all. Not the switch for the status query below, which
+   * runs from mount because this screen is only ever reached with an order already mid-payment.
+   */
+  const [sheetPresented, setSheetPresented] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
    * The SDK's own verdict — `null` until the sheet reports back. Owned by `usePaymobSheet`, which
@@ -56,7 +60,10 @@ export default function PaymentScreen() {
   const sheet = usePaymobSheet();
   const sdkResult = sheet.outcome;
 
-  const statusQuery = usePaymentStatus(validOrderId, { poll: polling });
+  // Polls from mount and stops on its own at a terminal state. Gating this on a sheet *this*
+  // screen had opened meant arriving here after a PENDING verdict — the one route in — began no
+  // polling at all, so the payment never resolved on the screen built to resolve it.
+  const statusQuery = usePaymentStatus(validOrderId, { poll: true });
   const { data: status } = statusQuery;
 
   const settled = sdkResult === 'success' || status?.orderStatus === 'paid';
@@ -96,7 +103,7 @@ export default function PaymentScreen() {
       const intent = await initiate.mutateAsync(validOrderId);
       presentPaymob(intent);
     } catch (err) {
-      setPolling(false);
+      setSheetPresented(false);
       setError(messageForError(err));
     }
   }
@@ -108,7 +115,7 @@ export default function PaymentScreen() {
       const intent = await retry.mutateAsync(validOrderId);
       presentPaymob(intent);
     } catch (err) {
-      setPolling(false);
+      setSheetPresented(false);
       setError(messageForError(err));
     }
   }
@@ -116,7 +123,7 @@ export default function PaymentScreen() {
   function presentPaymob(intent: { clientSecret: string; publicKey: string }) {
     if (!sheet.available) return;
     sheet.present(intent);
-    setPolling(true);
+    setSheetPresented(true);
   }
 
   if (!validOrderId) {
@@ -153,7 +160,15 @@ export default function PaymentScreen() {
 
   const card = designAsset('cardSukunOrange');
   const amount = order ? formatEgp(order.totalEgp) : '—';
-  const busy = initiate.isPending || retry.isPending || polling;
+  /*
+   * A sheet is up and has not answered yet. Derived rather than latched: the old boolean was
+   * set when the sheet opened and cleared nowhere, so a cancelled or declined payment left the
+   * Pay button a permanent spinner and "Try payment again" permanently disabled — both actions
+   * dead on the screen whose whole purpose is retrying. `present()` resets the outcome to null,
+   * so this reads true again for each new attempt without anything to keep in sync.
+   */
+  const awaitingVerdict = sheetPresented && sdkResult === null;
+  const busy = initiate.isPending || retry.isPending || awaitingVerdict;
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -176,7 +191,7 @@ export default function PaymentScreen() {
         Tapping pay opens Paymob&apos;s secure sheet, where you enter your card.
       </Text>
 
-      {polling && !failed && !settled ? (
+      {(awaitingVerdict || pending) && !failed && !settled ? (
         <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
           {pending
             ? 'Your payment is still being processed. This can take a moment…'

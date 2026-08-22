@@ -1,5 +1,6 @@
 import type { SukunApi } from '../contract';
 import { Platform } from 'react-native';
+import { File } from 'expo-file-system';
 import type {
   AccountDeletionPreview,
   Authenticated,
@@ -161,10 +162,12 @@ export const liveApi: SukunApi = {
     async uploadSelfie(uri: string): Promise<CurrentUser> {
       const form = new FormData();
       const name = uri.split('/').pop() ?? 'selfie.jpg';
-      const type = name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
       if (Platform.OS !== 'web') {
-        // React Native's FormData accepts this native file descriptor shape.
-        form.append('file', { uri, name, type } as unknown as Blob);
+        // Not the `{ uri, name, type }` descriptor React Native's own networking accepts: Expo
+        // replaces global `fetch`, and its implementation reads a part's bytes rather than
+        // resolving a URI — "`uri` is not supported for React Native's FormData", as its own
+        // `convertFormData` puts it. An `expo-file-system` File carries the bytes it wants.
+        form.append('file', new File(uri) as unknown as Blob);
       } else {
         const response = await fetch(uri);
         if (!response.ok) throw new ApiError('FILE_READ_FAILED', 'The selfie file could not be read.', response.status);

@@ -81,6 +81,8 @@ export interface CurrentUser {
   selfieUploaded: boolean;
   selfieUrl: string | null;
   selfieExpiresAt: string | null;
+  /** Consent to Sukun marketing messages on WhatsApp — Meta requires an explicit opt-in. */
+  marketingOptIn: boolean;
   profileComplete: boolean;
   status: AppUserStatus;
 }
@@ -93,6 +95,7 @@ export interface UpdateProfileInput {
   gender?: AppUserGender;
   areaId?: string;
   areaCode?: string;
+  marketingOptIn?: boolean;
 }
 
 /* ------------------------------------------------------------------ auth */
@@ -125,6 +128,7 @@ export interface LiveUpdateProfileInput {
   gender?: AppUserGender;
   areaId?: number;
   areaCode?: string;
+  marketingOptIn?: boolean;
 }
 
 /** `UserProjectionDto`, returned inside OTP authentication responses. */

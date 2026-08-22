@@ -104,11 +104,11 @@ export default function OtpScreen() {
 
       <StepLabel>Step 1 of 3</StepLabel>
       <View style={styles.heading}>
-        <BulletHeading title="Check your texts" size="lg" />
+        <BulletHeading title="Check WhatsApp" size="lg" />
       </View>
 
       <Text variant="bodyMuted" style={styles.blurb}>
-        We sent a code to{' '}
+        We sent a code on WhatsApp to{' '}
         <Text variant="bodyMuted" color={colors.textPrimary} style={styles.strong}>
           {pendingPhone ? formatPhoneForDisplay(pendingPhone) : ''}
         </Text>

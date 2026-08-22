@@ -129,6 +129,34 @@ export function parseDateOfBirth(input: string): string | null {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/** The server enforces the same floor in `validateDateOfBirth`; both must agree. */
+export const MINIMUM_AGE = 18;
+
+/** Whole years between an ISO `YYYY-MM-DD` birth date and `today`, in local time. */
+export function ageOn(isoDate: string, today: Date): number {
+  const born = new Date(`${isoDate}T00:00:00`);
+  let age = today.getFullYear() - born.getFullYear();
+  const monthDelta = today.getMonth() - born.getMonth();
+
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < born.getDate())) age--;
+
+  return age;
+}
+
+/**
+ * A stored tag → a chip label: `"wellness"` → `"Wellness"`, `"sound-bath"` → `"Sound Bath"`.
+ *
+ * Tags are normalised to lowercase on the way in (`normalizeTags` on the backend), so this only
+ * ever has to put the case back for display. The value sent when filtering stays the stored one.
+ */
+export function formatTagLabel(tag: string): string {
+  return tag
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 /** Seconds → `"0:29"`, for the resend and QR-rotation timers. */
 export function formatCountdown(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));

@@ -559,6 +559,7 @@ export const mockApi: SukunApi = {
         emailVerified: input.email && input.email !== user.email ? false : user.emailVerified,
         dateOfBirth: input.dateOfBirth ?? user.dateOfBirth,
         gender: input.gender ?? user.gender,
+        marketingOptIn: input.marketingOptIn ?? user.marketingOptIn,
         area,
       });
 

@@ -3,7 +3,8 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { api } from '../../api';
 import type { CursorPage, PaymentStatus, Ticket } from '../../api/types';
-import { queryKeys, usePaymentStatus, useTickets } from '../queries';
+import { queryKeys, useCreateOrder, usePaymentStatus, useTickets } from '../queries';
+import { isHeldOrderError } from '../../lib/errors';
 import { useAuthStore } from '../../stores/auth';
 import {
   deleteSecureItem,
@@ -17,11 +18,15 @@ jest.mock('../../api', () => ({
     payments: { status: jest.fn() },
     auth: { logout: jest.fn() },
     tickets: { list: jest.fn() },
+    orders: { create: jest.fn(), list: jest.fn(), detail: jest.fn() },
   },
 }));
 
 const paymentStatusMock = api.payments.status as jest.MockedFunction<typeof api.payments.status>;
 const ticketsListMock = api.tickets.list as jest.MockedFunction<typeof api.tickets.list>;
+const ordersCreateMock = api.orders.create as jest.MockedFunction<typeof api.orders.create>;
+const ordersListMock = api.orders.list as jest.MockedFunction<typeof api.orders.list>;
+const ordersDetailMock = api.orders.detail as jest.MockedFunction<typeof api.orders.detail>;
 
 function wrapper(client: QueryClient) {
   return function QueryWrapper({ children }: { children: ReactNode }) {
@@ -162,5 +167,111 @@ describe('auth session transition', () => {
     });
     await expect(getSecureItem(SECURE_KEYS.accessToken)).resolves.toBeNull();
     await expect(getSecureItem(SECURE_KEYS.refreshToken)).resolves.toBeNull();
+  });
+});
+
+describe('order creation hook', () => {
+  const clients: QueryClient[] = [];
+
+  function makeClient() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    clients.push(client);
+    return client;
+  }
+
+  function orderSummary(id: string, eventId: string, status: string) {
+    return { id, eventId, status } as unknown as Awaited<
+      ReturnType<typeof api.orders.list>
+    >['data'][number];
+  }
+
+  function duplicateActiveOrder() {
+    return Object.assign(new Error('conflict'), { code: 'DUPLICATE_ACTIVE_ORDER' });
+  }
+
+  const input = {
+    eventId: 'evt-1',
+    buyerTierId: 'tier-1',
+    items: [{ tierId: 'tier-1', quantity: 3 }],
+    guests: [],
+  } as unknown as Parameters<typeof api.orders.create>[0];
+
+  afterEach(() => {
+    clients.forEach((client) => client.clear());
+    clients.length = 0;
+    jest.clearAllMocks();
+  });
+
+  it('passes a created order straight through', async () => {
+    const created = { id: 'order-new' } as Awaited<ReturnType<typeof api.orders.create>>;
+    ordersCreateMock.mockResolvedValue(created);
+
+    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
+
+    await expect(result.current.mutateAsync(input)).resolves.toBe(created);
+    expect(ordersListMock).not.toHaveBeenCalled();
+  });
+
+  /*
+   * A 409 means the held order is *different* from what was asked for — the backend returns 200
+   * when it matches. Substituting it silently sent the buyer to the payment sheet for a basket
+   * they never chose, so it has to surface instead.
+   */
+  it('reports the held order rather than substituting it', async () => {
+    ordersCreateMock.mockRejectedValue(duplicateActiveOrder());
+    ordersListMock.mockResolvedValue({
+      data: [orderSummary('order-held', 'evt-1', 'awaiting_payment')],
+      meta: { limit: 50, hasNextPage: false, nextCursor: null },
+    } as unknown as Awaited<ReturnType<typeof api.orders.list>>);
+
+    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
+
+    const error = await result.current.mutateAsync(input).catch((e: unknown) => e);
+
+    expect(isHeldOrderError(error)).toBe(true);
+    expect(isHeldOrderError(error) && error.heldOrderId).toBe('order-held');
+    // Never resolved into an order the caller would then hand to the payment sheet.
+    expect(ordersDetailMock).not.toHaveBeenCalled();
+  });
+
+  it('never offers an already-paid order as the held one', async () => {
+    ordersCreateMock.mockRejectedValue(duplicateActiveOrder());
+    ordersListMock.mockResolvedValue({
+      data: [orderSummary('order-paid', 'evt-1', 'paid')],
+      meta: { limit: 50, hasNextPage: false, nextCursor: null },
+    } as unknown as Awaited<ReturnType<typeof api.orders.list>>);
+
+    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
+
+    const error = await result.current.mutateAsync(input).catch((e: unknown) => e);
+
+    expect(isHeldOrderError(error)).toBe(true);
+    expect(isHeldOrderError(error) && error.heldOrderId).toBeNull();
+  });
+
+  it('ignores a held order belonging to another event', async () => {
+    ordersCreateMock.mockRejectedValue(duplicateActiveOrder());
+    ordersListMock.mockResolvedValue({
+      data: [orderSummary('order-other', 'evt-2', 'awaiting_payment')],
+      meta: { limit: 50, hasNextPage: false, nextCursor: null },
+    } as unknown as Awaited<ReturnType<typeof api.orders.list>>);
+
+    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
+
+    const error = await result.current.mutateAsync(input).catch((e: unknown) => e);
+
+    expect(isHeldOrderError(error) && error.heldOrderId).toBeNull();
+  });
+
+  it('lets an unrelated failure through untouched', async () => {
+    const other = Object.assign(new Error('nope'), { code: 'EVENT_NOT_PURCHASABLE' });
+    ordersCreateMock.mockRejectedValue(other);
+
+    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
+
+    await expect(result.current.mutateAsync(input)).rejects.toBe(other);
+    expect(ordersListMock).not.toHaveBeenCalled();
   });
 });

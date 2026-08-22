@@ -60,8 +60,10 @@ const MESSAGES: Record<string, string> = {
   PAYMENT_FAILED: 'The payment did not go through. Nothing was charged.',
   PAYMENT_CONFIRMATION_PENDING:
     "We're still confirming your last payment attempt. Give it a moment, then try again.",
-  // The backend keeps one active order per event per user; `useCreateOrder` recovers the
-  // existing order rather than surfacing this, so the copy is only a last resort.
+  // The backend blocks only on an order still awaiting payment, and answers 200 when that order
+  // already matches the request — so this code always means a *different* order is holding the
+  // capacity. `useCreateOrder` turns it into a `HeldOrderError` so the screen can offer that
+  // order instead of quietly swapping the buyer's basket for it.
   DUPLICATE_ACTIVE_ORDER: 'You already have an order in progress for this event.',
   PAYMENT_ALREADY_COMPLETED: 'This order is already paid. Check your tickets.',
   PAYMENT_PROVIDER_ERROR: "The payment provider couldn't be reached. Nothing was charged.",
@@ -144,4 +146,22 @@ export function messageForError(error: unknown): string {
     if (typeof error.message === 'string' && error.message.trim()) return error.message;
   }
   return FALLBACK;
+}
+
+/**
+ * Thrown when order creation is refused because an earlier order for the same event is still
+ * holding capacity. Carries that order's id when it could be located, so the screen can offer
+ * to continue it — the one thing the buyer can actually do about it.
+ */
+export class HeldOrderError extends Error {
+  readonly code = 'DUPLICATE_ACTIVE_ORDER';
+
+  constructor(readonly heldOrderId: string | null) {
+    super('You already have an order in progress for this event.');
+    this.name = 'HeldOrderError';
+  }
+}
+
+export function isHeldOrderError(error: unknown): error is HeldOrderError {
+  return error instanceof HeldOrderError;
 }

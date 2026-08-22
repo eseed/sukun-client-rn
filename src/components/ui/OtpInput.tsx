@@ -5,7 +5,10 @@ import { Text } from './Text';
 
 /**
  * The four-box code entry from design screen 03. A single hidden input backs all four boxes
- * so paste and SMS autofill work; the boxes are presentation.
+ * so paste and the keyboard's one-time-code suggestion work; the boxes are presentation.
+ *
+ * The code arrives over WhatsApp, not SMS, so there is no SMS Retriever to hint at — Android
+ * one-tap autofill would need the WhatsApp handshake with Meta, which we have not set up.
  */
 export function OtpInput({
   value,
@@ -39,7 +42,7 @@ export function OtpInput({
         onChangeText={(next) => onChange(next.replace(/\D/g, '').slice(0, length))}
         keyboardType="number-pad"
         textContentType="oneTimeCode"
-        autoComplete="sms-otp"
+        autoComplete="one-time-code"
         autoFocus={autoFocus}
         maxLength={length}
         accessibilityLabel="Verification code"

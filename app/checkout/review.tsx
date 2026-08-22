@@ -23,7 +23,7 @@ import {
   usePricePreview,
   useValidatePromoCode,
 } from '../../src/hooks/queries';
-import { messageForError } from '../../src/lib/errors';
+import { isHeldOrderError, messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { addEgp, multiplyEgp, vatOnEgp, VAT_RATE } from '../../src/lib/money';
 import { useCheckoutStore } from '../../src/stores/checkout';
@@ -64,6 +64,8 @@ export default function ReviewScreen() {
   const [promoDraft, setPromoDraft] = useState('');
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Set when creation was refused because an earlier order is still holding the capacity. */
+  const [heldOrderId, setHeldOrderId] = useState<string | null>(null);
 
   const eventQuery = useEvent(validEventId);
   const { data: event } = eventQuery;
@@ -120,6 +122,7 @@ export default function ReviewScreen() {
   const invalidSelection = !event || !tier || !tier.isPurchasable;
   async function applyPromo() {
     setError(null);
+    setHeldOrderId(null);
     const code = promoDraft.trim().toUpperCase();
     if (!code) return;
     if (!items.length) {
@@ -134,6 +137,10 @@ export default function ReviewScreen() {
       }
       setPromoCode(result.code);
       setPromoDraft('');
+      // The held order was priced without this code, and `onContinue` reuses `order` when it is
+      // set — so leaving it in place charged the undiscounted total with the promo on screen.
+      // `removePromo` already cleared it; only this direction did not.
+      setOrder(null);
     } catch (err) {
       setError(messageForError(err));
     }
@@ -146,6 +153,7 @@ export default function ReviewScreen() {
    */
   async function onContinue() {
     setError(null);
+    setHeldOrderId(null);
     if (!validEventId || !tierId || invalidSelection) {
       setError('Choose an available pass before continuing.');
       return;
@@ -176,6 +184,10 @@ export default function ReviewScreen() {
       const intent = created.payment ?? (await initiatePayment.mutateAsync(created.id));
       sheet.present(intent);
     } catch (err) {
+      // A held order is not a failure the buyer can retry past — it is a choice. Name it and
+      // hand them the only action that resolves it, rather than paying for a basket they did
+      // not assemble.
+      if (isHeldOrderError(err)) setHeldOrderId(err.heldOrderId);
       setError(messageForError(err));
     }
   }
@@ -183,6 +195,7 @@ export default function ReviewScreen() {
   function removePromo() {
     setPromoCode(null);
     setOrder(null);
+    setHeldOrderId(null);
   }
 
   // Before the order exists the backend has priced nothing, so the screen estimates from the
@@ -338,6 +351,15 @@ export default function ReviewScreen() {
         </Text>
       ) : null}
 
+      {heldOrderId ? (
+        <Button
+          label="Continue your held order"
+          variant="secondary"
+          onPress={() => router.push(`/checkout/payment?orderId=${heldOrderId}`)}
+          style={styles.heldOrder}
+        />
+      ) : null}
+
       {API_MODE !== 'live' && priceQuery.isError ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {messageForError(priceQuery.error)}
@@ -418,6 +440,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   error: {
+    marginBottom: 12,
+  },
+  heldOrder: {
     marginBottom: 12,
   },
   pressed: {

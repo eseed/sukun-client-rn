@@ -11,6 +11,7 @@ import {
   TextField,
 } from '../../src/components/ui';
 import { useRequestOtp } from '../../src/hooks/queries';
+import { useKeyboardVisible } from '../../src/hooks/useKeyboardVisible';
 import { messageForError } from '../../src/lib/errors';
 import { formatNationalInput, isValidEgyptianPhone, sanitizeNationalInput } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
@@ -30,6 +31,7 @@ export default function PhoneScreen() {
 
   const [national, setNational] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const keyboardVisible = useKeyboardVisible();
 
   const e164 = `+20${national}`;
   const isValid = isValidEgyptianPhone(e164);
@@ -107,10 +109,14 @@ export default function PhoneScreen() {
         }
       />
 
+      {/* Always rendered: this is also the flexible gap that pins the CTA to the bottom. The
+          swirl itself steps aside for the keyboard, which leaves it no room to sit in. */}
       <View style={styles.decoWrap}>
-        <View style={styles.swirlCrop}>
-          <Image source={swirl} style={styles.swirl} />
-        </View>
+        {keyboardVisible ? null : (
+          <View style={styles.swirlCrop} testID="phone-deco-swirl">
+            <Image source={swirl} style={styles.swirl} />
+          </View>
+        )}
       </View>
 
       <Button
@@ -147,6 +153,10 @@ const styles = StyleSheet.create({
   },
   decoWrap: {
     flex: 1,
+    // Without these the fixed-height crop below refuses to shrink, and a squeezed gap pushes
+    // it up over the number field instead of clipping it.
+    minHeight: 0,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: 55,

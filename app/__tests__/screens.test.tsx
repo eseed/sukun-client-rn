@@ -55,7 +55,7 @@ async function signInAndComplete() {
     email: 'yasmin@email.com',
     dateOfBirth: '1994-03-12',
     gender: 'female',
-    areaId: 'ar-cairo',
+    areaId: 'ar-maadi',
   });
   const complete = await mockApi.profile.uploadSelfie('file:///selfie.jpg');
   useAuthStore.setState({ status: 'signed-in', user: complete, pendingPhone: null });
@@ -89,7 +89,7 @@ describe('03 Verify code', () => {
     renderWithProviders(<OtpScreen />);
 
     expect(screen.getByText('Step 1 of 3')).toBeTruthy();
-    expect(screen.getByText('Check your texts')).toBeTruthy();
+    expect(screen.getByText('Check WhatsApp')).toBeTruthy();
     expect(screen.getByText('+20 101 234 5678')).toBeTruthy();
     expect(screen.getByText('Verify')).toBeTruthy();
     expect(screen.getByText(/Resend in/)).toBeTruthy();
@@ -106,7 +106,14 @@ describe('04 About you', () => {
     for (const label of ['Full name', 'Email', 'Date of birth', 'Gender', 'Living area']) {
       expect(screen.getByText(label)).toBeTruthy();
     }
-    expect(screen.getByPlaceholderText('DD/MM/YYYY')).toBeTruthy();
+    // Date of birth, gender and living area are all pickers now — nothing is typed into them,
+    // so each shows its placeholder as text rather than as a TextInput placeholder.
+    expect(screen.getAllByText('Select').length).toBe(3);
+    // Meta requires marketing consent to be an explicit opt-in, so the box starts unticked.
+    const consent = screen.getByRole('checkbox', {
+      name: /WhatsApp me updates from Sukun/,
+    });
+    expect(consent.props.accessibilityState.checked).toBe(false);
   });
 });
 
@@ -128,9 +135,14 @@ describe('06 Discover', () => {
     expect(screen.getByText('Discover')).toBeTruthy();
     expect(screen.getByText('Find your next Sukun gathering')).toBeTruthy();
     expect(screen.getByPlaceholderText('Search events')).toBeTruthy();
-    expect(screen.getByText('Festivals')).toBeTruthy();
 
     await waitFor(() => expect(screen.getByText('Tulua')).toBeTruthy());
+
+    // The chips are built from the tags the loaded events carry, so they arrive with the
+    // events rather than being present on the first frame. Labels are title-cased for display;
+    // the value sent when filtering is the stored lowercase tag.
+    expect(screen.getByText('All')).toBeTruthy();
+    expect(screen.getByText('Festivals')).toBeTruthy();
     expect(screen.getByText('On sale now')).toBeTruthy();
     expect(screen.getByText('23–24 Oct 2026 · Tunis Village, Fayoum')).toBeTruthy();
     expect(screen.getByText('More gatherings')).toBeTruthy();

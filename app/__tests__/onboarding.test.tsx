@@ -1,6 +1,7 @@
+import { Keyboard } from 'react-native';
 import { MOCK_OTP_CODE, mockApi, mockConfig, resetMockState } from '../../src/api/mock';
 import { useAuthStore } from '../../src/stores/auth';
-import { fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
+import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
 import OtpScreen from '../(onboarding)/otp';
 import PhoneScreen from '../(onboarding)/phone';
 
@@ -30,6 +31,29 @@ describe('Phone number screen', () => {
     expect(screen.getByText("Hello! What's your number?")).toBeTruthy();
     expect(screen.getByText('🇪🇬 +20')).toBeTruthy();
     expect(screen.getByText('Send me a code')).toBeTruthy();
+  });
+
+  it('drops the decorative swirl while the keyboard covers its space', () => {
+    // The swirl fills the gap between the field and the CTA. `Screen` avoids the keyboard by
+    // shrinking that gap, and a fixed-size swirl in a collapsed gap rides up over the number.
+    const listeners: Record<string, () => void> = {};
+    const addListener = jest.spyOn(Keyboard, 'addListener').mockImplementation((event, listener) => {
+      listeners[event] = listener as () => void;
+      return { remove: jest.fn() } as never;
+    });
+
+    try {
+      renderWithProviders(<PhoneScreen />);
+      expect(screen.getByTestId('phone-deco-swirl')).toBeTruthy();
+
+      act(() => listeners.keyboardWillShow?.());
+      expect(screen.queryByTestId('phone-deco-swirl')).toBeNull();
+
+      act(() => listeners.keyboardWillHide?.());
+      expect(screen.getByTestId('phone-deco-swirl')).toBeTruthy();
+    } finally {
+      addListener.mockRestore();
+    }
   });
 
   it('keeps the CTA inert until the number is a valid Egyptian mobile', async () => {

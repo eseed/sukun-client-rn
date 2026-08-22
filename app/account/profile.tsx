@@ -4,13 +4,15 @@ import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 import { z } from 'zod';
-import type { AppUserGender } from '../../src/api/types';
 import {
   BackButton,
   BulletHeading,
   Button,
+  Checkbox,
   InlineError,
+  DateField,
   PickerField,
+  SelectField,
   ResourceState,
   Screen,
   TextField,
@@ -18,22 +20,30 @@ import {
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
-import { formatDateOfBirth, parseDateOfBirth } from '../../src/lib/format';
+import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
 import { useAuthStore } from '../../src/stores/auth';
 import { space } from '../../src/theme/tokens';
 
-const GENDERS: { value: AppUserGender; label: string }[] = [
-  { value: 'female', label: 'Woman' },
-  { value: 'male', label: 'Man' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+/** Same wording as onboarding — consent must be as easy to withdraw as it was to give. */
+const CONSENT_LABEL =
+  "WhatsApp me updates from Sukun about events, offers, and things I'll actually care about.";
+
+const GENDERS: { value: 'male' | 'female'; label: string }[] = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
 ];
 
 const schema = z.object({
   fullName: z.string().trim().min(2, 'Tell us your name'),
   email: z.string().trim().email('Check that email address'),
-  dateOfBirth: z.string().trim().refine((value) => parseDateOfBirth(value) !== null, 'Use DD/MM/YYYY'),
-  gender: z.enum(['male', 'female', 'prefer_not_to_say']),
+  dateOfBirth: z
+    .string()
+    .trim()
+    .min(1, 'Pick your date of birth')
+    .refine((value) => ageOn(value, new Date()) >= MINIMUM_AGE, `You must be ${MINIMUM_AGE} or over`),
+  gender: z.enum(['male', 'female']),
   areaId: z.string().min(1, 'Pick your area'),
+  marketingOptIn: z.boolean(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -53,9 +63,12 @@ export default function EditProfileScreen() {
     defaultValues: {
       fullName: user?.fullName ?? '',
       email: user?.email ?? '',
-      dateOfBirth: user?.dateOfBirth ? formatDateOfBirth(user.dateOfBirth) : '',
-      gender: user?.gender ?? undefined,
+      dateOfBirth: user?.dateOfBirth ?? '',
+      // `prefer_not_to_say` is still stored for anyone who chose it before it was withdrawn;
+      // the form no longer offers it, so those users pick again.
+      gender: user?.gender === 'male' || user?.gender === 'female' ? user.gender : undefined,
       areaId: user?.area?.id ?? '',
+      marketingOptIn: user?.marketingOptIn ?? false,
     },
     mode: 'onBlur',
   });
@@ -75,9 +88,10 @@ export default function EditProfileScreen() {
       await updateProfile.mutateAsync({
         fullName: values.fullName,
         email: values.email,
-        dateOfBirth: parseDateOfBirth(values.dateOfBirth) ?? undefined,
+        dateOfBirth: values.dateOfBirth,
         gender: values.gender,
         areaId: values.areaId,
+        marketingOptIn: values.marketingOptIn,
       });
       router.back();
     } catch (err) {
@@ -129,15 +143,13 @@ export default function EditProfileScreen() {
             control={control}
             name="dateOfBirth"
             render={({ field, fieldState }) => (
-              <TextField
+              <DateField
                 containerStyle={styles.rowItem}
                 label="Date of birth"
                 value={field.value}
-                onChangeText={field.onChange}
-                onBlur={field.onBlur}
-                placeholder="DD/MM/YYYY"
-                keyboardType="number-pad"
-                maxLength={10}
+                onChange={field.onChange}
+                placeholder="Select"
+                format={formatDateOfBirth}
                 error={fieldState.error?.message ?? null}
               />
             )}
@@ -146,12 +158,13 @@ export default function EditProfileScreen() {
             control={control}
             name="gender"
             render={({ field, fieldState }) => (
-              <PickerField
+              <SelectField
                 containerStyle={styles.rowItem}
                 label="Gender"
                 placeholder="Select"
-                value={GENDERS.find((item) => item.value === field.value)?.label ?? null}
-                onPress={() => setSheet('gender')}
+                value={field.value ?? null}
+                options={GENDERS}
+                onChange={field.onChange}
                 error={fieldState.error?.message ?? null}
               />
             )}
@@ -164,7 +177,7 @@ export default function EditProfileScreen() {
             <>
               <PickerField
                 label="Living area"
-                placeholder="Cairo, Egypt"
+                placeholder="Select"
                 value={areas.find((area) => area.id === field.value)?.name ?? null}
                 onPress={() => setSheet('area')}
                 error={fieldState.error?.message ?? null}
@@ -182,15 +195,14 @@ export default function EditProfileScreen() {
         />
         <Controller
           control={control}
-          name="gender"
+          name="marketingOptIn"
           render={({ field }) => (
-            <OptionSheet
-              visible={sheet === 'gender'}
-              title="Gender"
-              options={GENDERS}
-              selectedValue={field.value ?? null}
-              onSelect={field.onChange}
-              onClose={() => setSheet(null)}
+            <Checkbox
+              checked={field.value}
+              onToggle={() => field.onChange(!field.value)}
+              label={CONSENT_LABEL}
+              pulse
+              prominent
             />
           )}
         />

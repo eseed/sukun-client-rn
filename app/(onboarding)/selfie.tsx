@@ -39,6 +39,36 @@ export default function SelfieScreen() {
 
   if (user?.profileComplete || user?.selfieUploaded) return null;
 
+  /**
+   * Development builds only. The iOS Simulator presents a camera but its shutter cannot
+   * actually capture, so without this the selfie step cannot be exercised anywhere but a real
+   * phone. Never offered in a release build: a selfie chosen from the library is a photo of
+   * anyone, which is exactly what the control exists to prevent (CLAUDE.md rule 3).
+   */
+  async function pickFromLibrary() {
+    setError(null);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setError('Photo access is needed to pick a selfie.');
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setUri(result.assets[0].uri);
+      }
+    } catch {
+      setError("Couldn't open the photo library.");
+    }
+  }
+
   async function capture() {
     setError(null);
     const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -50,20 +80,32 @@ export default function SelfieScreen() {
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      cameraType: ImagePicker.CameraType.front,
-      quality: 0.7,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        cameraType: ImagePicker.CameraType.front,
+        quality: 0.7,
+        allowsEditing: true,
+        aspect: [1, 1],
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      setUri(result.assets[0].uri);
+      if (!result.canceled && result.assets[0]) {
+        setUri(result.assets[0].uri);
+      }
+    } catch (err) {
+      // The camera can refuse for reasons a permission check does not cover — another app
+      // holding it, or a simulator, which has no camera at all. Without this the rejection is
+      // unhandled and the button simply does nothing, which reads as the app being broken.
+      setError(
+        err instanceof Error && /simulator|unavailable|not available/i.test(err.message)
+          ? 'No camera on this device. The selfie needs a real phone.'
+          : "The camera didn't open. Try again.",
+      );
     }
   }
 
   async function onContinue() {
     if (!uri) {
+      // `capture` reports its own failures; awaiting it here only sequences the two steps.
       await capture();
       return;
     }
@@ -94,7 +136,7 @@ export default function SelfieScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={uri ? 'Retake selfie' : 'Take a selfie'}
-              onPress={capture}
+              onPress={() => void capture()}
               style={styles.target}
             >
               {uri ? (
@@ -113,7 +155,7 @@ export default function SelfieScreen() {
       </View>
 
       {uri ? (
-        <Pressable onPress={capture} accessibilityRole="button" style={styles.retake}>
+        <Pressable onPress={() => void capture()} accessibilityRole="button" style={styles.retake}>
           <Text variant="meta" color={colors.accentSky}>
             Retake
           </Text>
@@ -124,6 +166,18 @@ export default function SelfieScreen() {
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {error}
         </Text>
+      ) : null}
+
+      {__DEV__ ? (
+        <Pressable
+          onPress={() => void pickFromLibrary()}
+          accessibilityRole="button"
+          style={styles.retake}
+        >
+          <Text variant="meta" color={colors.textMuted}>
+            Dev only · pick from library
+          </Text>
+        </Pressable>
       ) : null}
 
       <View style={styles.spacer} />
