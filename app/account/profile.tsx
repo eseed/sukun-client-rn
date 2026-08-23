@@ -26,7 +26,7 @@ import { space } from '../../src/theme/tokens';
 
 /** Same wording as onboarding — consent must be as easy to withdraw as it was to give. */
 const CONSENT_LABEL =
-  "WhatsApp me updates from Sukun about events, offers, and things I'll actually care about.";
+  "I don't want to miss on Sukun's events and activities. WhatsApp me your latest updates";
 
 const GENDERS: { value: 'male' | 'female'; label: string }[] = [
   { value: 'male', label: 'Male' },

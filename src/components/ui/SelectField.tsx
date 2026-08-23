@@ -49,17 +49,23 @@ export function SelectField<T extends string>({
   const androidPicker = useRef<Picker<string | T>>(null);
   const selectedLabel = options.find((option) => option.value === value)?.label ?? null;
 
-  /** The placeholder row exists only while nothing is chosen, so it cannot be re-selected. */
-  const items = (current: T | null) => (
-    <>
-      {current === null ? (
-        <Picker.Item label={placeholder} value="" color={colors.textMuted} />
-      ) : null}
-      {options.map((option) => (
-        <Picker.Item key={option.value} label={option.label} value={option.value} />
-      ))}
-    </>
-  );
+  /**
+   * The placeholder row exists only while nothing is chosen, so it cannot be re-selected.
+   *
+   * Returns an array, never a fragment. Both platforms read the options with
+   * `React.Children.toArray(children).map((child) => child.props.value)`, and that does not
+   * descend into a fragment — it hands back the fragment itself, whose `props.value` and
+   * `props.label` are undefined. The wheel then renders exactly one blank row and no options.
+   * `React.Children` does flatten arrays, so an array is the shape this has to be.
+   */
+  const items = (current: T | null) => [
+    ...(current === null
+      ? [<Picker.Item key="__placeholder" label={placeholder} value="" color={colors.textMuted} />]
+      : []),
+    ...options.map((option) => (
+      <Picker.Item key={option.value} label={option.label} value={option.value} />
+    )),
+  ];
 
   if (Platform.OS !== 'ios') {
     return (

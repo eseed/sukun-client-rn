@@ -111,7 +111,7 @@ describe('04 About you', () => {
     expect(screen.getAllByText('Select').length).toBe(3);
     // Meta requires marketing consent to be an explicit opt-in, so the box starts unticked.
     const consent = screen.getByRole('checkbox', {
-      name: /WhatsApp me updates from Sukun/,
+      name: /WhatsApp me your latest updates/,
     });
     expect(consent.props.accessibilityState.checked).toBe(false);
   });

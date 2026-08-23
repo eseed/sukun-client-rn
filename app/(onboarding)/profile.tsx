@@ -35,7 +35,7 @@ import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 
 /** Meta requires the consent wording to name the sender and what is being sent. */
 const CONSENT_LABEL =
-  "WhatsApp me updates from Sukun about events, offers, and things I'll actually care about.";
+  "I don't want to miss on Sukun's events and activities. WhatsApp me your latest updates";
 
 const GENDERS: { value: 'male' | 'female'; label: string }[] = [
   { value: 'male', label: 'Male' },

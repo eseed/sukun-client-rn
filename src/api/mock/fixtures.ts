@@ -8,6 +8,9 @@ import type { Area, CurrentUser, EventDetail, EventListItem, Ticket } from '../t
 export const VAT_RATE = '0.14';
 
 export const areas: Area[] = [
+  // First, as the backend sorts it (sort_order 1, ahead of the launch list's 10). The answer for
+  // someone abroad, before they start scrolling governorates looking for one that fits.
+  { id: 'ar-not-in-egypt', code: 'not_in_egypt', name: 'Not in Egypt' },
   { id: 'ar-6th-of-october-city', code: '6th_of_october_city', name: '6th of October City' },
   { id: 'ar-abbassia', code: 'abbassia', name: 'Abbassia' },
   { id: 'ar-agouza', code: 'agouza', name: 'Agouza' },

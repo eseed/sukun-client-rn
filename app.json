@@ -15,7 +15,8 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.sukun.client",
+      "bundleIdentifier": "co.sukunwellness",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry.",
         "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification.",
