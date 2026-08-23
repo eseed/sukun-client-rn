@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import { colors } from '../../theme/tokens';
 import { initials } from '../../lib/format';
@@ -6,6 +7,10 @@ import { Text } from './Text';
 /**
  * Monogram or photo avatar. The design uses a gold-100 monogram chip in the Discover header
  * and a photo circle on the Profile tab; contact rows use rose-500 / sky-500 monograms.
+ *
+ * Selfie URLs are signed and short-lived (the backend gives them five minutes), so a `uri`
+ * held in the auth store goes stale between renders. A failed load falls back to the monogram
+ * rather than leaving an empty circle.
  */
 export function Avatar({
   name,
@@ -20,11 +25,16 @@ export function Avatar({
   background?: string;
   foreground?: string;
 }) {
-  if (uri) {
+  // Remembering *which* URL failed, rather than a bare boolean, means a re-signed selfie is
+  // retried on its own — no effect needed to clear the flag when `uri` changes.
+  const [failedUri, setFailedUri] = useState<string | null>(null);
+
+  if (uri && uri !== failedUri) {
     return (
       <Image
         source={{ uri }}
         style={{ width: size, height: size, borderRadius: size / 2 }}
+        onError={() => setFailedUri(uri)}
         accessibilityIgnoresInvertColors
       />
     );

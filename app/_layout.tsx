@@ -1,3 +1,4 @@
+import * as Clarity from '@microsoft/react-native-clarity';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -14,6 +15,10 @@ export const unstable_settings = {
 };
 
 void SplashScreen.preventAutoHideAsync();
+
+Clarity.initialize('y6tknxh6u4', {
+  logLevel: Clarity.LogLevel.None,
+});
 
 export default function RootLayout() {
   const restore = useAuthStore((s) => s.restore);
@@ -55,7 +60,7 @@ export default function RootLayout() {
             <Stack.Screen name="event/[slug]" />
             <Stack.Screen name="checkout" />
             <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_bottom' }} />
-            <Stack.Screen name="orders" />
+            <Stack.Screen name="orders/index" />
             <Stack.Screen name="orders/[id]" />
             <Stack.Screen name="account/profile" />
             <Stack.Screen name="account/restore-phone" />

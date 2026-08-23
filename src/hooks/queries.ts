@@ -153,13 +153,31 @@ export function useUploadSelfie() {
   });
 }
 
+/**
+ * The backend signs selfie URLs for five minutes. Going stale a minute early means a screen
+ * that has been open a while re-signs on its next mount instead of rendering a dead URL.
+ */
+const SELFIE_URL_STALE_MS = 4 * 60 * 1000;
+
 export function useSelfie(options?: { enabled?: boolean }) {
   const signedIn = useAuthStore((s) => s.status === 'signed-in');
   return useQuery({
     queryKey: queryKeys.selfie,
     queryFn: () => api.profile.getSelfie(),
     enabled: signedIn && (options?.enabled ?? true),
+    staleTime: SELFIE_URL_STALE_MS,
   });
+}
+
+/**
+ * The current user's selfie as an avatar source. Prefers a freshly-signed URL over the one
+ * captured in the auth store, which is only as young as the last `me` fetch — and which a
+ * profile save blanks out entirely, since that response carries no selfie.
+ */
+export function useAvatarUri(): string | undefined {
+  const user = useAuthStore((s) => s.user);
+  const selfie = useSelfie({ enabled: user?.selfieUploaded ?? false });
+  return selfie.data?.selfieUrl ?? user?.selfieUrl ?? undefined;
 }
 
 export function useSendEmailVerification() {

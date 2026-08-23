@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Avatar, BulletHeading, ListRow, ResourceState, Screen, Text } from '../../src/components/ui';
-import { useTickets } from '../../src/hooks/queries';
+import { useAvatarUri, useTickets } from '../../src/hooks/queries';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
@@ -12,6 +12,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
+  const avatarUri = useAvatarUri();
   const ticketsQuery = useTickets();
   // See tickets.tsx: a disabled (signed-out) query is `isPending` forever, so gate on `isLoading`.
   const { data, isLoading, isError, refetch } = ticketsQuery;
@@ -30,11 +31,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.identity}>
-          <Avatar
-            name={user?.fullName ?? 'You'}
-            uri={user?.selfieUrl ?? undefined}
-            size={64}
-          />
+          <Avatar name={user?.fullName ?? 'You'} uri={avatarUri} size={64} />
           <View style={styles.identityText}>
             <Text style={styles.name}>{user?.fullName ?? 'Your profile'}</Text>
             <Text variant="meta">
@@ -71,7 +68,7 @@ export default function ProfileScreen() {
             <ListRow label="Edit profile" />
           </Pressable>
 
-          <Pressable onPress={() => router.push('/orders/index')} accessibilityRole="button">
+          <Pressable onPress={() => router.push('/orders')} accessibilityRole="button">
             <ListRow label="Order history" />
           </Pressable>
 

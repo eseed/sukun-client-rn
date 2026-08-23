@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import * as Contacts from 'expo-contacts';
+import { Contact, ContactField, requestPermissionsAsync } from 'expo-contacts';
 import { API_MODE } from '../api';
 import { fallbackContacts } from '../api/mock/fixtures';
 import { normalizeEgyptianPhone } from '../lib/phone';
@@ -27,6 +27,10 @@ interface ContactsResult {
  *
  * If permission is refused or the address book cannot be read, no contacts are fabricated.
  *
+ * Uses the class-based API (`Contact.getAllDetails`) introduced in expo-contacts 57. The old
+ * module-level `getContactsAsync` is still exported from `expo-contacts`, but it is a
+ * deprecation stub that *throws* at runtime — which is what silently emptied this list.
+ *
  * Goes through TanStack Query like every other read, so there is no hand-rolled loading
  * state and the address book is read once per session rather than on every mount.
  */
@@ -34,26 +38,27 @@ async function readContacts(): Promise<ContactsResult> {
   const fallback = API_MODE === 'mock' ? fallbackContacts : [];
 
   try {
-    const { status } = await Contacts.requestPermissionsAsync();
+    const { status } = await requestPermissionsAsync();
     if (status !== 'granted') {
       return { contacts: fallback, permission: 'denied' };
     }
 
-    const { data } = await Contacts.getContactsAsync({
-      fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name],
-    });
+    // `getAllDetails` returns plain field bags rather than hydrated `Contact` instances, which
+    // is the cheap path for a bulk read of two fields. iOS 18 "limited access" simply returns
+    // the subset the user picked, so it needs no separate branch.
+    const details = await Contact.getAllDetails([ContactField.FULL_NAME, ContactField.PHONES]);
 
     const mapped: PhoneContact[] = [];
     const seen = new Set<string>();
 
-    for (const contact of data) {
-      for (const phone of contact.phoneNumbers ?? []) {
+    for (const contact of details) {
+      for (const phone of contact.phones ?? []) {
         const e164 = normalizeEgyptianPhone(phone.number ?? '');
         if (!e164 || seen.has(e164)) continue;
         seen.add(e164);
         mapped.push({
           id: `${contact.id ?? e164}:${e164}`,
-          name: contact.name?.trim() || e164,
+          name: contact.fullName?.trim() || e164,
           phoneNumber: e164,
         });
       }
@@ -61,7 +66,10 @@ async function readContacts(): Promise<ContactsResult> {
 
     mapped.sort((a, b) => a.name.localeCompare(b.name));
     return { contacts: mapped.length > 0 ? mapped : fallback, permission: 'granted' };
-  } catch {
+  } catch (error) {
+    // Swallowing this silently is what made the deprecation stub above so hard to spot: the
+    // screen said "we couldn't read your contacts" and the reason never left this function.
+    console.warn('[contacts] address book read failed', error);
     return { contacts: fallback, permission: 'error' };
   }
 }

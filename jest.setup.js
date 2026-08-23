@@ -24,8 +24,8 @@ jest.mock('expo-font', () => ({
 
 jest.mock('expo-contacts', () => ({
   requestPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
-  getContactsAsync: jest.fn(async () => ({ data: [] })),
-  Fields: { PhoneNumbers: 'phoneNumbers', Name: 'name' },
+  Contact: { getAllDetails: jest.fn(async () => []) },
+  ContactField: { FULL_NAME: 'fullName', PHONES: 'phones' },
 }));
 
 jest.mock('expo-camera', () => ({
