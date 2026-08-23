@@ -39,7 +39,7 @@ export default function GuestsScreen() {
   const toggleGuest = useCheckoutStore((s) => s.toggleGuest);
   const addGuest = useCheckoutStore((s) => s.addGuest);
 
-  const { contacts, permission, reload } = useContacts();
+  const { contacts, permission, loading: contactsLoading, load: loadContacts } = useContacts();
   const validateGuests = useValidateGuests();
 
   const [manual, setManual] = useState('');
@@ -143,9 +143,7 @@ export default function GuestsScreen() {
       {slots > 0 ? (
         <>
           <View style={styles.listHeader}>
-            <Text style={styles.listHeaderLabel}>
-              {permission === 'denied' ? 'Suggested' : 'From your contacts'}
-            </Text>
+            <Text style={styles.listHeaderLabel}>Guests</Text>
             <Text style={styles.listHeaderCount}>
               {picked} of {slots} picked
             </Text>
@@ -191,25 +189,41 @@ export default function GuestsScreen() {
             })}
           </ScrollView>
 
-          {permission === 'denied' || permission === 'error' ? (
-            <View style={styles.contactsNotice}>
-              <Text variant="metaSm" color={colors.textMuted}>
-                {permission === 'denied'
-                  ? 'Allow contacts access in your phone settings to choose guests from your address book.'
-                  : "We couldn't read your contacts right now."}
+          {rows.length === 0 ? (
+            <View style={styles.emptyList}>
+              <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
+                {permission === null
+                  ? 'Add a guest from your contacts, or enter their number below.'
+                  : 'No Egyptian mobile numbers in your contacts. Enter one below.'}
               </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  if (permission === 'denied') void Linking.openSettings();
-                  else void reload();
-                }}
-              >
-                <Text variant="metaSm" color={colors.accentSky} style={styles.contactsAction}>
-                  {permission === 'denied' ? 'Open settings' : 'Try again'}
-                </Text>
-              </Pressable>
             </View>
+          ) : null}
+
+          <View style={styles.spacer} />
+
+          {permission === 'denied' ? (
+            // iOS will not re-prompt once access is refused, so the only route left is Settings.
+            <Button
+              label="Allow contacts in settings"
+              variant="secondary"
+              onPress={() => void Linking.openSettings()}
+              style={styles.contactsButton}
+            />
+          ) : (
+            <Button
+              label="Add from Contacts"
+              variant="secondary"
+              onPress={loadContacts}
+              loading={contactsLoading}
+              disabled={full}
+              style={styles.contactsButton}
+            />
+          )}
+
+          {permission === 'error' ? (
+            <Text variant="metaSm" color={colors.textMuted} style={styles.contactsNotice}>
+              {"We couldn't read your contacts. Try again, or enter the number below."}
+            </Text>
           ) : null}
 
           <Text style={styles.manualLabel}>Not in your contacts?</Text>
@@ -245,9 +259,14 @@ export default function GuestsScreen() {
         </Text>
       ) : null}
 
-      <View style={styles.spacer} />
+      {slots === 0 ? <View style={styles.spacer} /> : null}
 
-      <Button label="Continue" onPress={onContinue} loading={validateGuests.isPending} />
+      <Button
+        label="Continue"
+        onPress={onContinue}
+        loading={validateGuests.isPending}
+        style={styles.continue}
+      />
     </Screen>
   );
 }
@@ -284,18 +303,24 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   list: {
-    maxHeight: 220,
-    marginBottom: 20,
+    flexGrow: 0,
+    maxHeight: 260,
   },
   listContent: {
     gap: 6,
   },
-  contactsNotice: {
-    gap: 6,
-    marginBottom: 16,
+  emptyList: {
+    paddingVertical: 18,
   },
-  contactsAction: {
-    fontWeight: '600',
+  emptyText: {
+    textAlign: 'center',
+  },
+  contactsButton: {
+    marginBottom: 18,
+  },
+  contactsNotice: {
+    marginTop: -8,
+    marginBottom: 14,
   },
   contactRow: {
     flexDirection: 'row',
@@ -335,6 +360,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: colors.textMuted,
     marginBottom: 8,
+  },
+  continue: {
+    marginTop: 16,
   },
   manualRow: {
     flexDirection: 'row',

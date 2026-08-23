@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { PermissionStatus } from 'expo-modules-core';
 import * as Contacts from 'expo-contacts';
 import type { ReactNode } from 'react';
@@ -39,6 +39,18 @@ function granted() {
   });
 }
 
+/** Nothing is read until the guest picker asks, so every case has to drive `load()` first. */
+async function renderLoaded() {
+  const rendered = renderHook(() => useContacts(), { wrapper });
+
+  await act(async () => {
+    rendered.result.current.load();
+  });
+  await waitFor(() => expect(rendered.result.current.loading).toBe(false));
+
+  return rendered;
+}
+
 describe('contacts hook', () => {
   beforeEach(() => {
     requestPermissionsMock.mockResolvedValue({
@@ -54,10 +66,18 @@ describe('contacts hook', () => {
     jest.clearAllMocks();
   });
 
-  it('returns no fabricated contacts when permission is denied', async () => {
+  it('reads nothing until the picker asks, so checkout raises no permission sheet', async () => {
     const rendered = renderHook(() => useContacts(), { wrapper });
 
     await waitFor(() => expect(rendered.result.current.loading).toBe(false));
+
+    expect(requestPermissionsMock).not.toHaveBeenCalled();
+    expect(getAllDetailsMock).not.toHaveBeenCalled();
+    expect(rendered.result.current.permission).toBeNull();
+  });
+
+  it('returns no fabricated contacts when permission is denied', async () => {
+    const rendered = await renderLoaded();
 
     expect(rendered.result.current.contacts).toEqual([]);
     expect(rendered.result.current.permission).toBe('denied');
@@ -65,9 +85,7 @@ describe('contacts hook', () => {
 
   it('returns no fabricated contacts when the address book is empty', async () => {
     granted();
-    const rendered = renderHook(() => useContacts(), { wrapper });
-
-    await waitFor(() => expect(rendered.result.current.loading).toBe(false));
+    const rendered = await renderLoaded();
 
     expect(rendered.result.current.contacts).toEqual([]);
     expect(rendered.result.current.permission).toBe('granted');
@@ -87,9 +105,7 @@ describe('contacts hook', () => {
       { id: '3', fullName: 'Landline Only', phones: [{ id: 'p3', number: '0223456789' }] },
     ] as never);
 
-    const rendered = renderHook(() => useContacts(), { wrapper });
-
-    await waitFor(() => expect(rendered.result.current.loading).toBe(false));
+    const rendered = await renderLoaded();
 
     expect(rendered.result.current.permission).toBe('granted');
     expect(rendered.result.current.contacts).toEqual([
@@ -101,9 +117,7 @@ describe('contacts hook', () => {
 
   it('returns an error state and no contacts when the address book cannot be read', async () => {
     requestPermissionsMock.mockRejectedValue(new Error('contacts unavailable'));
-    const rendered = renderHook(() => useContacts(), { wrapper });
-
-    await waitFor(() => expect(rendered.result.current.loading).toBe(false));
+    const rendered = await renderLoaded();
 
     expect(rendered.result.current.contacts).toEqual([]);
     expect(rendered.result.current.permission).toBe('error');

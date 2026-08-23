@@ -198,11 +198,17 @@ describe('09 Guests', () => {
 
     expect(screen.getByText('Bringing anyone?')).toBeTruthy();
     expect(screen.getByText('You bought 2 tickets. Attach 1 guest from your contacts.')).toBeTruthy();
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    expect(screen.getByText('010 2233 4455')).toBeTruthy();
     expect(screen.getByText('0 of 1 picked')).toBeTruthy();
     expect(screen.getByText('Not in your contacts?')).toBeTruthy();
     expect(screen.getByPlaceholderText('Enter phone number')).toBeTruthy();
+
+    // Opening checkout must not touch the address book; the button is the only way in.
+    expect(screen.queryByText('Nour Hassan')).toBeNull();
+
+    fireEvent.press(screen.getByText('Add from Contacts'));
+
+    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
+    expect(screen.getByText('010 2233 4455')).toBeTruthy();
   });
 });
 

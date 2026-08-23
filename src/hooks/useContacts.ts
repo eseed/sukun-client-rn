@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { Contact, ContactField, requestPermissionsAsync } from 'expo-contacts';
 import { API_MODE } from '../api';
 import { fallbackContacts } from '../api/mock/fixtures';
@@ -74,17 +75,46 @@ async function readContacts(): Promise<ContactsResult> {
   }
 }
 
+const CONTACTS_KEY = ['contacts'] as const;
+
+/**
+ * The address book is read only once the guest picker explicitly asks for it, so simply opening
+ * checkout never raises the system permission sheet. `requestPermissionsAsync` is a no-op when
+ * access was already granted, so `load()` costs a returning user nothing.
+ */
 export function useContacts() {
+  const client = useQueryClient();
+  // Seeded from the cache so stepping back into checkout keeps the contacts already loaded
+  // instead of dropping the user back to the button.
+  const [requested, setRequested] = useState(
+    () => client.getQueryData(CONTACTS_KEY) !== undefined,
+  );
+
   const query = useQuery({
-    queryKey: ['contacts'],
+    queryKey: CONTACTS_KEY,
     queryFn: readContacts,
+    enabled: requested,
     staleTime: 5 * 60 * 1000,
   });
 
+  const { refetch } = query;
+  const load = useCallback(() => {
+    // A second tap after a failed read is a retry, not a no-op against the cached result.
+    if (requested) {
+      void refetch();
+
+      return;
+    }
+
+    setRequested(true);
+  }, [requested, refetch]);
+
   return {
     contacts: query.data?.contacts ?? [],
-    permission: query.data?.permission ?? 'granted',
-    loading: query.isPending,
-    reload: query.refetch,
+    /** `null` until the user asks — distinct from having asked and been refused. */
+    permission: query.data?.permission ?? null,
+    loading: requested && query.isFetching,
+    load,
+    reload: refetch,
   };
 }
