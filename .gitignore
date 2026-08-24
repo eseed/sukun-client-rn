@@ -16,6 +16,9 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+
+# EAS local credentials (paths + p12 passwords)
+credentials.json
 /ios
 /android
 
