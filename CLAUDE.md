@@ -90,6 +90,19 @@ npm test           jest
 npm run verify     all three (run this before every commit)
 ```
 
+### Releasing to iOS
+
+When the user says to release on iOS (e.g. "release this on iOS", "ship an iOS build"), run:
+
+```
+npm run verify && npx eas build --platform ios --profile production --auto-submit
+```
+
+This builds in the cloud and auto-submits to TestFlight (App Store Connect handles
+managed credentials; `eas.json`'s `production` profile has `autoIncrement: true` so the
+build number bumps itself). Only run this when explicitly asked to release; never do it
+as a side effect of another task.
+
 ## Conventions
 
 - Money: format with `formatEgp()` from `src/lib/format.ts`. Never `toFixed` in a screen.

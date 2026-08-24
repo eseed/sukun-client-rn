@@ -18,6 +18,7 @@
       "bundleIdentifier": "co.sukunwellness",
       "buildNumber": "1",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry.",
         "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification.",
         "NSContactsUsageDescription": "Sukun uses your contacts so you can attach guests to tickets by phone number."
@@ -32,7 +33,12 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["android.permission.CAMERA", "android.permission.READ_CONTACTS"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_CONTACTS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -62,6 +68,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "55c4af36-6e7f-4624-8847-1a4da6500134"
+      }
+    },
+    "owner": "eseed"
   }
 }
