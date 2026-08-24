@@ -47,6 +47,26 @@ jest.mock('expo-router', () => ({
   Tabs: Object.assign(() => null, { Screen: () => null }),
 }));
 
+/** A signed-in user with nothing filled in yet, so the form renders its empty state. */
+function emptyForeignUser() {
+  return {
+    id: 'user-foreign',
+    phoneNumber: '+971501234567',
+    fullName: null,
+    email: null,
+    emailVerified: false,
+    dateOfBirth: null,
+    gender: null,
+    area: null,
+    selfieUploaded: false,
+    selfieUrl: null,
+    selfieExpiresAt: null,
+    marketingOptIn: false,
+    profileComplete: false,
+    status: 'pending_profile' as const,
+  };
+}
+
 async function signInAndComplete() {
   await mockApi.auth.requestOtp('+201012345678');
   const { user } = await mockApi.auth.verifyOtp('+201012345678', MOCK_OTP_CODE);
@@ -77,9 +97,7 @@ describe('01 Welcome', () => {
     renderWithProviders(<WelcomeScreen />);
     expect(screen.getByText('Everything wellness.')).toBeTruthy();
     expect(screen.getByText("Let's move!")).toBeTruthy();
-    expect(
-      screen.getByText('By continuing you agree to our terms & privacy policy'),
-    ).toBeTruthy();
+    expect(screen.getByText('By continuing you agree to our terms & privacy policy')).toBeTruthy();
   });
 });
 
@@ -90,7 +108,7 @@ describe('03 Verify code', () => {
 
     expect(screen.getByText('Step 1 of 3')).toBeTruthy();
     expect(screen.getByText('Check WhatsApp')).toBeTruthy();
-    expect(screen.getByText('+20 101 234 5678')).toBeTruthy();
+    expect(screen.getByText('+20 10 12345678')).toBeTruthy();
     expect(screen.getByText('Verify')).toBeTruthy();
     expect(screen.getByText(/Resend in/)).toBeTruthy();
   });
@@ -114,6 +132,23 @@ describe('04 About you', () => {
       name: /WhatsApp me your latest updates/,
     });
     expect(consent.props.accessibilityState.checked).toBe(false);
+  });
+
+  it('drops the living area for a number outside Egypt', async () => {
+    // `areas` are Egyptian governorates, so there is no answer to give from abroad — the
+    // field is not shown, and nothing waits on the area list to load.
+    useAuthStore.setState({
+      status: 'signed-in',
+      user: { ...emptyForeignUser(), phoneNumber: '+971501234567' },
+    });
+    renderWithProviders(<ProfileFormScreen />);
+
+    await waitFor(() => expect(screen.getByText('Step 2 of 3')).toBeTruthy());
+    for (const label of ['Full name', 'Email', 'Date of birth', 'Gender']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    expect(screen.queryByText('Living area')).toBeNull();
+    expect(screen.getAllByText('Select').length).toBe(2);
   });
 });
 
@@ -197,7 +232,9 @@ describe('09 Guests', () => {
     renderWithProviders(<GuestsScreen />);
 
     expect(screen.getByText('Bringing anyone?')).toBeTruthy();
-    expect(screen.getByText('You bought 2 tickets. Attach 1 guest from your contacts.')).toBeTruthy();
+    expect(
+      screen.getByText('You bought 2 tickets. Attach 1 guest from your contacts.'),
+    ).toBeTruthy();
     expect(screen.getByText('0 of 1 picked')).toBeTruthy();
     expect(screen.getByText('Not in your contacts?')).toBeTruthy();
     expect(screen.getByPlaceholderText('Enter phone number')).toBeTruthy();
@@ -208,7 +245,7 @@ describe('09 Guests', () => {
     fireEvent.press(screen.getByText('Add from Contacts'));
 
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    expect(screen.getByText('010 2233 4455')).toBeTruthy();
+    expect(screen.getByText('010 22334455')).toBeTruthy();
   });
 });
 
@@ -291,7 +328,6 @@ describe('11 Payment', () => {
       screen.getByText("Tapping pay opens Paymob's secure sheet, where you enter your card."),
     ).toBeTruthy();
   });
-
 });
 
 describe('12 Confirmation', () => {
@@ -307,9 +343,7 @@ describe('12 Confirmation', () => {
 
     renderWithProviders(<ConfirmationScreen />);
 
-    await waitFor(() =>
-      expect(screen.getByText(new RegExp(`2 tickets to Tulua`))).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(new RegExp(`2 tickets to Tulua`))).toBeTruthy());
     expect(screen.getByText(/WhatsApp message/)).toBeTruthy();
     expect(screen.getByText('See my ticket')).toBeTruthy();
   });
@@ -366,7 +400,7 @@ describe('15 Profile', () => {
 
     expect(screen.getByText('Profile')).toBeTruthy();
     expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
-    expect(screen.getByText('+20 101 234 5678')).toBeTruthy();
+    expect(screen.getByText('+20 10 12345678')).toBeTruthy();
     expect(screen.getByText('yasmin@email.com')).toBeTruthy();
     expect(screen.getByText('Account')).toBeTruthy();
     expect(screen.getByText('Privacy policy & terms')).toBeTruthy();

@@ -110,7 +110,7 @@ export default function ConfirmationScreen() {
           </Text>
         ) : (
           <Text style={styles.blurb}>
-            Your entry pass is ready. Bring your face — gate staff check it against your selfie.
+            Your entry pass is ready. Bring your face: gate staff check it against your selfie.
           </Text>
         )}
 

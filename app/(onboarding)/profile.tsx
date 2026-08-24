@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Image, StyleSheet, View } from 'react-native';
 import { z } from 'zod';
@@ -20,11 +20,17 @@ import {
 } from '../../src/components/ui';
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
+import { setUserProperties, track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
+import {
+  countryRequiresLivingArea,
+  DEFAULT_COUNTRY,
+  requiresLivingArea,
+} from '../../src/lib/phone';
 
 /**
  * Design screen 04 · About you.
@@ -42,29 +48,44 @@ const GENDERS: { value: 'male' | 'female'; label: string }[] = [
   { value: 'female', label: 'Female' },
 ];
 
-const schema = z.object({
-  fullName: z.string().trim().min(2, 'Tell us your name'),
-  email: z.string().trim().email('Check that email address'),
-  dateOfBirth: z
-    .string()
-    .trim()
-    .min(1, 'Pick your date of birth')
-    .refine((value) => ageOn(value, new Date()) >= MINIMUM_AGE, `You must be ${MINIMUM_AGE} or over`),
-  gender: z.enum(['male', 'female']),
-  areaId: z.string().min(1, 'Pick your area'),
-  // Consent, so it is never required and never pre-ticked — Meta only accepts marketing
-  // messages sent on an explicit opt-in, and a default-on box is not one.
-  marketingOptIn: z.boolean(),
-});
+/**
+ * The living area is an Egyptian governorate, so it is only asked of — and only required of —
+ * a user whose number is Egyptian. Mirrors the backend's profile completeness rule.
+ */
+function buildSchema(areaRequired: boolean) {
+  return z.object({
+    fullName: z.string().trim().min(2, 'Tell us your name'),
+    email: z.string().trim().email('Check that email address'),
+    dateOfBirth: z
+      .string()
+      .trim()
+      .min(1, 'Pick your date of birth')
+      .refine(
+        (value) => ageOn(value, new Date()) >= MINIMUM_AGE,
+        `You must be ${MINIMUM_AGE} or over`,
+      ),
+    gender: z.enum(['male', 'female']),
+    areaId: areaRequired ? z.string().min(1, 'Pick your area') : z.string().optional(),
+    // Consent, so it is never required and never pre-ticked — Meta only accepts marketing
+    // messages sent on an explicit opt-in, and a default-on box is not one.
+    marketingOptIn: z.boolean(),
+  });
+}
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<ReturnType<typeof buildSchema>>;
 
 export default function ProfileFormScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  // Until the profile loads there is no number to read a country from; assume the home
+  // market rather than let the field appear a beat after the rest of the form.
+  const areaRequired = user
+    ? requiresLivingArea(user.phoneNumber)
+    : countryRequiresLivingArea(DEFAULT_COUNTRY);
   const areasQuery = useAreas();
   const areas = areasQuery.data ?? [];
   const updateProfile = useUpdateProfile();
+  const schema = useMemo(() => buildSchema(areaRequired), [areaRequired]);
 
   const [sheet, setSheet] = useState<'gender' | 'area' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -118,8 +139,19 @@ export default function ProfileFormScreen() {
         email: values.email,
         dateOfBirth: values.dateOfBirth,
         gender: values.gender,
-        areaId: values.areaId,
+        areaId: areaRequired ? values.areaId : undefined,
         marketingOptIn: values.marketingOptIn,
+      });
+      const area = areas.find((a) => a.id === values.areaId);
+      setUserProperties({
+        gender: values.gender,
+        marketing_opt_in: values.marketingOptIn,
+        ...(area ? { area_code: area.code } : {}),
+      });
+      track('profile_completed', {
+        gender: values.gender,
+        marketing_opt_in: values.marketingOptIn,
+        ...(area ? { area_code: area.code } : {}),
       });
       router.push('/(onboarding)/selfie');
     } catch (err) {
@@ -127,7 +159,7 @@ export default function ProfileFormScreen() {
     }
   });
 
-  if (areasQuery.isPending) {
+  if (areaRequired && areasQuery.isPending) {
     return (
       <Screen contentStyle={styles.stateScreen}>
         <ResourceState status="loading" loadingLabel="Loading areas..." />
@@ -135,7 +167,7 @@ export default function ProfileFormScreen() {
     );
   }
 
-  if (areasQuery.isError) {
+  if (areaRequired && areasQuery.isError) {
     return (
       <Screen contentStyle={styles.stateScreen}>
         <ResourceState
@@ -231,29 +263,31 @@ export default function ProfileFormScreen() {
           />
         </View>
 
-        <Controller
-          control={control}
-          name="areaId"
-          render={({ field, fieldState }) => (
-            <>
-              <PickerField
-                label="Living area"
-                placeholder="Select"
-                value={areas.find((a) => a.id === field.value)?.name ?? null}
-                onPress={() => setSheet('area')}
-                error={fieldState.error?.message ?? null}
-              />
-              <OptionSheet
-                visible={sheet === 'area'}
-                title="Living area"
-                options={areas.map((a) => ({ value: a.id, label: a.name }))}
-                selectedValue={field.value || null}
-                onSelect={field.onChange}
-                onClose={() => setSheet(null)}
-              />
-            </>
-          )}
-        />
+        {areaRequired ? (
+          <Controller
+            control={control}
+            name="areaId"
+            render={({ field, fieldState }) => (
+              <>
+                <PickerField
+                  label="Living area"
+                  placeholder="Select"
+                  value={areas.find((a) => a.id === field.value)?.name ?? null}
+                  onPress={() => setSheet('area')}
+                  error={fieldState.error?.message ?? null}
+                />
+                <OptionSheet
+                  visible={sheet === 'area'}
+                  title="Living area"
+                  options={areas.map((a) => ({ value: a.id, label: a.name }))}
+                  selectedValue={field.value || null}
+                  onSelect={field.onChange}
+                  onClose={() => setSheet(null)}
+                />
+              </>
+            )}
+          />
+        ) : null}
 
         <Controller
           control={control}
@@ -268,7 +302,6 @@ export default function ProfileFormScreen() {
             />
           )}
         />
-
       </View>
 
       {submitError ? (

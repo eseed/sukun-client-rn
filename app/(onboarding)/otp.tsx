@@ -11,9 +11,10 @@ import {
 } from '../../src/components/ui';
 import { OtpInput } from '../../src/components/ui/OtpInput';
 import { useRequestOtp, useVerifyOtp } from '../../src/hooks/queries';
+import { track } from '../../src/lib/analytics';
 import { isAccountRestorationRequired, messageForError } from '../../src/lib/errors';
 import { formatCountdown } from '../../src/lib/format';
-import { formatPhoneForDisplay, isValidEgyptianPhone } from '../../src/lib/phone';
+import { formatPhoneForDisplay, isValidPhone } from '../../src/lib/phone';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { colors } from '../../src/theme/tokens';
 
@@ -45,7 +46,7 @@ export default function OtpScreen() {
   // successful sign-in looks like a rejection.
   useEffect(() => {
     if (status === 'signed-in') return;
-    if (!pendingPhone || !isValidEgyptianPhone(pendingPhone)) {
+    if (!pendingPhone || !isValidPhone(pendingPhone)) {
       router.replace('/(onboarding)/phone');
     }
   }, [pendingPhone, router, status]);
@@ -53,25 +54,30 @@ export default function OtpScreen() {
   const ready = code.length === CODE_LENGTH && !verifyOtp.isPending;
 
   async function onVerify() {
-    if (!pendingPhone || !isValidEgyptianPhone(pendingPhone)) return;
+    if (!pendingPhone || !isValidPhone(pendingPhone)) return;
     setError(null);
     setRestorationRequired(false);
     try {
-       await verifyOtp.mutateAsync({ phoneNumber: pendingPhone, code });
+      const result = await verifyOtp.mutateAsync({ phoneNumber: pendingPhone, code });
       // Where they land depends on how much of the profile already exists — a returning
       // user skips straight into the app.
-        const user = useAuthStore.getState().user;
-        if (!user?.profileComplete) {
-          const missing = missingProfileFields(user);
-          if (missing.length === 0) {
-            router.replace('/(tabs)/discover');
-          } else {
-            router.replace(
-              missing.length === 1 && missing[0] === 'selfie'
-                ? '/(onboarding)/selfie'
-                : '/(onboarding)/profile',
-            );
-          }
+      const user = useAuthStore.getState().user;
+      useAuthStore.getState().setIsNewUser(result.isNewUser);
+      track('otp_verified', {
+        is_new_user: result.isNewUser,
+        has_complete_profile: Boolean(user?.profileComplete),
+      });
+      if (!user?.profileComplete) {
+        const missing = missingProfileFields(user);
+        if (missing.length === 0) {
+          router.replace('/(tabs)/discover');
+        } else {
+          router.replace(
+            missing.length === 1 && missing[0] === 'selfie'
+              ? '/(onboarding)/selfie'
+              : '/(onboarding)/profile',
+          );
+        }
       } else {
         router.replace('/(tabs)/discover');
       }
@@ -79,6 +85,7 @@ export default function OtpScreen() {
       setRestorationRequired(isAccountRestorationRequired(err));
       setError(messageForError(err));
       setCode('');
+      track('otp_verify_failed');
     }
   }
 
@@ -88,7 +95,7 @@ export default function OtpScreen() {
   }
 
   async function onResend() {
-    if (!pendingPhone || !isValidEgyptianPhone(pendingPhone) || secondsLeft > 0) return;
+    if (!pendingPhone || !isValidPhone(pendingPhone) || secondsLeft > 0) return;
     setError(null);
     try {
       await requestOtp.mutateAsync(pendingPhone);
@@ -149,12 +156,7 @@ export default function OtpScreen() {
 
       <View style={styles.spacer} />
 
-      <Button
-        label="Verify"
-        onPress={onVerify}
-        disabled={!ready}
-        loading={verifyOtp.isPending}
-      />
+      <Button label="Verify" onPress={onVerify} disabled={!ready} loading={verifyOtp.isPending} />
     </Screen>
   );
 }

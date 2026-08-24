@@ -39,21 +39,53 @@ jest.mock('expo-image-picker', () => ({
   MediaTypeOptions: { Images: 'Images' },
 }));
 
-jest.mock('paymob-reactnative', () => ({
-  __esModule: true,
-  default: {
-    setAppName: jest.fn(),
-    setButtonBackgroundColor: jest.fn(),
-    setButtonTextColor: jest.fn(),
-    setAppIcon: jest.fn(),
-    setShowSaveCard: jest.fn(),
-    setSaveCardDefault: jest.fn(),
-    setShowConfirmationPage: jest.fn(),
-    setShowTransactionResult: jest.fn(),
-    setKeyboardHandlingEnabled: jest.fn(),
-    presentPayVC: jest.fn(),
-    setSdkListener: jest.fn(),
-    removeSdkListener: jest.fn(),
-  },
-  PaymentStatus: { SUCCESS: 'Success', FAIL: 'Fail', CANCELLED: 'Cancelled', PENDING: 'Pending' },
-}), { virtual: true });
+jest.mock('mixpanel-react-native', () => {
+  const people = { set: jest.fn(), setOnce: jest.fn() };
+  return {
+    Mixpanel: jest.fn().mockImplementation(() => ({
+      init: jest.fn(async () => {}),
+      track: jest.fn(),
+      identify: jest.fn(async () => {}),
+      getPeople: () => people,
+      reset: jest.fn(),
+      setServerURL: jest.fn(),
+    })),
+  };
+});
+
+jest.mock('@microsoft/react-native-clarity', () => ({
+  initialize: jest.fn(),
+  pause: jest.fn(async () => true),
+  resume: jest.fn(async () => true),
+  setCustomUserId: jest.fn(async () => true),
+  startNewSession: jest.fn((cb) => cb && cb('session-id')),
+  LogLevel: { None: 'None', Verbose: 'Verbose' },
+}));
+
+jest.mock('expo-localization', () => ({
+  getLocales: () => [{ regionCode: 'EG' }],
+  getCalendars: () => [{ timeZone: 'Africa/Cairo' }],
+}));
+
+jest.mock(
+  'paymob-reactnative',
+  () => ({
+    __esModule: true,
+    default: {
+      setAppName: jest.fn(),
+      setButtonBackgroundColor: jest.fn(),
+      setButtonTextColor: jest.fn(),
+      setAppIcon: jest.fn(),
+      setShowSaveCard: jest.fn(),
+      setSaveCardDefault: jest.fn(),
+      setShowConfirmationPage: jest.fn(),
+      setShowTransactionResult: jest.fn(),
+      setKeyboardHandlingEnabled: jest.fn(),
+      presentPayVC: jest.fn(),
+      setSdkListener: jest.fn(),
+      removeSdkListener: jest.fn(),
+    },
+    PaymentStatus: { SUCCESS: 'Success', FAIL: 'Fail', CANCELLED: 'Cancelled', PENDING: 'Pending' },
+  }),
+  { virtual: true },
+);

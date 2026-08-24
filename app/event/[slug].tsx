@@ -1,13 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  Image,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BackButton,
@@ -20,6 +13,7 @@ import {
   Text,
 } from '../../src/components/ui';
 import { useEvent } from '../../src/hooks/queries';
+import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
@@ -37,7 +31,8 @@ export default function EventDetailScreen() {
   const user = useAuthStore((s) => s.user);
   const startCheckout = useCheckoutStore((s) => s.start);
   const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
-  const eventSlug = typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
+  const eventSlug =
+    typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
 
@@ -56,15 +51,17 @@ export default function EventDetailScreen() {
   }
 
   const firstPurchasableTier = event.tiers.find((tier) => tier.isPurchasable);
-  const availability = event.tiers.length === 0
-    ? 'Tickets are not available for this event.'
-    : firstPurchasableTier
-      ? 'Tickets are available now.'
-      : event.state === 'sold_out' || event.tiers.every((tier) => tier.availabilityStatus === 'sold_out')
-        ? 'This event is sold out.'
-        : event.state === 'sales_closed'
-          ? 'Sales for this event are closed.'
-          : 'Tickets are not on sale yet.';
+  const availability =
+    event.tiers.length === 0
+      ? 'Tickets are not available for this event.'
+      : firstPurchasableTier
+        ? 'Tickets are available now.'
+        : event.state === 'sold_out' ||
+            event.tiers.every((tier) => tier.availabilityStatus === 'sold_out')
+          ? 'This event is sold out.'
+          : event.state === 'sales_closed'
+            ? 'Sales for this event are closed.'
+            : 'Tickets are not on sale yet.';
   const eventId = event.id;
 
   function onGetTickets() {
@@ -79,6 +76,11 @@ export default function EventDetailScreen() {
     // onboarding just because the local mirror is partial.
     if (user.profileComplete) {
       startCheckout(eventId, firstPurchasableTier.id);
+      track('checkout_started', {
+        event_id: eventId,
+        event_slug: eventSlug ?? '',
+        tier_id: firstPurchasableTier.id,
+      });
       router.push(`/checkout/pass?eventId=${eventId}`);
       return;
     }
@@ -153,7 +155,10 @@ export default function EventDetailScreen() {
           ) : null}
 
           <View style={styles.badges}>
-            <Badge label={`${event.days.length} ${event.days.length === 1 ? 'day' : 'days'}`} tone="sky" />
+            <Badge
+              label={`${event.days.length} ${event.days.length === 1 ? 'day' : 'days'}`}
+              tone="sky"
+            />
             {firstPurchasableTier && firstPurchasableTier.available < 100 ? (
               <Badge label="Early bird selling fast" tone="gold" />
             ) : null}
@@ -167,8 +172,12 @@ export default function EventDetailScreen() {
               <PinIcon />
             </View>
             <View style={styles.flex}>
-              <Text style={styles.venueName}>{event.venue?.name ?? 'Venue details coming soon'}</Text>
-              {event.venue?.address ? <Text style={styles.venueAddress}>{event.venue.address}</Text> : null}
+              <Text style={styles.venueName}>
+                {event.venue?.name ?? 'Venue details coming soon'}
+              </Text>
+              {event.venue?.address ? (
+                <Text style={styles.venueAddress}>{event.venue.address}</Text>
+              ) : null}
             </View>
           </View>
 
@@ -187,7 +196,7 @@ export default function EventDetailScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}> 
+      <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}>
         <View>
           <Text style={styles.barLabel}>From</Text>
           <Text style={styles.barPrice}>

@@ -46,4 +46,5 @@ export async function deleteSecureItem(key: string): Promise<void> {
 export const SECURE_KEYS = {
   accessToken: 'sukun.accessToken',
   refreshToken: 'sukun.refreshToken',
+  analyticsConsent: 'sukun.analyticsConsent',
 } as const;

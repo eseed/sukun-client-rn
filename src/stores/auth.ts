@@ -2,12 +2,9 @@ import { create } from 'zustand';
 import { api } from '../api';
 import { setAuthFailureHandler } from '../api/live/http';
 import type { CurrentUser } from '../api/types';
-import {
-  deleteSecureItem,
-  getSecureItem,
-  SECURE_KEYS,
-  setSecureItem,
-} from '../lib/secure-storage';
+import { identify, resetAnalytics } from '../lib/analytics';
+import { deleteSecureItem, getSecureItem, SECURE_KEYS, setSecureItem } from '../lib/secure-storage';
+import { requiresLivingArea } from '../lib/phone';
 
 /**
  * Session state. Tokens live in the keychain; this store holds the in-memory view of who is
@@ -49,16 +46,28 @@ interface AuthState {
   status: AuthStatus;
   user: CurrentUser | null;
   pendingPhone: string | null;
+  /**
+   * Transient, in-memory only — whether the OTP verification that produced the current
+   * session was for a brand-new account. Set by `otp.tsx` right after verifying, read (and
+   * cleared) by `selfie.tsx` to fire the `signup_completed` analytics event exactly once, and
+   * never persisted or shown in the UI (CLAUDE.md rule 4 is about UI copy, not analytics).
+   */
+  isNewUser: boolean;
 
   restore: () => Promise<void>;
   setPendingPhone: (phone: string | null) => void;
-  signIn: (tokens: { accessToken: string; refreshToken: string }, user: CurrentUser) => Promise<void>;
+  setIsNewUser: (value: boolean) => void;
+  signIn: (
+    tokens: { accessToken: string; refreshToken: string },
+    user: CurrentUser,
+  ) => Promise<void>;
   setUser: (user: CurrentUser) => void;
   signOut: (options?: { remote?: boolean }) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   status: 'loading',
+  isNewUser: false,
   user: null,
   pendingPhone: null,
 
@@ -77,6 +86,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const user = await api.auth.me();
       if (generation !== sessionGeneration) return;
       set({ status: 'signed-in', user });
+      identify(user.id);
     } catch {
       // Keep credentials for a later restore if this was a transient network/API failure.
       if (generation !== sessionGeneration) return;
@@ -89,6 +99,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ pendingPhone: phone });
   },
 
+  setIsNewUser(value) {
+    set({ isNewUser: value });
+  },
+
   async signIn(tokens, user) {
     const generation = ++sessionGeneration;
     await queueSecureTransition(async () => {
@@ -97,6 +111,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
     if (generation !== sessionGeneration) return;
     set({ status: 'signed-in', user, pendingPhone: null });
+    identify(user.id);
   },
 
   setUser(user) {
@@ -107,6 +122,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const generation = ++sessionGeneration;
     clearQueryCache?.();
     set({ status: 'signed-out', user: null, pendingPhone: null });
+    resetAnalytics();
 
     await queueSecureTransition(async () => {
       if (options?.remote !== false) {
@@ -142,7 +158,8 @@ export function missingProfileFields(user: CurrentUser | null): string[] {
   if (!user.email) missing.push('email');
   if (!user.dateOfBirth) missing.push('date of birth');
   if (!user.gender) missing.push('gender');
-  if (!user.area) missing.push('area');
+  // Only Egyptian numbers are asked for a living area, so only they can be missing one.
+  if (requiresLivingArea(user.phoneNumber) && !user.area) missing.push('area');
   if (!user.selfieUploaded) missing.push('selfie');
   return missing;
 }

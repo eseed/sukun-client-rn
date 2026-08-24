@@ -57,7 +57,8 @@
           "contactsPermission": "Sukun uses your contacts so you can attach guests to tickets by phone number."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true

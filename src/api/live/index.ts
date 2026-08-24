@@ -31,7 +31,7 @@ import type {
   UpdateProfileInput,
 } from '../types';
 import { ApiError, request } from './http';
-import { normalizeEgyptianPhone } from '../../lib/phone';
+import { normalizePhone } from '../../lib/phone';
 
 /**
  * Live backend implementation. Endpoint paths and DTO shapes are verified against the staging
@@ -57,7 +57,7 @@ function normalizeCurrentUser(user: LiveCurrentUser): CurrentUser {
 
 function normalizePhoneForRequest(phoneNumber: string): string {
   // Preserve invalid input so the backend returns its normal validation error and copy.
-  return normalizeEgyptianPhone(phoneNumber) ?? phoneNumber;
+  return normalizePhone(phoneNumber) ?? phoneNumber;
 }
 
 function toLiveProfileInput(input: UpdateProfileInput): LiveUpdateProfileInput {
@@ -170,7 +170,12 @@ export const liveApi: SukunApi = {
         form.append('file', new File(uri) as unknown as Blob);
       } else {
         const response = await fetch(uri);
-        if (!response.ok) throw new ApiError('FILE_READ_FAILED', 'The selfie file could not be read.', response.status);
+        if (!response.ok)
+          throw new ApiError(
+            'FILE_READ_FAILED',
+            'The selfie file could not be read.',
+            response.status,
+          );
         form.append('file', await response.blob(), name);
       }
       await request<SelfieResponse>('mobile/users/me/selfie', { method: 'PUT', form });
@@ -236,15 +241,18 @@ export const liveApi: SukunApi = {
 
     // MobileOrdersController — POST orders/validate-guests
     validateGuests: (eventId: string, guests: GuestValidationInput[]) =>
-      request<{ valid: boolean; issues: LiveGuestValidationIssue[] }>('mobile/orders/validate-guests', {
-        method: 'POST',
-        body: {
-          eventId,
-          guests: guests.map(({ phoneNumber }) => ({
-            phoneNumber: normalizePhoneForRequest(phoneNumber),
-          })),
+      request<{ valid: boolean; issues: LiveGuestValidationIssue[] }>(
+        'mobile/orders/validate-guests',
+        {
+          method: 'POST',
+          body: {
+            eventId,
+            guests: guests.map(({ phoneNumber }) => ({
+              phoneNumber: normalizePhoneForRequest(phoneNumber),
+            })),
+          },
         },
-      }).then((result) => ({
+      ).then((result) => ({
         valid: result.valid,
         issues: result.issues.map(({ guestIndex, error }) => ({
           guestIndex,
@@ -316,12 +324,13 @@ export const liveApi: SukunApi = {
       }).then((page) => ({ ...page, data: page.data.map(normalizeTicket) })),
 
     // GET tickets/:ticketId
-    detail: (ticketId) =>
-      request<LiveTicket>(`mobile/tickets/${ticketId}`).then(normalizeTicket),
+    detail: (ticketId) => request<LiveTicket>(`mobile/tickets/${ticketId}`).then(normalizeTicket),
 
     // POST tickets/:ticketId/claim
     claim: (ticketId) =>
-      request<LiveTicket>(`mobile/tickets/${ticketId}/claim`, { method: 'POST' }).then(normalizeTicket),
+      request<LiveTicket>(`mobile/tickets/${ticketId}/claim`, { method: 'POST' }).then(
+        normalizeTicket,
+      ),
 
     /**
      * PENDING BACKEND — the rotating entry pass has no endpoint. `MobileTicketsController`
@@ -332,8 +341,7 @@ export const liveApi: SukunApi = {
 
   account: {
     // MobileAppUserAccountLifecycleController (path `mobile/users/me`) — GET .../deletion-preview
-    deletionPreview: () =>
-      request<AccountDeletionPreview>('mobile/users/me/deletion-preview'),
+    deletionPreview: () => request<AccountDeletionPreview>('mobile/users/me/deletion-preview'),
 
     // POST mobile/users/me/deletion/otp/request
     requestDeletionOtp: async () => {

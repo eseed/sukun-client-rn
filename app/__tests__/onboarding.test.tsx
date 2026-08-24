@@ -24,12 +24,12 @@ beforeEach(() => {
 });
 
 describe('Phone number screen', () => {
-  it('renders the design copy and the +20 prefix', () => {
+  it('renders the design copy and the home-country prefix', () => {
     renderWithProviders(<PhoneScreen />);
 
     expect(screen.getByText('Step 1 of 3')).toBeTruthy();
     expect(screen.getByText("Hello! What's your number?")).toBeTruthy();
-    expect(screen.getByText('🇪🇬 +20')).toBeTruthy();
+    expect(screen.getByText(/🇪🇬 \+20/)).toBeTruthy();
     expect(screen.getByText('Send me a code')).toBeTruthy();
   });
 
@@ -37,10 +37,12 @@ describe('Phone number screen', () => {
     // The swirl fills the gap between the field and the CTA. `Screen` avoids the keyboard by
     // shrinking that gap, and a fixed-size swirl in a collapsed gap rides up over the number.
     const listeners: Record<string, () => void> = {};
-    const addListener = jest.spyOn(Keyboard, 'addListener').mockImplementation((event, listener) => {
-      listeners[event] = listener as () => void;
-      return { remove: jest.fn() } as never;
-    });
+    const addListener = jest
+      .spyOn(Keyboard, 'addListener')
+      .mockImplementation((event, listener) => {
+        listeners[event] = listener as () => void;
+        return { remove: jest.fn() } as never;
+      });
 
     try {
       renderWithProviders(<PhoneScreen />);
@@ -56,9 +58,9 @@ describe('Phone number screen', () => {
     }
   });
 
-  it('keeps the CTA inert until the number is a valid Egyptian mobile', async () => {
+  it('keeps the CTA inert until the number is a valid mobile', async () => {
     renderWithProviders(<PhoneScreen />);
-    const input = screen.getByPlaceholderText('10 1234 5678');
+    const input = screen.getByPlaceholderText('10 01234567');
 
     fireEvent.changeText(input, '1012');
     fireEvent.press(screen.getByText('Send me a code'));
@@ -68,7 +70,7 @@ describe('Phone number screen', () => {
   it('requests a code and advances, storing the number as identity', async () => {
     renderWithProviders(<PhoneScreen />);
 
-    fireEvent.changeText(screen.getByPlaceholderText('10 1234 5678'), '1012345678');
+    fireEvent.changeText(screen.getByPlaceholderText('10 01234567'), '1012345678');
     fireEvent.press(screen.getByText('Send me a code'));
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/(onboarding)/otp'));
@@ -77,22 +79,30 @@ describe('Phone number screen', () => {
 
   it('formats the national number as it is typed', () => {
     renderWithProviders(<PhoneScreen />);
-    const input = screen.getByPlaceholderText('10 1234 5678');
+    const input = screen.getByPlaceholderText('10 01234567');
 
     fireEvent.changeText(input, '01012345678');
-    expect(input.props.value).toBe('10 1234 5678');
+    expect(input.props.value).toBe('10 12345678');
   });
 
   it('explains why an incomplete number cannot be submitted', async () => {
     renderWithProviders(<PhoneScreen />);
 
-    fireEvent.changeText(screen.getByPlaceholderText('10 1234 5678'), '100000001');
+    fireEvent.changeText(screen.getByPlaceholderText('10 01234567'), '10123');
+    fireEvent.press(screen.getByText('Send me a code'));
+
+    await waitFor(() => expect(screen.getByText('That number is too short.')).toBeTruthy());
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('names the country when the number is the right length but not a mobile one', async () => {
+    renderWithProviders(<PhoneScreen />);
+
+    fireEvent.changeText(screen.getByPlaceholderText('10 01234567'), '2223456789');
     fireEvent.press(screen.getByText('Send me a code'));
 
     await waitFor(() =>
-      expect(
-        screen.getByText('That number is too short — Egyptian numbers have 10 digits.'),
-      ).toBeTruthy(),
+      expect(screen.getByText("That doesn't look like a mobile number in Egypt.")).toBeTruthy(),
     );
     expect(mockPush).not.toHaveBeenCalled();
   });

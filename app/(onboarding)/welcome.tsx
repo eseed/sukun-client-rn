@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { Image, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, ImageSlot, Text } from '../../src/components/ui';
+import { track } from '../../src/lib/analytics';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
@@ -25,16 +26,17 @@ export default function WelcomeScreen() {
         <Button
           label="Let's move!"
           variant="accent"
-          onPress={() => router.push('/(onboarding)/phone')}
+          onPress={() => {
+            track('onboarding_started');
+            router.push('/(onboarding)/phone');
+          }}
         />
         <Button
           label="Restore account"
           variant="secondary"
           onPress={() => router.push('/account/restore-phone')}
         />
-        <Text style={styles.terms}>
-          By continuing you agree to our terms &amp; privacy policy
-        </Text>
+        <Text style={styles.terms}>By continuing you agree to our terms &amp; privacy policy</Text>
       </View>
     </View>
   );

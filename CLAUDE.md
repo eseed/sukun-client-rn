@@ -9,7 +9,9 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
 ## Product rules — these are non-negotiable
 
 1. **The phone number is identity.** Auth is phone + OTP. Email is for receipts and gates
-   nothing.
+   nothing. Numbers are canonical E.164 and may come from any country; the picker defaults to
+   Egypt and lists it first. Exclusions live in one place per repo and must agree — see
+   `EXCLUDED_COUNTRIES` in `src/lib/phone.ts` and in the backend's phone normalizer.
 2. **A ticket can exist before its owner.** Guests are attached _by phone_ from contacts;
    their ticket binds when they register that number. There are no claim codes.
 3. **The selfie is the anti-fraud control.** Captured at registration; required for a usable
@@ -22,7 +24,9 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
 7. **Never compute prices client-side.** The server is authoritative. Mock prices live in
    `src/api/mock/`, never in a screen or component.
 8. **Profile completeness gates purchase** — full name, email, date of birth, gender, area,
-   and selfie. Email _verification_ gates nothing.
+   and selfie. Email _verification_ gates nothing. The living area is only asked of, and only
+   required of, an Egyptian number: `areas` are Egyptian governorates, so there is no answer
+   to give from abroad. Use `requiresLivingArea` rather than testing the country by hand.
 9. **Payments (P1):** follow the Paymob React Native SDK documentation exactly. Customize the
    sheet (`setAppName`, `setButtonBackgroundColor`, `setButtonTextColor`, …) _before_ calling
    `Paymob.presentPayVC(clientSecret, publicKey)`, and drive the payment outcome from
@@ -62,7 +66,7 @@ src/components/ui/   base components built from tokens
 src/api/             contract + mock + live + types
 src/hooks/           TanStack Query hooks (the only thing screens call)
 src/stores/          Zustand (auth/session, checkout draft)
-src/lib/             formatting, phone normalisation, secure storage
+src/lib/             formatting, phone normalisation, secure storage, analytics
 ```
 
 ## Design system
@@ -89,7 +93,16 @@ npm run verify     all three (run this before every commit)
 ## Conventions
 
 - Money: format with `formatEgp()` from `src/lib/format.ts`. Never `toFixed` in a screen.
-- Phone: normalise with `src/lib/phone.ts` (E.164, `+20`). Display uses the local format.
+- Phone: normalise with `src/lib/phone.ts` (E.164). Never hardcode a dial code or a digit
+  count — both differ per country. Enter numbers through `PhoneField`, which pairs a country
+  with a national number; display with `formatPhoneForDisplay` / `formatPhoneLocal`.
+  `src/lib/countries.data.ts` is generated — do not edit it by hand.
 - Dates: Africa/Cairo. Format with `src/lib/format.ts` helpers.
 - Every screen that depends on P1 backend work is marked with a `PENDING BACKEND` comment at
   the top of the file, and lists what it needs.
+- UI copy must never use em dashes (—). Use commas, periods, or colons instead.
+- Analytics: call `src/lib/analytics.ts` only, never Mixpanel or Clarity directly. Both SDKs
+  sit behind one consent switch (`enableAnalytics`/`disableAnalytics`) and neither starts on
+  import, so a consent answer stops events _and_ session replay. Never put a name, email, or
+  phone number in an event property or user property — identify by the app user id.
+  `requiresPrivacyConsentGate()` decides who is asked; everyone else is not prompted.

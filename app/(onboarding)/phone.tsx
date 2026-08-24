@@ -6,17 +6,18 @@ import {
   BulletHeading,
   Button,
   StepLabel,
+  PhoneField,
   Screen,
   Text,
-  TextField,
 } from '../../src/components/ui';
 import { useRequestOtp } from '../../src/hooks/queries';
 import { useKeyboardVisible } from '../../src/hooks/useKeyboardVisible';
+import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
-import { formatNationalInput, isValidEgyptianPhone, sanitizeNationalInput } from '../../src/lib/phone';
+import { DEFAULT_COUNTRY, isValidPhone, phoneErrorMessage, toE164 } from '../../src/lib/phone';
+import type { CountryCode } from 'libphonenumber-js/mobile';
 import { useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
-import { colors } from '../../src/theme/tokens';
 
 /**
  * Design screen 02 · Phone number.
@@ -29,12 +30,13 @@ export default function PhoneScreen() {
   const setPendingPhone = useAuthStore((s) => s.setPendingPhone);
   const requestOtp = useRequestOtp();
 
+  const [country, setCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
   const [national, setNational] = useState('');
   const [error, setError] = useState<string | null>(null);
   const keyboardVisible = useKeyboardVisible();
 
-  const e164 = `+20${national}`;
-  const isValid = isValidEgyptianPhone(e164);
+  const e164 = toE164(national, country);
+  const isValid = isValidPhone(e164, country);
   const swirl = designAsset('decoSwirl');
 
   /**
@@ -43,12 +45,9 @@ export default function PhoneScreen() {
    */
   const canSubmit = !requestOtp.isPending;
 
-  /** Same rule as the backend: `+20` then 10 digits starting 10, 11, 12 or 15. */
+  /** Same rule as the backend, for whichever country is selected. */
   function localValidationError(): string | null {
-    if (national.length === 0) return 'Enter your mobile number.';
-    if (national.length < 10) return 'That number is too short — Egyptian numbers have 10 digits.';
-    if (!isValid) return 'That doesn’t look like an Egyptian mobile number.';
-    return null;
+    return phoneErrorMessage(national, country);
   }
 
   async function onSubmit() {
@@ -62,6 +61,7 @@ export default function PhoneScreen() {
     try {
       await requestOtp.mutateAsync(e164);
       setPendingPhone(e164);
+      track('otp_requested');
       router.push('/(onboarding)/otp');
     } catch (err) {
       setError(messageForError(err));
@@ -78,15 +78,20 @@ export default function PhoneScreen() {
       </View>
 
       <Text variant="bodyMuted" style={styles.blurb}>
-        Your phone number is how we know you. It&apos;s how tickets find you, and how friends
-        can send you one.
+        Your phone number is how we know you. It&apos;s how tickets find you, and how friends can
+        send you one.
       </Text>
 
-      <TextField
+      <PhoneField
         label="Mobile number"
-        value={formatNationalInput(national)}
-        onChangeText={(value) => {
-          setNational(sanitizeNationalInput(value));
+        country={country}
+        onCountryChange={(next) => {
+          setCountry(next);
+          if (error) setError(null);
+        }}
+        national={national}
+        onNationalChange={(value) => {
+          setNational(value);
           // Clear as they correct it; re-validating on every keystroke would flag a number
           // that is merely half-typed.
           if (error) setError(null);
@@ -94,19 +99,7 @@ export default function PhoneScreen() {
         onBlur={() => {
           if (national.length > 0 && !isValid) setError(localValidationError());
         }}
-        placeholder="10 1234 5678"
-        keyboardType="phone-pad"
-        textContentType="telephoneNumber"
-        autoComplete="tel"
-        maxLength={12}
         error={error}
-        prefix={
-          <View style={styles.prefix}>
-            <Text variant="bodyValue" color={colors.textMuted} style={styles.prefixText}>
-              🇪🇬 +20
-            </Text>
-          </View>
-        }
       />
 
       {/* Always rendered: this is also the flexible gap that pins the CTA to the bottom. The
@@ -142,14 +135,6 @@ const styles = StyleSheet.create({
   },
   blurb: {
     marginBottom: 30,
-  },
-  prefix: {
-    borderRightWidth: 1,
-    borderRightColor: colors.borderDefault,
-    paddingRight: 10,
-  },
-  prefixText: {
-    fontSize: 16,
   },
   decoWrap: {
     flex: 1,

@@ -35,14 +35,14 @@ const MESSAGES: Record<string, string> = {
   SELFIE_NOT_FOUND: 'Add your selfie to use this ticket.',
 
   GUEST_PHONE_INVALID: 'That does not look like an Egyptian mobile number.',
-  GUEST_IS_BUYER: "That's your own number — your ticket is already included.",
+  GUEST_IS_BUYER: "That's your own number. Your ticket is already included.",
   GUEST_DUPLICATE: "You've already added that number.",
   MAX_TICKETS_EXCEEDED: 'That is more tickets than this event allows in one order.',
   // `GuestValidationIssueResponseDto.error` on the live backend — same guest-step copy above,
   // just the server's own vocabulary instead of the mock's.
   INVALID_PHONE_NUMBER: 'That does not look like an Egyptian mobile number.',
   DUPLICATE_IN_ORDER: "You've already added that number.",
-  SAME_AS_BUYER: "That's your own number — your ticket is already included.",
+  SAME_AS_BUYER: "That's your own number. Your ticket is already included.",
   GUEST_ALREADY_HAS_TICKET: 'That guest already has a ticket to this event.',
 
   PROMO_CODE_INVALID: 'That promo code is not valid.',

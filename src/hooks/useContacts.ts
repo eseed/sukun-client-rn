@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { Contact, ContactField, requestPermissionsAsync } from 'expo-contacts';
 import { API_MODE } from '../api';
 import { fallbackContacts } from '../api/mock/fixtures';
-import { normalizeEgyptianPhone } from '../lib/phone';
+import { normalizePhone } from '../lib/phone';
 
 export interface PhoneContact {
   id: string;
@@ -54,7 +54,7 @@ async function readContacts(): Promise<ContactsResult> {
 
     for (const contact of details) {
       for (const phone of contact.phones ?? []) {
-        const e164 = normalizeEgyptianPhone(phone.number ?? '');
+        const e164 = normalizePhone(phone.number ?? '');
         if (!e164 || seen.has(e164)) continue;
         seen.add(e164);
         mapped.push({
@@ -86,9 +86,7 @@ export function useContacts() {
   const client = useQueryClient();
   // Seeded from the cache so stepping back into checkout keeps the contacts already loaded
   // instead of dropping the user back to the button.
-  const [requested, setRequested] = useState(
-    () => client.getQueryData(CONTACTS_KEY) !== undefined,
-  );
+  const [requested, setRequested] = useState(() => client.getQueryData(CONTACTS_KEY) !== undefined);
 
   const query = useQuery({
     queryKey: CONTACTS_KEY,

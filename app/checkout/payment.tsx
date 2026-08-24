@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import {
   BackButton,
@@ -16,6 +16,7 @@ import {
   usePaymentStatus,
   useRetryPayment,
 } from '../../src/hooks/queries';
+import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
@@ -69,38 +70,69 @@ export default function PaymentScreen() {
   const settled = sdkResult === 'success' || status?.orderStatus === 'paid';
   const terminal = Boolean(
     settled ||
-      (status &&
-        (['paid', 'failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
-          ['captured', 'failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus))),
+    (status &&
+      (['paid', 'failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
+        ['captured', 'failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus))),
   );
   const failed = Boolean(
     !settled &&
-      (sdkResult === 'fail' ||
-        sdkResult === 'cancelled' ||
-        (status &&
-          (['failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
-            ['failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)))),
+    (sdkResult === 'fail' ||
+      sdkResult === 'cancelled' ||
+      (status &&
+        (['failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
+          ['failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)))),
   );
   /** SDK reported PENDING: the transaction is still being processed on Paymob's side. */
   const pending = sdkResult === 'pending' && !settled && !failed;
 
+  const trackedSettledRef = useRef(false);
+  const trackedFailedRef = useRef(false);
+
   useEffect(() => {
     if (!settled) return;
+    if (!trackedSettledRef.current) {
+      trackedSettledRef.current = true;
+      if (order) {
+        track('purchase_completed', {
+          order_id: order.id,
+          event_id: order.eventId,
+          total: Number(order.totalEgp),
+          currency: order.currency,
+          item_count: order.items.reduce((sum, item) => sum + item.quantity, 0),
+          guest_count: order.guests.length,
+          has_promo: Number(order.discountEgp) > 0,
+        });
+      }
+    }
     reset();
     router.replace(`/checkout/confirmation?orderId=${validOrderId}`);
-  }, [reset, router, settled, validOrderId]);
+  }, [order, reset, router, settled, validOrderId]);
+
+  useEffect(() => {
+    if (!failed || trackedFailedRef.current || !validOrderId) return;
+    trackedFailedRef.current = true;
+    track('payment_failed', {
+      order_id: validOrderId,
+      outcome: sdkResult === 'cancelled' ? 'cancelled' : 'fail',
+    });
+  }, [failed, sdkResult, validOrderId]);
 
   async function onPay() {
     if (!validOrderId) return;
     setError(null);
 
     if (!sheet.available) {
-      setError('Payment needs the Sukun app — it isn’t available here.');
+      setError('Payment needs the Sukun app. It isn’t available here.');
       return;
     }
 
     try {
       const intent = await initiate.mutateAsync(validOrderId);
+      track('payment_started', {
+        order_id: validOrderId,
+        total: Number(order?.totalEgp ?? 0),
+        currency: order?.currency ?? 'EGP',
+      });
       presentPaymob(intent);
     } catch (err) {
       setSheetPresented(false);
@@ -113,6 +145,8 @@ export default function PaymentScreen() {
     setError(null);
     try {
       const intent = await retry.mutateAsync(validOrderId);
+      trackedFailedRef.current = false;
+      track('payment_retried', { order_id: validOrderId });
       presentPaymob(intent);
     } catch (err) {
       setSheetPresented(false);
@@ -205,12 +239,12 @@ export default function PaymentScreen() {
             (sdkResult === 'cancelled'
               ? 'Payment was cancelled. Nothing was charged.'
               : status?.orderStatus === 'expired'
-              ? 'This payment hold expired. You can try again.'
-              : status?.orderStatus === 'cancelled'
-                ? 'This order was cancelled and cannot be paid.'
-                : status?.orderStatus === 'refunded'
-                  ? 'This order has been refunded and cannot be paid.'
-                  : 'The payment did not go through. Nothing was charged.')}
+                ? 'This payment hold expired. You can try again.'
+                : status?.orderStatus === 'cancelled'
+                  ? 'This order was cancelled and cannot be paid.'
+                  : status?.orderStatus === 'refunded'
+                    ? 'This order has been refunded and cannot be paid.'
+                    : 'The payment did not go through. Nothing was charged.')}
         </Text>
       ) : null}
 
@@ -295,4 +329,3 @@ const styles = StyleSheet.create({
     minHeight: 12,
   },
 });
-

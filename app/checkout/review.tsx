@@ -23,6 +23,7 @@ import {
   usePricePreview,
   useValidatePromoCode,
 } from '../../src/hooks/queries';
+import { track } from '../../src/lib/analytics';
 import { isHeldOrderError, messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { addEgp, multiplyEgp, vatOnEgp, VAT_RATE } from '../../src/lib/money';
@@ -95,9 +96,7 @@ export default function ReviewScreen() {
   const serverSaysPaid = paymentStatusQuery.data?.orderStatus === 'paid';
   const rejectedByServer =
     paymentStatusQuery.data != null &&
-    ['failed', 'expired', 'cancelled', 'refunded'].includes(
-      paymentStatusQuery.data.orderStatus,
-    );
+    ['failed', 'expired', 'cancelled', 'refunded'].includes(paymentStatusQuery.data.orderStatus);
 
   useEffect(() => {
     if (!order) return;
@@ -133,8 +132,10 @@ export default function ReviewScreen() {
       const result = await validatePromo.mutateAsync({ items, promoCode: code });
       if (!result.valid) {
         setError('That promo code is not valid.');
+        track('promo_failed', { event_id: validEventId ?? '', promo_code: code });
         return;
       }
+      track('promo_applied', { event_id: validEventId ?? '', promo_code: result.code });
       setPromoCode(result.code);
       setPromoDraft('');
       // The held order was priced without this code, and `onContinue` reuses `order` when it is
@@ -160,7 +161,7 @@ export default function ReviewScreen() {
     }
 
     if (!sheet.available) {
-      setError('Payment needs the Sukun app — it isn’t available here.');
+      setError('Payment needs the Sukun app. It isn’t available here.');
       return;
     }
 
@@ -177,11 +178,24 @@ export default function ReviewScreen() {
         }));
       setOrder(created);
       setOrderId(created.id);
+      track('checkout_review_completed', {
+        event_id: validEventId,
+        order_id: created.id,
+        item_count: items.reduce((sum, item) => sum + item.quantity, 0),
+        total: Number(created.totalEgp),
+        currency: created.currency,
+        has_promo: Boolean(promoCode),
+      });
 
       // Creating the order already opened the Paymob intention, so the sheet can go up straight
       // away. Only fall back to `initiate` when the response carries no intent — asking for one
       // while that intention is live is rejected with PAYMENT_CONFIRMATION_PENDING.
       const intent = created.payment ?? (await initiatePayment.mutateAsync(created.id));
+      track('payment_started', {
+        order_id: created.id,
+        total: Number(created.totalEgp),
+        currency: created.currency,
+      });
       sheet.present(intent);
     } catch (err) {
       // A held order is not a failure the buyer can retry past — it is a choice. Name it and
@@ -227,7 +241,12 @@ export default function ReviewScreen() {
       </Screen>
     );
   }
-  if (access.blocked) return <Screen><View /></Screen>;
+  if (access.blocked)
+    return (
+      <Screen>
+        <View />
+      </Screen>
+    );
   if (!validEventId) {
     return (
       <Screen>
@@ -274,15 +293,11 @@ export default function ReviewScreen() {
       <Card radiusSize={14} style={styles.summary}>
         <SummaryRow
           label={`${tier?.name ?? 'Pass'} × ${quantity}`}
-           value={displayedSubtotal ? formatEgp(displayedSubtotal) : '—'}
+          value={displayedSubtotal ? formatEgp(displayedSubtotal) : '—'}
         />
 
         {displayedVat && Number(displayedVatRate) > 0 ? (
-          <SummaryRow
-            label={`VAT (${vatPercent}%)`}
-            value={formatEgp(displayedVat)}
-            tone="muted"
-          />
+          <SummaryRow label={`VAT (${vatPercent}%)`} value={formatEgp(displayedVat)} tone="muted" />
         ) : null}
 
         {promoCode && displayedDiscount && Number(displayedDiscount) > 0 ? (
@@ -332,8 +347,8 @@ export default function ReviewScreen() {
 
       {guests.length > 0 ? (
         <Text variant="metaSm" style={styles.guestNote}>
-          {guests.length === 1 ? 'One guest ticket' : `${guests.length} guest tickets`} will be
-          sent to the numbers you picked.
+          {guests.length === 1 ? 'One guest ticket' : `${guests.length} guest tickets`} will be sent
+          to the numbers you picked.
         </Text>
       ) : null}
 
@@ -345,7 +360,7 @@ export default function ReviewScreen() {
         />
       </View>
 
-      {error ?? sheetError ? (
+      {(error ?? sheetError) ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {error ?? sheetError}
         </Text>

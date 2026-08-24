@@ -1,11 +1,14 @@
-import * as Clarity from '@microsoft/react-native-clarity';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AnalyticsConsentScreen } from '../src/components/AnalyticsConsentScreen';
+import { decideConsent, disableAnalytics, enableAnalytics, track } from '../src/lib/analytics';
+import { requiresPrivacyConsentGate } from '../src/lib/privacyRegion';
+import { getSecureItem, setSecureItem, SECURE_KEYS } from '../src/lib/secure-storage';
 import { QueryProvider } from '../src/providers/QueryProvider';
 import { useAuthStore } from '../src/stores/auth';
 import { colors } from '../src/theme/tokens';
@@ -16,12 +19,11 @@ export const unstable_settings = {
 
 void SplashScreen.preventAutoHideAsync();
 
-Clarity.initialize('y6tknxh6u4', {
-  logLevel: Clarity.LogLevel.None,
-});
+type ConsentStatus = 'loading' | 'unknown' | 'granted' | 'denied';
 
 export default function RootLayout() {
   const restore = useAuthStore((s) => s.restore);
+  const [consentStatus, setConsentStatus] = useState<ConsentStatus>('loading');
   const [fontsLoaded, fontError] = useFonts({
     SeriouslyNostalgic: require('../assets/fonts/SeriouslyNostalgicFine-Regular.otf'),
     SeriouslyNostalgicItalic: require('../assets/fonts/SeriouslyNostalgic-RegularItalic.otf'),
@@ -37,10 +39,50 @@ export default function RootLayout() {
   }, [restore]);
 
   useEffect(() => {
+    (async () => {
+      // The region check is re-run every launch (cheap, offline) rather than cached, but it
+      // only governs whether someone who has never answered is asked — a stored answer wins.
+      const stored = await getSecureItem(SECURE_KEYS.analyticsConsent);
+      const decision = decideConsent(stored, requiresPrivacyConsentGate());
+
+      if (decision === 'granted') {
+        enableAnalytics();
+        setConsentStatus('granted');
+      } else if (decision === 'denied') {
+        disableAnalytics();
+        setConsentStatus('denied');
+      } else {
+        setConsentStatus('unknown');
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     if (fontsLoaded || fontError) void SplashScreen.hideAsync();
   }, [fontsLoaded, fontError]);
 
+  const onConsentAnswer = (granted: boolean) => {
+    void setSecureItem(SECURE_KEYS.analyticsConsent, granted ? 'granted' : 'denied');
+    if (granted) {
+      // Only the "granted" branch is trackable — declining means we can't record the decline.
+      enableAnalytics();
+      track('analytics_consent_answered', { consent_granted: true });
+    } else {
+      disableAnalytics();
+    }
+    setConsentStatus(granted ? 'granted' : 'denied');
+  };
+
   if (!fontsLoaded && !fontError) return null;
+  if (consentStatus === 'loading') return null;
+
+  if (consentStatus === 'unknown') {
+    return (
+      <SafeAreaProvider>
+        <AnalyticsConsentScreen onAnswer={onConsentAnswer} />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

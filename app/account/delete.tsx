@@ -19,6 +19,7 @@ import {
   useDeletionPreview,
   useRequestDeletionOtp,
 } from '../../src/hooks/queries';
+import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatDate } from '../../src/lib/format';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
@@ -53,6 +54,7 @@ export default function DeleteAccountScreen() {
     setError(null);
     try {
       await requestOtp.mutateAsync();
+      track('account_deletion_requested');
       setStage('confirm');
     } catch (err) {
       setError(messageForError(err));
@@ -63,6 +65,10 @@ export default function DeleteAccountScreen() {
     setError(null);
     try {
       await deleteAccount.mutateAsync({ code, confirmForfeit });
+      track('account_deleted', {
+        active_ticket_count: preview?.activeTicketCount ?? 0,
+        forfeit_confirmed: confirmForfeit,
+      });
       router.replace('/(onboarding)/welcome');
     } catch (err) {
       setError(messageForError(err));
@@ -72,7 +78,8 @@ export default function DeleteAccountScreen() {
 
   const blocked = Boolean(preview?.deletionBlockedByPendingPayment);
   const needsForfeit = Boolean(preview?.requiresForfeitConfirmation);
-  const canRequestCode = Boolean(preview) && !isLoading && !isError && !blocked && (!needsForfeit || confirmForfeit);
+  const canRequestCode =
+    Boolean(preview) && !isLoading && !isError && !blocked && (!needsForfeit || confirmForfeit);
 
   if (authStatus === 'loading') {
     return <ResourceState status="loading" loadingLabel="Loading your account..." />;
@@ -111,7 +118,9 @@ export default function DeleteAccountScreen() {
                 Deletion is unavailable
               </Text>
               <Text variant="bodyMuted">
-                Finish or cancel your {preview.pendingPaymentOrderCount === 1 ? 'pending order' : 'pending orders'} before deleting your account.
+                Finish or cancel your{' '}
+                {preview.pendingPaymentOrderCount === 1 ? 'pending order' : 'pending orders'} before
+                deleting your account.
               </Text>
             </Card>
           ) : preview && preview.activeTicketCount > 0 ? (
@@ -124,8 +133,8 @@ export default function DeleteAccountScreen() {
                 <View key={event.id} style={styles.eventRow}>
                   <Text variant="bodyValue">{event.title}</Text>
                   <Text variant="metaSm">
-                    {event.startsAt ? formatDate(event.startsAt) : ''} ·{' '}
-                    {event.ticketCount} {event.ticketCount === 1 ? 'ticket' : 'tickets'}
+                    {event.startsAt ? formatDate(event.startsAt) : ''} · {event.ticketCount}{' '}
+                    {event.ticketCount === 1 ? 'ticket' : 'tickets'}
                   </Text>
                 </View>
               ))}
@@ -147,7 +156,8 @@ export default function DeleteAccountScreen() {
 
           {preview && !blocked ? (
             <Text variant="metaSm" style={styles.retentionNote}>
-              Your account data is retained for {preview.dataRetainedDays} days. If you restore your account during that period, your tickets are restored too.
+              Your account data is retained for {preview.dataRetainedDays} days. If you restore your
+              account during that period, your tickets are restored too.
             </Text>
           ) : null}
 
@@ -162,7 +172,12 @@ export default function DeleteAccountScreen() {
             disabled={!canRequestCode}
             loading={requestOtp.isPending || isLoading}
           />
-          <Button label="Keep my account" variant="secondary" onPress={() => router.back()} style={styles.secondary} />
+          <Button
+            label="Keep my account"
+            variant="secondary"
+            onPress={() => router.back()}
+            style={styles.secondary}
+          />
         </>
       ) : (
         <>

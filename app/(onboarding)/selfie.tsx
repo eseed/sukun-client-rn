@@ -12,6 +12,7 @@ import {
 } from '../../src/components/ui';
 import { ConicRing } from '../../src/components/ui/ConicRing';
 import { useUploadSelfie } from '../../src/hooks/queries';
+import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { colors } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/stores/auth';
@@ -112,6 +113,11 @@ export default function SelfieScreen() {
     setError(null);
     try {
       await uploadSelfie.mutateAsync(uri);
+      track('selfie_completed');
+      if (useAuthStore.getState().isNewUser) {
+        track('signup_completed');
+        useAuthStore.getState().setIsNewUser(false);
+      }
       router.replace('/(tabs)/discover');
     } catch (err) {
       setError(messageForError(err));

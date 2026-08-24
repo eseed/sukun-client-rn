@@ -5,15 +5,22 @@ import {
   BackButton,
   BulletHeading,
   Button,
+  PhoneField,
   Screen,
   Text,
-  TextField,
 } from '../../src/components/ui';
 import { useRequestAccountRestorationOtp } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
-import { formatNationalInput, isValidEgyptianPhone, sanitizeNationalInput } from '../../src/lib/phone';
+import {
+  countryOf,
+  DEFAULT_COUNTRY,
+  isValidPhone,
+  nationalDigitsOf,
+  toE164,
+} from '../../src/lib/phone';
+import type { CountryCode } from 'libphonenumber-js/mobile';
 import { useAuthStore } from '../../src/stores/auth';
-import { colors, space } from '../../src/theme/tokens';
+import { space } from '../../src/theme/tokens';
 
 export default function RestorePhoneScreen() {
   const router = useRouter();
@@ -21,9 +28,16 @@ export default function RestorePhoneScreen() {
   const pendingPhone = useAuthStore((state) => state.pendingPhone);
   const setPendingPhone = useAuthStore((state) => state.setPendingPhone);
   const requestOtp = useRequestAccountRestorationOtp();
-  const [national, setNational] = useState(() => pendingPhone?.replace(/^\+20/, '') ?? '');
+  // Seeded from whatever number brought them here, country and all, so a foreign number is
+  // not silently re-read as an Egyptian one.
+  const [country, setCountry] = useState<CountryCode>(
+    () => (pendingPhone ? countryOf(pendingPhone) : null) ?? DEFAULT_COUNTRY,
+  );
+  const [national, setNational] = useState(() =>
+    pendingPhone ? nationalDigitsOf(pendingPhone) : '',
+  );
   const [error, setError] = useState<string | null>(null);
-  const phone = `+20${national}`;
+  const phone = toE164(national, country);
 
   if (status === 'signed-in') return <Redirect href="/(tabs)/discover" />;
 
@@ -47,23 +61,19 @@ export default function RestorePhoneScreen() {
       <Text variant="bodyMuted" style={styles.blurb}>
         Enter the phone number you used with Sukun. We&apos;ll send a code to help you get back in.
       </Text>
-      <TextField
+      <PhoneField
         label="Mobile number"
-        value={formatNationalInput(national)}
-        onChangeText={(value) => setNational(sanitizeNationalInput(value))}
-        placeholder="10 1234 5678"
-        keyboardType="phone-pad"
-        textContentType="telephoneNumber"
-        autoComplete="tel"
-        maxLength={12}
+        country={country}
+        onCountryChange={setCountry}
+        national={national}
+        onNationalChange={setNational}
         error={error}
-        prefix={<Text variant="bodyValue" color={colors.textMuted}>🇪🇬 +20</Text>}
       />
       <View style={styles.spacer} />
       <Button
         label="Send me a code"
         onPress={onSubmit}
-        disabled={!isValidEgyptianPhone(phone)}
+        disabled={!isValidPhone(phone, country)}
         loading={requestOtp.isPending}
       />
     </Screen>

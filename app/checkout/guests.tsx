@@ -8,14 +8,25 @@ import {
   BulletHeading,
   Button,
   CheckCircle,
+  CountryPrefix,
+  CountrySheet,
   Screen,
   StepLabel,
   Text,
 } from '../../src/components/ui';
 import { useContacts, type PhoneContact } from '../../src/hooks/useContacts';
 import { useValidateGuests } from '../../src/hooks/queries';
+import { track } from '../../src/lib/analytics';
 import { messageForCode, messageForError } from '../../src/lib/errors';
-import { formatNationalInput, normalizeEgyptianPhone, formatPhoneLocal, sanitizeNationalInput } from '../../src/lib/phone';
+import {
+  DEFAULT_COUNTRY,
+  formatNationalInput,
+  formatPhoneLocal,
+  normalizePhone,
+  sanitizeNationalInput,
+  toE164,
+} from '../../src/lib/phone';
+import type { CountryCode } from 'libphonenumber-js/mobile';
 import { guestSlots, useCheckoutStore } from '../../src/stores/checkout';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
@@ -43,16 +54,15 @@ export default function GuestsScreen() {
   const validateGuests = useValidateGuests();
 
   const [manual, setManual] = useState('');
+  const [manualCountry, setManualCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
+  const [countrySheetOpen, setCountrySheetOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const slots = guestSlots(quantity);
   const picked = guests.length;
   const full = picked >= slots;
 
-  const selectedNumbers = useMemo(
-    () => new Set(guests.map((g) => g.phoneNumber)),
-    [guests],
-  );
+  const selectedNumbers = useMemo(() => new Set(guests.map((g) => g.phoneNumber)), [guests]);
 
   /** Contacts, plus any manually-added number so it appears in the same list. */
   const rows: PhoneContact[] = useMemo(() => {
@@ -65,7 +75,7 @@ export default function GuestsScreen() {
 
   function onAddManual() {
     setError(null);
-    const e164 = normalizeEgyptianPhone(`+20${manual}`);
+    const e164 = normalizePhone(toE164(manual, manualCountry), manualCountry);
     if (!e164) {
       setError(messageForCode('GUEST_PHONE_INVALID'));
       return;
@@ -105,11 +115,27 @@ export default function GuestsScreen() {
       }
     }
 
+    track('guests_added', {
+      event_id: validEventId,
+      guest_count: guests.length,
+      contacts_guest_count: guests.filter((g) => g.fromContacts).length,
+      manual_guest_count: guests.filter((g) => !g.fromContacts).length,
+    });
     router.push(`/checkout/review?eventId=${validEventId}`);
   }
 
-  if (access.loading) return <Screen><View /></Screen>;
-  if (access.blocked) return <Screen><View /></Screen>;
+  if (access.loading)
+    return (
+      <Screen>
+        <View />
+      </Screen>
+    );
+  if (access.blocked)
+    return (
+      <Screen>
+        <View />
+      </Screen>
+    );
 
   if (!validEventId) {
     return (
@@ -179,9 +205,7 @@ export default function GuestsScreen() {
                   />
                   <View style={styles.contactBody}>
                     <Text style={styles.contactName}>{contact.name}</Text>
-                    <Text style={styles.contactPhone}>
-                      {formatPhoneLocal(contact.phoneNumber)}
-                    </Text>
+                    <Text style={styles.contactPhone}>{formatPhoneLocal(contact.phoneNumber)}</Text>
                   </View>
                   <CheckCircle selected={selected} />
                 </Pressable>
@@ -229,12 +253,14 @@ export default function GuestsScreen() {
           <Text style={styles.manualLabel}>Not in your contacts?</Text>
           <View style={styles.manualRow}>
             <View style={styles.manualInput}>
-              <Text variant="bodyValue" color={colors.textMuted} style={styles.manualPrefix}>
-                +20
-              </Text>
+              <CountryPrefix
+                country={manualCountry}
+                onPress={() => setCountrySheetOpen(true)}
+                compact
+              />
               <TextInput
-                value={formatNationalInput(manual)}
-                onChangeText={(value) => setManual(sanitizeNationalInput(value))}
+                value={formatNationalInput(manual, manualCountry)}
+                onChangeText={(value) => setManual(sanitizeNationalInput(value, manualCountry))}
                 placeholder="Enter phone number"
                 placeholderTextColor={colors.textMuted}
                 keyboardType="phone-pad"
@@ -252,6 +278,16 @@ export default function GuestsScreen() {
           </View>
         </>
       ) : null}
+
+      <CountrySheet
+        visible={countrySheetOpen}
+        selectedCode={manualCountry}
+        onSelect={(code) => {
+          if (code !== manualCountry) setManual('');
+          setManualCountry(code as CountryCode);
+        }}
+        onClose={() => setCountrySheetOpen(false)}
+      />
 
       {error ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
@@ -379,9 +415,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 14,
     backgroundColor: colors.bgSurface,
-  },
-  manualPrefix: {
-    fontSize: 14,
   },
   manualField: {
     flex: 1,
