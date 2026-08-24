@@ -1,14 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 import type { DesignAssetKey } from '../../src/theme/assets';
-import { Avatar, ResourceState, Screen, SearchIcon, Tag, Text } from '../../src/components/ui';
+import { ResourceState, Screen, SearchIcon, Tag, Text } from '../../src/components/ui';
 import { EventListRow, FeaturedEventCard } from '../../src/components/events/EventCards';
-import { useAvatarUri, useEvents } from '../../src/hooks/queries';
+import { useEvents } from '../../src/hooks/queries';
 import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
 import { messageForError } from '../../src/lib/errors';
 import { formatTagLabel } from '../../src/lib/format';
-import { useAuthStore } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
 const THUMBS: DesignAssetKey[] = ['eventThumb1', 'eventThumb2', 'eventThumb3'];
@@ -16,8 +15,6 @@ const THUMBS: DesignAssetKey[] = ['eventThumb1', 'eventThumb2', 'eventThumb3'];
 /** Design screen 06 · Discover (home). */
 export default function DiscoverScreen() {
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-  const avatarUri = useAvatarUri();
 
   const [tag, setTag] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -81,18 +78,8 @@ export default function DiscoverScreen() {
       }}
     >
       <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <View style={styles.ring} />
-          <Text variant="titleMd">Discover</Text>
-        </View>
-        <Pressable
-          onPress={() => router.push('/(tabs)/profile')}
-          accessibilityRole="button"
-          accessibilityLabel="Your profile"
-          hitSlop={8}
-        >
-          <Avatar name={user?.fullName ?? 'You'} uri={avatarUri} size={38} />
-        </Pressable>
+        <View style={styles.ring} />
+        <Text variant="titleMd">Discover</Text>
       </View>
 
       <Text variant="bodyMuted" style={styles.subtitle}>
@@ -181,14 +168,9 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  headerLeft: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginBottom: 4,
   },
   ring: {
     width: 13,
