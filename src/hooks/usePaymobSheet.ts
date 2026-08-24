@@ -37,9 +37,13 @@ export function usePaymobSheet() {
       // save-card option is hidden rather than shown unchecked.
       sdk.setShowSaveCard(false);
       sdk.setSaveCardDefault(false);
-      // Turns off the SDK's own keyboard handling, whose floating "Done" pill sits over the
-      // sheet. iOS dismisses the keyboard on its own here.
-      sdk.setKeyboardHandlingEnabled(false);
+      // Left on, which is the SDK's own default. Turning it off was tried, to drop the floating
+      // "Done" pill the sheet draws above the keyboard, and TestFlight showed it does neither
+      // thing that change assumed: the pill stayed, and the card fields stopped lifting, so the
+      // keyboard covered the field being typed into. The pill belongs to the number pad inside
+      // Paymob's own view controller, which has no return key and nothing else to dismiss it
+      // with, and no bridge method reaches it. Keyboard avoidance is the half we do control.
+      sdk.setKeyboardHandlingEnabled(true);
       // The SDK's own result screen is left on. Suppressing it was tried and does not remove the
       // page the buyer actually sees after 3DS — that one belongs to the acquirer — and the only
       // lever that does (`redirection_url`) costs the SUCCESS event this screen navigates on.

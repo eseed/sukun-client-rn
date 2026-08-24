@@ -27,8 +27,9 @@ describe('usePaymobSheet', () => {
     // Sukun stores no cards, so the save-card option is hidden entirely.
     expect(mockPaymob.setShowSaveCard!).toHaveBeenCalledWith(false);
     expect(mockPaymob.setSaveCardDefault!).toHaveBeenCalledWith(false);
-    // The SDK's own keyboard handling draws a floating "Done" pill over the sheet.
-    expect(mockPaymob.setKeyboardHandlingEnabled!).toHaveBeenCalledWith(false);
+    // Regression: this was set to false to drop the sheet's floating "Done" pill. It kept the
+    // pill and lost the field lifting, so the keyboard covered the card field being filled in.
+    expect(mockPaymob.setKeyboardHandlingEnabled!).toHaveBeenCalledWith(true);
     // The SDK's own result screen stays on: suppressing it does not remove the acquirer's
     // post-3DS page, and the only lever that does costs the SUCCESS event.
     expect(mockPaymob.setShowTransactionResult!).not.toHaveBeenCalled();
