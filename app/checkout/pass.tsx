@@ -61,7 +61,12 @@ export default function ChoosePassScreen() {
     );
   }
 
-  if (access.blocked) return <Screen><View /></Screen>;
+  if (access.blocked)
+    return (
+      <Screen>
+        <View />
+      </Screen>
+    );
 
   if (!validEventId) {
     return (
@@ -139,7 +144,9 @@ export default function ChoosePassScreen() {
                 <Text style={styles.tierDescription}>{tier.description}</Text>
               ) : null}
               {!tier.isPurchasable ? (
-                <Text style={styles.unavailable}>{tier.availabilityStatus.replaceAll('_', ' ')}</Text>
+                <Text style={styles.unavailable}>
+                  {tier.availabilityStatus.replaceAll('_', ' ')}
+                </Text>
               ) : null}
             </View>
           </SelectableCard>

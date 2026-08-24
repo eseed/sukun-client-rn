@@ -28,9 +28,7 @@ describe('live order and account routes', () => {
       .mockResolvedValueOnce(order);
 
     await expect(
-      liveApi.orders.validateGuests('event-1', [
-        { phoneNumber: '+201012345678' },
-      ]),
+      liveApi.orders.validateGuests('event-1', [{ phoneNumber: '+201012345678' }]),
     ).resolves.toEqual({ valid: true, issues: [] });
     await expect(
       liveApi.orders.create({
@@ -62,7 +60,10 @@ describe('live order and account routes', () => {
 
   it('uses the account lifecycle routes and wire names', async () => {
     const preview = { activeTicketCount: 0 } as AccountDeletionPreview;
-    requestMock.mockResolvedValueOnce(preview).mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
+    requestMock
+      .mockResolvedValueOnce(preview)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
 
     await expect(liveApi.account.deletionPreview()).resolves.toBe(preview);
     await expect(liveApi.account.requestDeletionOtp()).resolves.toBeUndefined();

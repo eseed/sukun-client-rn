@@ -87,7 +87,12 @@ export function DateField({
       {open && Platform.OS !== 'ios' ? picker : null}
 
       {Platform.OS === 'ios' ? (
-        <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+        <Modal
+          visible={open}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setOpen(false)}
+        >
           <Pressable
             style={styles.scrim}
             onPress={() => setOpen(false)}

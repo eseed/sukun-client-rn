@@ -20,11 +20,7 @@ import type {
   TicketStatus,
   UpdateProfileInput,
 } from '../api/types';
-import {
-  getAuthSessionGeneration,
-  isCurrentSignedInSession,
-  useAuthStore,
-} from '../stores/auth';
+import { getAuthSessionGeneration, isCurrentSignedInSession, useAuthStore } from '../stores/auth';
 import { HeldOrderError } from '../lib/errors';
 
 /**
@@ -214,7 +210,7 @@ export function useEvents(query?: ListEventsQuery) {
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => api.events.list({ ...query, cursor: pageParam }),
     getNextPageParam: (lastPage) =>
-      lastPage.meta.hasNextPage ? lastPage.meta.nextCursor ?? undefined : undefined,
+      lastPage.meta.hasNextPage ? (lastPage.meta.nextCursor ?? undefined) : undefined,
   });
 
   const pages = result.data?.pages;
@@ -328,9 +324,9 @@ export function usePricePreview(input: {
         items,
         promoCode: promoCode ?? undefined,
       }),
-     // Staging has no preview endpoint. Live checkout creates the order on the review CTA,
-     // which is the first server-authoritative pricing response.
-     enabled: API_MODE !== 'live' && signedIn && Boolean(eventId) && items.length > 0,
+    // Staging has no preview endpoint. Live checkout creates the order on the review CTA,
+    // which is the first server-authoritative pricing response.
+    enabled: API_MODE !== 'live' && signedIn && Boolean(eventId) && items.length > 0,
   });
 }
 
@@ -343,10 +339,8 @@ export function useValidateGuests() {
 
 export function useValidatePromoCode() {
   return useMutation({
-    mutationFn: (input: {
-      items: { tierId: string; quantity: number }[];
-      promoCode: string;
-    }) => api.orders.validatePromoCode(input.items, input.promoCode),
+    mutationFn: (input: { items: { tierId: string; quantity: number }[]; promoCode: string }) =>
+      api.orders.validatePromoCode(input.items, input.promoCode),
   });
 }
 
@@ -423,7 +417,7 @@ export function useOrders(options?: { limit?: number; enabled?: boolean }) {
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => api.orders.list(pageParam, limit),
     getNextPageParam: (lastPage) =>
-      lastPage.meta.hasNextPage ? lastPage.meta.nextCursor ?? undefined : undefined,
+      lastPage.meta.hasNextPage ? (lastPage.meta.nextCursor ?? undefined) : undefined,
     enabled: signedIn && (options?.enabled ?? true),
   });
 }
@@ -459,8 +453,7 @@ export function usePaymentStatus(orderId: string | undefined, options?: { poll?:
     queryKey: queryKeys.paymentStatus(orderId ?? ''),
     queryFn: () => api.payments.status(orderId as string),
     enabled: signedIn && Boolean(orderId) && poll,
-    refetchInterval: (currentQuery) =>
-      isPaymentTerminal(currentQuery.state.data) ? false : 2000,
+    refetchInterval: (currentQuery) => (isPaymentTerminal(currentQuery.state.data) ? false : 2000),
   });
 
   useEffect(() => {
@@ -513,9 +506,7 @@ export function useTickets(statuses?: TicketStatus[]) {
 
       while (page.meta.hasNextPage && page.meta.nextCursor) {
         page = await api.tickets.list(
-          statuses
-            ? { statuses, cursor: page.meta.nextCursor }
-            : { cursor: page.meta.nextCursor },
+          statuses ? { statuses, cursor: page.meta.nextCursor } : { cursor: page.meta.nextCursor },
         );
         tickets.push(...page.data);
       }

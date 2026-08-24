@@ -1,14 +1,5 @@
 import { fireEvent, renderWithProviders, screen } from '../../../test-utils';
-import {
-  Badge,
-  Button,
-  InlineError,
-  MarkdownText,
-  PageHeader,
-  ResourceState,
-  Tag,
-  Text,
-} from '..';
+import { Badge, Button, InlineError, MarkdownText, PageHeader, ResourceState, Tag, Text } from '..';
 import { Checkbox, QuantityStepper } from '../Selection';
 
 describe('Button', () => {
@@ -76,9 +67,7 @@ describe('QuantityStepper', () => {
 describe('Checkbox', () => {
   it('toggles', () => {
     const onToggle = jest.fn();
-    renderWithProviders(
-      <Checkbox checked={false} onToggle={onToggle} label="I understand" />,
-    );
+    renderWithProviders(<Checkbox checked={false} onToggle={onToggle} label="I understand" />);
 
     fireEvent.press(screen.getByRole('checkbox'));
     expect(onToggle).toHaveBeenCalledTimes(1);
@@ -140,7 +129,9 @@ describe('MarkdownText', () => {
     const onLinkPress = jest.fn();
     renderWithProviders(
       <MarkdownText
-        markdown={'<p>Read <strong>the guide</strong> at <a href="https://sukun.test/guide">Sukun</a>.</p>'}
+        markdown={
+          '<p>Read <strong>the guide</strong> at <a href="https://sukun.test/guide">Sukun</a>.</p>'
+        }
         onLinkPress={onLinkPress}
       />,
     );

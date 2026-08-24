@@ -29,9 +29,7 @@ export function FieldBox({
   invalid?: boolean;
   style?: ViewStyle;
 }) {
-  return (
-    <View style={[styles.box, invalid && styles.boxInvalid, style]}>{children}</View>
-  );
+  return <View style={[styles.box, invalid && styles.boxInvalid, style]}>{children}</View>;
 }
 
 export interface TextFieldProps extends TextInputProps {

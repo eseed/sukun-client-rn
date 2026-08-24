@@ -63,12 +63,7 @@ export default function DiscoverScreen() {
   }, [allEvents, debouncedSearch]);
 
   useEffect(() => {
-    if (
-      debouncedSearch.trim() &&
-      events.length === 0 &&
-      hasNextPage &&
-      !isFetchingNextPage
-    ) {
+    if (debouncedSearch.trim() && events.length === 0 && hasNextPage && !isFetchingNextPage) {
       void fetchNextPage();
     }
   }, [debouncedSearch, events.length, fetchNextPage, hasNextPage, isFetchingNextPage]);
@@ -134,7 +129,9 @@ export default function DiscoverScreen() {
       ) : null}
 
       <ResourceState
-        status={isPending ? 'loading' : isError ? 'error' : events.length === 0 ? 'empty' : 'success'}
+        status={
+          isPending ? 'loading' : isError ? 'error' : events.length === 0 ? 'empty' : 'success'
+        }
         loadingLabel="Loading gatherings..."
         emptyMessage="Nothing here yet. Try another filter."
         errorMessage={messageForError(error)}
@@ -167,7 +164,11 @@ export default function DiscoverScreen() {
           ) : null}
         </>
       </ResourceState>
-      {isFetchingNextPage ? <Text variant="meta" style={styles.loadingMore}>Loading more gatherings...</Text> : null}
+      {isFetchingNextPage ? (
+        <Text variant="meta" style={styles.loadingMore}>
+          Loading more gatherings...
+        </Text>
+      ) : null}
     </Screen>
   );
 }

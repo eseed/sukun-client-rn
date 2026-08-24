@@ -71,7 +71,13 @@ export function EventListRow({
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
       <ImageSlot
-        source={event.coverImageUrl ? { uri: event.coverImageUrl } : imageKey ? designAsset(imageKey) : null}
+        source={
+          event.coverImageUrl
+            ? { uri: event.coverImageUrl }
+            : imageKey
+              ? designAsset(imageKey)
+              : null
+        }
         tint={colors.sky100}
         style={styles.thumb}
       />

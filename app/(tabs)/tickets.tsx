@@ -46,7 +46,9 @@ export default function TicketsScreen() {
       </View>
 
       <ResourceState
-        status={isLoading ? 'loading' : isError ? 'error' : groups.length === 0 ? 'empty' : 'success'}
+        status={
+          isLoading ? 'loading' : isError ? 'error' : groups.length === 0 ? 'empty' : 'success'
+        }
         loadingLabel="Loading your tickets..."
         emptyTitle="No tickets yet"
         emptyMessage="When you buy one or a friend sends you one, it shows up here."

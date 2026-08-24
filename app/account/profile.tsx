@@ -40,7 +40,10 @@ const schema = z.object({
     .string()
     .trim()
     .min(1, 'Pick your date of birth')
-    .refine((value) => ageOn(value, new Date()) >= MINIMUM_AGE, `You must be ${MINIMUM_AGE} or over`),
+    .refine(
+      (value) => ageOn(value, new Date()) >= MINIMUM_AGE,
+      `You must be ${MINIMUM_AGE} or over`,
+    ),
   gender: z.enum(['male', 'female']),
   areaId: z.string().min(1, 'Pick your area'),
   marketingOptIn: z.boolean(),
@@ -209,14 +212,17 @@ export default function EditProfileScreen() {
       </View>
 
       {areasQuery.isError ? (
-        <InlineError message="We couldn't load the area list. Try again before saving." style={styles.error} />
+        <InlineError
+          message="We couldn't load the area list. Try again before saving."
+          style={styles.error}
+        />
       ) : null}
       {submitError ? <InlineError message={submitError} style={styles.error} /> : null}
       <Button
         label="Save changes"
         onPress={onSubmit}
         loading={updateProfile.isPending}
-         disabled={formState.isSubmitting || areasQuery.isError}
+        disabled={formState.isSubmitting || areasQuery.isError}
       />
     </Screen>
   );

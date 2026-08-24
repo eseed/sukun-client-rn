@@ -36,25 +36,25 @@ controllers.
 All fifteen frames from `Sukun App - All Screens.dc.html`, plus two the design links to but
 does not draw:
 
-| #   | Screen                | Route                        |
-| --- | --------------------- | ---------------------------- |
-| 01  | Welcome               | `/(onboarding)/welcome`      |
-| 02  | Phone number          | `/(onboarding)/phone`        |
-| 03  | Verify code           | `/(onboarding)/otp`          |
-| 04  | About you             | `/(onboarding)/profile`      |
-| 05  | Selfie capture        | `/(onboarding)/selfie`       |
-| 06  | Discover              | `/(tabs)/discover`           |
-| 07  | Event detail          | `/event/[slug]`              |
-| 08  | Checkout · pass       | `/checkout/pass`             |
-| 09  | Checkout · guests     | `/checkout/guests`           |
-| 10  | Checkout · review     | `/checkout/review`           |
-| 11  | Payment               | `/checkout/payment`          |
-| 12  | Confirmation          | `/checkout/confirmation`     |
-| 13  | My tickets            | `/(tabs)/tickets`            |
-| 14  | Entry pass / QR       | `/ticket/[id]`               |
-| 15  | Profile               | `/(tabs)/profile`            |
-| —   | Delete account        | `/account/delete`            |
-| —   | Privacy & terms       | `/legal/terms`               |
+| #   | Screen            | Route                    |
+| --- | ----------------- | ------------------------ |
+| 01  | Welcome           | `/(onboarding)/welcome`  |
+| 02  | Phone number      | `/(onboarding)/phone`    |
+| 03  | Verify code       | `/(onboarding)/otp`      |
+| 04  | About you         | `/(onboarding)/profile`  |
+| 05  | Selfie capture    | `/(onboarding)/selfie`   |
+| 06  | Discover          | `/(tabs)/discover`       |
+| 07  | Event detail      | `/event/[slug]`          |
+| 08  | Checkout · pass   | `/checkout/pass`         |
+| 09  | Checkout · guests | `/checkout/guests`       |
+| 10  | Checkout · review | `/checkout/review`       |
+| 11  | Payment           | `/checkout/payment`      |
+| 12  | Confirmation      | `/checkout/confirmation` |
+| 13  | My tickets        | `/(tabs)/tickets`        |
+| 14  | Entry pass / QR   | `/ticket/[id]`           |
+| 15  | Profile           | `/(tabs)/profile`        |
+| —   | Delete account    | `/account/delete`        |
+| —   | Privacy & terms   | `/legal/terms`           |
 
 ## Pending backend
 

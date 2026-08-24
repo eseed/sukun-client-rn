@@ -17,24 +17,14 @@ export type AppUserGender = 'male' | 'female' | 'prefer_not_to_say';
 
 /** `modules/orders/enums/order-status.enum.ts` */
 export type OrderStatus =
-  | 'awaiting_payment'
-  | 'paid'
-  | 'failed'
-  | 'expired'
-  | 'cancelled'
-  | 'refunded';
+  'awaiting_payment' | 'paid' | 'failed' | 'expired' | 'cancelled' | 'refunded';
 
 /** `modules/tickets/enums/ticket-status.enum.ts` */
 export type TicketStatus = 'pending_claim' | 'active' | 'voided' | 'refunded';
 
 /** `modules/tickets/enums/ticket-usage-status.enum.ts` */
 export type TicketUsageStatus =
-  | 'usable'
-  | 'pending_claim'
-  | 'selfie_required'
-  | 'profile_incomplete'
-  | 'voided'
-  | 'refunded';
+  'usable' | 'pending_claim' | 'selfie_required' | 'profile_incomplete' | 'voided' | 'refunded';
 
 /** `modules/tickets/enums/ticket-source.enum.ts` */
 export type TicketSource = 'order' | 'invitation';
@@ -222,12 +212,7 @@ export interface EventTier {
   description: string | null;
   priceEgp: string;
   availabilityStatus:
-    | 'available'
-    | 'expired'
-    | 'inactive'
-    | 'not_yet_open'
-    | 'quantity_limit_reached'
-    | 'sold_out';
+    'available' | 'expired' | 'inactive' | 'not_yet_open' | 'quantity_limit_reached' | 'sold_out';
   isPurchasable: boolean;
   available: number;
   quantityRemaining: number | null;
@@ -297,12 +282,7 @@ export interface LiveEventDetail extends Omit<EventDetail, 'tiers' | 'documents'
   documents: { id: string; label: string | null; url: string; orderIndex: number }[];
   tiers: (Omit<EventTier, 'availabilityStatus'> & {
     availabilityStatus:
-      | 'available'
-      | 'expired'
-      | 'inactive'
-      | 'not_yet_open'
-      | 'quantity_limit_reached'
-      | 'sold_out';
+      'available' | 'expired' | 'inactive' | 'not_yet_open' | 'quantity_limit_reached' | 'sold_out';
   })[];
 }
 
@@ -391,10 +371,7 @@ export interface GuestValidationIssue {
 export interface LiveGuestValidationIssue {
   guestIndex: number;
   error:
-    | 'INVALID_PHONE_NUMBER'
-    | 'DUPLICATE_IN_ORDER'
-    | 'SAME_AS_BUYER'
-    | 'GUEST_ALREADY_HAS_TICKET';
+    'INVALID_PHONE_NUMBER' | 'DUPLICATE_IN_ORDER' | 'SAME_AS_BUYER' | 'GUEST_ALREADY_HAS_TICKET';
 }
 
 /** `ValidateGuestRequestDto` */

@@ -1,6 +1,13 @@
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Avatar, BulletHeading, ListRow, ResourceState, Screen, Text } from '../../src/components/ui';
+import {
+  Avatar,
+  BulletHeading,
+  ListRow,
+  ResourceState,
+  Screen,
+  Text,
+} from '../../src/components/ui';
 import { useAvatarUri, useTickets } from '../../src/hooks/queries';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
@@ -25,7 +32,12 @@ export default function ProfileScreen() {
     <View style={styles.root}>
       <Image source={dots} style={styles.backdrop} resizeMode="cover" />
 
-      <Screen scroll edges={{ bottom: false }} contentStyle={styles.content} style={styles.transparent}>
+      <Screen
+        scroll
+        edges={{ bottom: false }}
+        contentStyle={styles.content}
+        style={styles.transparent}
+      >
         <View style={styles.heading}>
           <BulletHeading title="Profile" size="md" />
         </View>

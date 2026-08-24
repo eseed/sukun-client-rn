@@ -17,7 +17,7 @@ function withPaymobProjectRepositories(config) {
     const marker = 'allprojects {\n    repositories {';
     if (!contents.includes(marker)) {
       throw new Error(
-        'withPaymobAndroid: could not find `allprojects { repositories {` in the project build.gradle to insert the Paymob maven repos.'
+        'withPaymobAndroid: could not find `allprojects { repositories {` in the project build.gradle to insert the Paymob maven repos.',
       );
     }
 
@@ -30,7 +30,7 @@ function withPaymobProjectRepositories(config) {
         `        }\n` +
         `        maven {\n` +
         `            url = uri("https://jitpack.io")\n` +
-        `        }`
+        `        }`,
     );
     return config;
   });
@@ -47,7 +47,7 @@ function withPaymobDataBinding(config) {
     const index = contents.indexOf(marker);
     if (index === -1) {
       throw new Error(
-        'withPaymobAndroid: could not find the `android {` block in the app build.gradle to enable data binding.'
+        'withPaymobAndroid: could not find the `android {` block in the app build.gradle to enable data binding.',
       );
     }
 

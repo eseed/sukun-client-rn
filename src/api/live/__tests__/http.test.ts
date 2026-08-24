@@ -70,7 +70,9 @@ describe('live HTTP auth resilience', () => {
     await expect(
       Promise.all([http.request('protected'), http.request('protected')]),
     ).resolves.toEqual([{ ok: true }, { ok: true }]);
-    expect(fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/mobile/auth/refresh'))).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/mobile/auth/refresh')),
+    ).toHaveLength(1);
     await expect(getSecureItem(SECURE_KEYS.accessToken)).resolves.toBe('new-access');
     await expect(getSecureItem(SECURE_KEYS.refreshToken)).resolves.toBe('new-refresh');
   });
@@ -114,6 +116,8 @@ describe('live HTTP auth resilience', () => {
 
     const form = new FormData();
     form.append('file', new Blob(['photo'], { type: 'image/jpeg' }), 'selfie.jpg');
-    await expect(http.request('mobile/users/me/selfie', { method: 'PUT', form })).resolves.toBeUndefined();
+    await expect(
+      http.request('mobile/users/me/selfie', { method: 'PUT', form }),
+    ).resolves.toBeUndefined();
   });
 });

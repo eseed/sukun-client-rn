@@ -37,13 +37,18 @@ function wrapper(client: QueryClient) {
 function queryInterval(client: QueryClient, orderId: string): false | number {
   const query = client.getQueryCache().find({ queryKey: queryKeys.paymentStatus(orderId) });
   const interval = (
-    query?.options as {
-      refetchInterval?: number | false | ((currentQuery: { state: { data?: PaymentStatus } }) => false | number);
-    } | undefined
+    query?.options as
+      | {
+          refetchInterval?:
+            | number
+            | false
+            | ((currentQuery: { state: { data?: PaymentStatus } }) => false | number);
+        }
+      | undefined
   )?.refetchInterval;
   return typeof interval === 'function'
     ? interval({ state: query!.state as { data?: PaymentStatus } })
-    : interval ?? false;
+    : (interval ?? false);
 }
 
 describe('payment status hook', () => {
@@ -58,55 +63,56 @@ describe('payment status hook', () => {
     clients.splice(0).forEach((client) => client.clear());
   });
 
-  it.each<PaymentStatus['orderStatus']>([
-    'paid',
-    'failed',
-    'expired',
-    'cancelled',
-    'refunded',
-  ])('stops polling for terminal order status %s', async (orderStatus) => {
-    const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity, retry: false } } });
-    clients.push(client);
-    paymentStatusMock.mockResolvedValue({
-      orderStatus,
-      paymentStatus: 'pending',
-      ticketsIssued: 0,
-      paidAt: null,
-    });
+  it.each<PaymentStatus['orderStatus']>(['paid', 'failed', 'expired', 'cancelled', 'refunded'])(
+    'stops polling for terminal order status %s',
+    async (orderStatus) => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { gcTime: Infinity, retry: false } },
+      });
+      clients.push(client);
+      paymentStatusMock.mockResolvedValue({
+        orderStatus,
+        paymentStatus: 'pending',
+        ticketsIssued: 0,
+        paidAt: null,
+      });
 
-    const rendered = renderHook(() => usePaymentStatus(`order-${orderStatus}`, { poll: true }), {
-      wrapper: wrapper(client),
-    });
-    await waitFor(() => expect(paymentStatusMock).toHaveBeenCalledTimes(1));
+      const rendered = renderHook(() => usePaymentStatus(`order-${orderStatus}`, { poll: true }), {
+        wrapper: wrapper(client),
+      });
+      await waitFor(() => expect(paymentStatusMock).toHaveBeenCalledTimes(1));
 
-    expect(queryInterval(client, `order-${orderStatus}`)).toBe(false);
-    rendered.unmount();
-  });
+      expect(queryInterval(client, `order-${orderStatus}`)).toBe(false);
+      rendered.unmount();
+    },
+  );
 
-  it.each<PaymentStatus['paymentStatus']>([
-    'captured',
-    'failed',
-    'expired',
-    'refunded',
-    'voided',
-  ])('keeps polling until the order status is terminal for payment status %s', async (paymentStatus) => {
-    const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity, retry: false } } });
-    clients.push(client);
-    paymentStatusMock.mockResolvedValue({
-      orderStatus: 'awaiting_payment',
-      paymentStatus,
-      ticketsIssued: 0,
-      paidAt: null,
-    });
+  it.each<PaymentStatus['paymentStatus']>(['captured', 'failed', 'expired', 'refunded', 'voided'])(
+    'keeps polling until the order status is terminal for payment status %s',
+    async (paymentStatus) => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { gcTime: Infinity, retry: false } },
+      });
+      clients.push(client);
+      paymentStatusMock.mockResolvedValue({
+        orderStatus: 'awaiting_payment',
+        paymentStatus,
+        ticketsIssued: 0,
+        paidAt: null,
+      });
 
-    const rendered = renderHook(() => usePaymentStatus(`payment-${paymentStatus}`, { poll: true }), {
-      wrapper: wrapper(client),
-    });
-    await waitFor(() => expect(paymentStatusMock).toHaveBeenCalledTimes(1));
+      const rendered = renderHook(
+        () => usePaymentStatus(`payment-${paymentStatus}`, { poll: true }),
+        {
+          wrapper: wrapper(client),
+        },
+      );
+      await waitFor(() => expect(paymentStatusMock).toHaveBeenCalledTimes(1));
 
-    expect(queryInterval(client, `payment-${paymentStatus}`)).toBe(2000);
-    rendered.unmount();
-  });
+      expect(queryInterval(client, `payment-${paymentStatus}`)).toBe(2000);
+      rendered.unmount();
+    },
+  );
 });
 
 describe('tickets hook', () => {

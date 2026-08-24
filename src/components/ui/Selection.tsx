@@ -18,7 +18,14 @@ export function RadioDot({ selected, size = 22 }: { selected: boolean; size?: nu
       ]}
     >
       {selected ? (
-        <View style={{ width: size / 2, height: size / 2, borderRadius: size / 4, backgroundColor: colors.black }} />
+        <View
+          style={{
+            width: size / 2,
+            height: size / 2,
+            borderRadius: size / 4,
+            backgroundColor: colors.black,
+          }}
+        />
       ) : null}
     </View>
   );

@@ -1,13 +1,7 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import {
-  BackButton,
-  BulletHeading,
-  Button,
-  Screen,
-  Text,
-} from '../../src/components/ui';
+import { BackButton, BulletHeading, Button, Screen, Text } from '../../src/components/ui';
 import { OtpInput } from '../../src/components/ui/OtpInput';
 import {
   useConfirmAccountRestoration,

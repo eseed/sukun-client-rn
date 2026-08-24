@@ -88,7 +88,11 @@ export function CameraIcon({ size = 46, color = colors.textMuted }: IconProps) {
 export function PinIcon({ size = 22, color = colors.sage500 }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z" stroke={color} strokeWidth={1.6} />
+      <Path
+        d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10z"
+        stroke={color}
+        strokeWidth={1.6}
+      />
       <Circle cx="12" cy="11" r="2.2" stroke={color} strokeWidth={1.6} />
     </Svg>
   );

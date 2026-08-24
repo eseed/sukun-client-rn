@@ -86,7 +86,9 @@ describe('auth', () => {
 
     await signIn('+201022334455');
     const { data } = await mockApi.tickets.list();
-    expect(data.some((ticket) => ticket.status === 'active' && ticket.holderName === 'Same name')).toBe(true);
+    expect(
+      data.some((ticket) => ticket.status === 'active' && ticket.holderName === 'Same name'),
+    ).toBe(true);
   });
 });
 
@@ -343,7 +345,9 @@ describe('mock parity', () => {
       code: 'EMAIL_VERIFICATION_TOKEN_INVALID',
     });
     await mockApi.profile.sendEmailVerification();
-    expect(await mockApi.profile.verifyEmail(MOCK_EMAIL_VERIFICATION_TOKEN)).toEqual({ verified: true });
+    expect(await mockApi.profile.verifyEmail(MOCK_EMAIL_VERIFICATION_TOKEN)).toEqual({
+      verified: true,
+    });
     expect((await mockApi.auth.me()).emailVerified).toBe(true);
   });
 
@@ -351,7 +355,10 @@ describe('mock parity', () => {
     const firstEvents = await mockApi.events.list({ limit: 1 });
     expect(firstEvents.data).toHaveLength(1);
     expect(firstEvents.meta.hasNextPage).toBe(true);
-    const secondEvents = await mockApi.events.list({ limit: 1, cursor: firstEvents.meta.nextCursor });
+    const secondEvents = await mockApi.events.list({
+      limit: 1,
+      cursor: firstEvents.meta.nextCursor,
+    });
     expect(secondEvents.data[0]?.id).not.toBe(firstEvents.data[0]?.id);
 
     await signIn();
@@ -392,8 +399,13 @@ describe('mock parity', () => {
     await mockApi.account.requestDeletionOtp();
     await mockApi.account.delete(MOCK_OTP_CODE);
     await mockApi.auth.requestAccountRestorationOtp('+201012345678');
-    await mockApi.auth.confirmAccountRestoration({ phoneNumber: '+201012345678', otpCode: MOCK_OTP_CODE });
+    await mockApi.auth.confirmAccountRestoration({
+      phoneNumber: '+201012345678',
+      otpCode: MOCK_OTP_CODE,
+    });
     expect((await mockApi.auth.me()).status).toBe('active');
-    expect((await mockApi.tickets.list({ statuses: ['active'] })).data).toHaveLength(before.data.length);
+    expect((await mockApi.tickets.list({ statuses: ['active'] })).data).toHaveLength(
+      before.data.length,
+    );
   });
 });

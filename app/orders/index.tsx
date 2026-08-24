@@ -1,12 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
-import {
-  Card,
-  PageHeader,
-  ResourceState,
-  Screen,
-  Text,
-} from '../../src/components/ui';
+import { Card, PageHeader, ResourceState, Screen, Text } from '../../src/components/ui';
 import { useOrders } from '../../src/hooks/queries';
 import { formatDate, formatEgp } from '../../src/lib/format';
 import { colors, space } from '../../src/theme/tokens';
@@ -29,7 +23,15 @@ export default function OrdersScreen() {
       />
 
       <ResourceState
-        status={orders.isLoading ? 'loading' : orders.isError ? 'error' : items.length === 0 ? 'empty' : 'success'}
+        status={
+          orders.isLoading
+            ? 'loading'
+            : orders.isError
+              ? 'error'
+              : items.length === 0
+                ? 'empty'
+                : 'success'
+        }
         loadingLabel="Loading your orders..."
         emptyTitle="No orders yet"
         emptyMessage="Orders you place will appear here."

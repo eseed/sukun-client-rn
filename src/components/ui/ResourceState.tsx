@@ -1,11 +1,5 @@
 import { type ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { colors, radius, space } from '../../theme/tokens';
 import { Text } from './Text';
 
@@ -60,7 +54,10 @@ export function ResourceState({
 
   return (
     <View style={[styles.state, style]}>
-      <View accessible={status === 'error'} accessibilityRole={status === 'error' ? 'alert' : undefined}>
+      <View
+        accessible={status === 'error'}
+        accessibilityRole={status === 'error' ? 'alert' : undefined}
+      >
         <Text variant="titleSm" style={styles.title}>
           {title}
         </Text>

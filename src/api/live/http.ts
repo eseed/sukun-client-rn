@@ -159,15 +159,7 @@ function parseError(response: Response, payload: unknown): ApiError {
   const retryAfterSeconds =
     typeof err?.retryAfterSeconds === 'number' ? err.retryAfterSeconds : undefined;
 
-  return new ApiError(
-    code,
-    message,
-    status,
-    details,
-    requestId,
-    timestamp,
-    retryAfterSeconds,
-  );
+  return new ApiError(code, message, status, details, requestId, timestamp, retryAfterSeconds);
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -185,7 +177,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   // content (event copy, error messages) without this header.
   const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': 'en' };
   if (body !== undefined && form === undefined) headers['Content-Type'] = 'application/json';
-  const sentAccessToken = auth ? token ?? (await getSecureItem(SECURE_KEYS.accessToken)) : null;
+  const sentAccessToken = auth ? (token ?? (await getSecureItem(SECURE_KEYS.accessToken))) : null;
   if (auth) {
     if (sentAccessToken) headers.Authorization = `Bearer ${sentAccessToken}`;
   }

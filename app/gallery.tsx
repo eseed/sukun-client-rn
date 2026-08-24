@@ -142,8 +142,18 @@ export default function GalleryScreen() {
       <Section title="Avatars & ring">
         <View style={styles.row}>
           <Avatar name="Yasmin El Sayed" size={38} />
-          <Avatar name="Nour Hassan" size={38} background={colors.rose500} foreground={colors.creme} />
-          <Avatar name="Omar Farouk" size={38} background={colors.sky500} foreground={colors.creme} />
+          <Avatar
+            name="Nour Hassan"
+            size={38}
+            background={colors.rose500}
+            foreground={colors.creme}
+          />
+          <Avatar
+            name="Omar Farouk"
+            size={38}
+            background={colors.sky500}
+            foreground={colors.creme}
+          />
         </View>
         <ConicRing size={120} thickness={5}>
           <View style={styles.ringInner} />

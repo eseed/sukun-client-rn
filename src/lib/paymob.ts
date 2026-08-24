@@ -20,7 +20,6 @@ export interface PaymobSdk {
   presentPayVC: (clientSecret: string, publicKey: string) => void;
 }
 
-
 /** `PaymentResult` in the docs, `PaymentStatus` in the package. */
 export interface PaymobResultEnum {
   SUCCESS?: string;

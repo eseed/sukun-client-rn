@@ -137,21 +137,39 @@ function inlineMarkdown(
   key: string,
   onLinkPress?: (url: string) => void,
 ): ReactNode[] {
-  const tokens = value.split(/(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|`[^`]+`|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^\)]+\))/g);
+  const tokens = value.split(
+    /(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|`[^`]+`|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^\)]+\))/g,
+  );
   return tokens.map((token, index) => {
     const tokenKey = `${key}-${index}`;
     if (!token) return null;
     if (/^\*\*.*\*\*$|^__.*__$/.test(token)) {
-      return <RNText key={tokenKey} style={styles.bold}>{token.slice(2, -2)}</RNText>;
+      return (
+        <RNText key={tokenKey} style={styles.bold}>
+          {token.slice(2, -2)}
+        </RNText>
+      );
     }
     if (/^~~.*~~$/.test(token)) {
-      return <RNText key={tokenKey} style={styles.strikethrough}>{token.slice(2, -2)}</RNText>;
+      return (
+        <RNText key={tokenKey} style={styles.strikethrough}>
+          {token.slice(2, -2)}
+        </RNText>
+      );
     }
     if (/^`.*`$/.test(token)) {
-      return <RNText key={tokenKey} style={styles.code}>{token.slice(1, -1)}</RNText>;
+      return (
+        <RNText key={tokenKey} style={styles.code}>
+          {token.slice(1, -1)}
+        </RNText>
+      );
     }
     if (/^\*.*\*$|^_.*_$/.test(token)) {
-      return <RNText key={tokenKey} style={styles.italic}>{token.slice(1, -1)}</RNText>;
+      return (
+        <RNText key={tokenKey} style={styles.italic}>
+          {token.slice(1, -1)}
+        </RNText>
+      );
     }
     const link = token.match(/^\[([^\]]+)\]\(([^\)]+)\)$/);
     if (link) {
@@ -211,7 +229,12 @@ export interface MarkdownTextProps {
 }
 
 /** Renders the event description Markdown as native, semantically grouped blocks. */
-export function MarkdownText({ markdown, variant = 'bodyValue', style, onLinkPress }: MarkdownTextProps) {
+export function MarkdownText({
+  markdown,
+  variant = 'bodyValue',
+  style,
+  onLinkPress,
+}: MarkdownTextProps) {
   const baseStyle = StyleSheet.flatten([text[variant], style]) as TextStyle;
   const blocks = parseBlocks(htmlToMarkdown(markdown));
 
@@ -236,7 +259,9 @@ export function MarkdownText({ markdown, variant = 'bodyValue', style, onLinkPre
                   <RNText style={[baseStyle, styles.marker]}>
                     {block.ordered ? `${itemIndex + 1}.` : '\u2022'}
                   </RNText>
-                  <RNText style={baseStyle}>{inlineMarkdown(item, `${key}-${itemIndex}`, onLinkPress)}</RNText>
+                  <RNText style={baseStyle}>
+                    {inlineMarkdown(item, `${key}-${itemIndex}`, onLinkPress)}
+                  </RNText>
                 </View>
               ))}
             </View>

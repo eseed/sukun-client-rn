@@ -23,10 +23,7 @@ export function BulletHeading({
   return (
     <View style={styles.row}>
       <View
-        style={[
-          styles.dot,
-          { width: dot, height: dot, borderRadius: dot / 2, borderColor: color },
-        ]}
+        style={[styles.dot, { width: dot, height: dot, borderRadius: dot / 2, borderColor: color }]}
       />
       <Text variant={variant} color={color} style={styles.title}>
         {title}
@@ -67,7 +64,10 @@ export function BackButton({
       hitSlop={8}
     >
       <Text
-        style={[styles.backGlyph, { color: tone === 'inverse' ? colors.creme : colors.textPrimary }]}
+        style={[
+          styles.backGlyph,
+          { color: tone === 'inverse' ? colors.creme : colors.textPrimary },
+        ]}
       >
         ←
       </Text>
