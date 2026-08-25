@@ -22,7 +22,9 @@ interface ContactsResult {
 /**
  * Reads the address book so guests can be attached by phone (CLAUDE.md rule 2).
  *
- * Only contacts with a valid Egyptian mobile number are surfaced. Nothing here — and nothing
+ * Every mobile number the address book holds is surfaced, from any country. A number stored
+ * without a calling code is read as Egyptian, because that is what a number saved in Egypt
+ * looks like; one stored with a code keeps the country it names. Nothing here — and nothing
  * downstream — checks whether a number has a Sukun account: the picker looks identical for
  * registered and unregistered people (rule 4).
  *

@@ -505,7 +505,7 @@ export const mockApi: SukunApi = {
   auth: {
     async requestOtp(phoneNumber: string): Promise<OtpRequested> {
       const e164 = normalizePhone(phoneNumber);
-      if (!e164) throw new MockApiError('INVALID_PHONE', 'Enter a valid Egyptian mobile number');
+      if (!e164) throw new MockApiError('INVALID_PHONE', 'Enter a valid mobile number');
       state.pendingPhone = e164;
       // Identical response whether or not this number has an account (CLAUDE.md rule 4).
       return delay({ sent: true, expiresInSeconds: 300, resendAfterSeconds: 30 });
@@ -513,7 +513,7 @@ export const mockApi: SukunApi = {
 
     async verifyOtp(phoneNumber: string, code: string): Promise<Authenticated> {
       const e164 = normalizePhone(phoneNumber);
-      if (!e164) throw new MockApiError('INVALID_PHONE', 'Enter a valid Egyptian mobile number');
+      if (!e164) throw new MockApiError('INVALID_PHONE', 'Enter a valid mobile number');
       if (code !== OTP_CODE) {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
@@ -553,7 +553,7 @@ export const mockApi: SukunApi = {
 
     async requestAccountRestorationOtp(phoneNumber: string): Promise<void> {
       const e164 = normalizePhone(phoneNumber);
-      if (!e164) throw new MockApiError('INVALID_PHONE', 'Enter a valid Egyptian mobile number');
+      if (!e164) throw new MockApiError('INVALID_PHONE', 'Enter a valid mobile number');
       state.pendingRestorationPhone = e164;
       return delay(undefined);
     },

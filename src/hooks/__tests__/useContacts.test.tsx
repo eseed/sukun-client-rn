@@ -96,19 +96,22 @@ describe('contacts hook', () => {
    * call itself is wrong — which is how a throwing deprecation stub shipped as a silently
    * empty picker. This one fails unless real contacts actually come back mapped.
    */
-  it('maps Egyptian mobile numbers out of the address book', async () => {
+  it('maps mobile numbers out of the address book, from any country', async () => {
     granted();
     getAllDetailsMock.mockResolvedValue([
       { id: '1', fullName: 'Yasmin El Sayed', phones: [{ id: 'p1', number: '01012345678' }] },
       { id: '2', fullName: 'Omar Farouk', phones: [{ id: 'p2', number: '+20 100 111 2233' }] },
-      // No Egyptian mobile — must not appear at all.
-      { id: '3', fullName: 'Landline Only', phones: [{ id: 'p3', number: '0223456789' }] },
+      // A number that names its own country is kept as that country's, not re-read as Egyptian.
+      { id: '3', fullName: 'Dana Ward', phones: [{ id: 'p3', number: '+1 (213) 373-4253' }] },
+      // Not a mobile anywhere — must not appear at all.
+      { id: '4', fullName: 'Landline Only', phones: [{ id: 'p4', number: '0223456789' }] },
     ] as never);
 
     const rendered = await renderLoaded();
 
     expect(rendered.result.current.permission).toBe('granted');
     expect(rendered.result.current.contacts).toEqual([
+      { id: '3:+12133734253', name: 'Dana Ward', phoneNumber: '+12133734253' },
       { id: '2:+201001112233', name: 'Omar Farouk', phoneNumber: '+201001112233' },
       { id: '1:+201012345678', name: 'Yasmin El Sayed', phoneNumber: '+201012345678' },
     ]);

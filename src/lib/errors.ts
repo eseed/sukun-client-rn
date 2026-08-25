@@ -7,7 +7,7 @@
  */
 
 const MESSAGES: Record<string, string> = {
-  INVALID_PHONE: 'Enter a valid Egyptian mobile number.',
+  INVALID_PHONE: 'Enter a valid mobile number.',
   OTP_INVALID: 'That code is not right. Try again.',
   OTP_EXPIRED: 'That code has expired. Ask for a new one.',
   OTP_ATTEMPTS_EXCEEDED: 'Too many tries. Ask for a new code in a moment.',
@@ -34,13 +34,13 @@ const MESSAGES: Record<string, string> = {
   BUYER_NOT_FOUND: 'Complete your profile before buying tickets.',
   SELFIE_NOT_FOUND: 'Add your selfie to use this ticket.',
 
-  GUEST_PHONE_INVALID: 'That does not look like an Egyptian mobile number.',
+  GUEST_PHONE_INVALID: 'That does not look like a mobile number.',
   GUEST_IS_BUYER: "That's your own number. Your ticket is already included.",
   GUEST_DUPLICATE: "You've already added that number.",
   MAX_TICKETS_EXCEEDED: 'That is more tickets than this event allows in one order.',
   // `GuestValidationIssueResponseDto.error` on the live backend — same guest-step copy above,
   // just the server's own vocabulary instead of the mock's.
-  INVALID_PHONE_NUMBER: 'That does not look like an Egyptian mobile number.',
+  INVALID_PHONE_NUMBER: 'That does not look like a mobile number.',
   DUPLICATE_IN_ORDER: "You've already added that number.",
   SAME_AS_BUYER: "That's your own number. Your ticket is already included.",
   GUEST_ALREADY_HAS_TICKET: 'That guest already has a ticket to this event.',

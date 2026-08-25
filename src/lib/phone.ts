@@ -115,9 +115,15 @@ export function formatPhoneForDisplay(input: string): string {
   return parse(input, DEFAULT_COUNTRY)?.international ?? input;
 }
 
-/** Local display used in the contact list: `010 12345678`. */
+/**
+ * Compact display for contact and guest rows: `010 12345678` at home, `+1 213 373 4253`
+ * abroad. A national form only means one number inside its own country, so anything from
+ * elsewhere keeps its calling code rather than reading as a local number.
+ */
 export function formatPhoneLocal(input: string): string {
-  return parse(input, DEFAULT_COUNTRY)?.national ?? input;
+  const parsed = parse(input, DEFAULT_COUNTRY);
+  if (!parsed) return input;
+  return parsed.country === DEFAULT_COUNTRY ? parsed.national : parsed.international;
 }
 
 /**

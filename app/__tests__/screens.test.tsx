@@ -249,6 +249,30 @@ describe('09 Guests', () => {
   });
 
   /**
+   * Guests come from anywhere. A number entered under its own country is accepted, and the
+   * row keeps its calling code so a foreign number cannot read as a local one.
+   */
+  it('takes a guest number from another country', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
+
+    fireEvent.press(screen.getByLabelText('Country: +20. Change'));
+    fireEvent.changeText(screen.getByLabelText('Search country'), 'united states');
+    fireEvent.press(screen.getByLabelText('United States +1'));
+
+    fireEvent.changeText(screen.getByLabelText('Guest phone number'), '2133734253');
+    fireEvent.press(screen.getByText('Add'));
+
+    expect(screen.getAllByText('+1 213 373 4253').length).toBeGreaterThan(0);
+    expect(screen.getByText('1 of 1 picked')).toBeTruthy();
+    expect(screen.queryByText('That does not look like a mobile number.')).toBeNull();
+  });
+
+  /**
    * The buyer holds no ticket for this event, so their single ticket is their own and there
    * is no guest slot: the screen offers tickets for friends rather than a dead end.
    */

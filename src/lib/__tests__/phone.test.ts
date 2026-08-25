@@ -128,6 +128,11 @@ describe('display formatting', () => {
     expect(formatPhoneLocal('+201022334455')).toBe('010 22334455');
   });
 
+  it('keeps the calling code on a contact row from another country', () => {
+    // `213 373 4253` would read as an Egyptian number in a list of Egyptian numbers.
+    expect(formatPhoneLocal('+12133734253')).toBe('+1 213 373 4253');
+  });
+
   it('leaves an unrecognisable number alone', () => {
     expect(formatPhoneForDisplay('12345')).toBe('12345');
   });

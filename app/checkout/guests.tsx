@@ -24,6 +24,8 @@ import {
   formatNationalInput,
   formatPhoneLocal,
   normalizePhone,
+  phoneErrorMessage,
+  phoneProblem,
   sanitizeNationalInput,
   toE164,
 } from '../../src/lib/phone';
@@ -104,6 +106,17 @@ export default function GuestsScreen() {
 
   function onAddManual() {
     setError(null);
+    // Judged against the country the picker is showing, not against Egypt: a number that is
+    // perfectly good in Germany is not a typo, and the message says what is actually wrong.
+    const problem = phoneProblem(manual, manualCountry);
+    if (problem !== null) {
+      setError(
+        problem === 'empty'
+          ? 'Enter their mobile number.'
+          : (phoneErrorMessage(manual, manualCountry) ?? messageForCode('GUEST_PHONE_INVALID')),
+      );
+      return;
+    }
     const e164 = normalizePhone(toE164(manual, manualCountry), manualCountry);
     if (!e164) {
       setError(messageForCode('GUEST_PHONE_INVALID'));
@@ -288,7 +301,7 @@ export default function GuestsScreen() {
               <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
                 {permission === null
                   ? 'Add a guest from your contacts, or enter their number below.'
-                  : 'No Egyptian mobile numbers in your contacts. Enter one below.'}
+                  : 'No mobile numbers in your contacts. Enter one below.'}
               </Text>
             </View>
           ) : null}

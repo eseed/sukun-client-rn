@@ -359,6 +359,9 @@ export const fallbackContacts = [
   { id: 'c2', name: 'Omar Farouk', phoneNumber: '+201188776655' },
   { id: 'c3', name: 'Laila Mansour', phoneNumber: '+201233445566' },
   { id: 'c4', name: 'Karim Adel', phoneNumber: '+201099887766' },
+  // Guests are attached by phone from any country, so the seeded picker holds one from
+  // outside Egypt: the row keeps its calling code rather than reading as a local number.
+  { id: 'c5', name: 'Dana Ward', phoneNumber: '+12133734253' },
 ];
 
 /**
