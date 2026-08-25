@@ -278,14 +278,25 @@ describe('10 Review & pay', () => {
     mockParams.eventId = TULUA_ID;
     await signInAndComplete();
     useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
-    // Quantity 1 = buyer only; the api requires one guest per extra ticket.
     useCheckoutStore.getState().setQuantity(1);
+    // signInAndComplete seeds this user a Tulua ticket, so this one is for a guest - every
+    // ticket in the order needs a guest against it rather than quantity minus the buyer's own.
+    // The guests screen sets this from the ticket check; this test goes straight to review.
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    useCheckoutStore.getState().addGuest({
+      phoneNumber: '+201022334455',
+      name: 'Nour Hassan',
+      fromContacts: false,
+    });
     useCheckoutStore.getState().setTermsAccepted(true);
 
     renderWithProviders(<ReviewScreen />);
-    // The button stays disabled until the mock price preview settles.
+    // The button stays disabled until the mock price preview and the ticket check settle.
     await waitFor(() => expect(screen.getByText('Full Weekend Pass × 1')).toBeTruthy());
     await waitFor(() => expect(screen.getByText('1,824.00 EGP')).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
+    );
 
     fireEvent.press(screen.getByText('Continue to payment'));
 
@@ -309,11 +320,15 @@ describe('11 Payment', () => {
   // so the screen now shows the amount and hands straight off — no inputs of its own.
   it('shows the Paymob amount and no card fields of its own', async () => {
     await signInAndComplete();
+    // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
-      buyerTierId: TIER_WEEKEND,
+      buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+      ],
     });
     mockParams.orderId = order.id;
 
@@ -333,11 +348,15 @@ describe('11 Payment', () => {
 describe('12 Confirmation', () => {
   it('names the order and explains the guest WhatsApp message', async () => {
     await signInAndComplete();
+    // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
-      buyerTierId: TIER_WEEKEND,
+      buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+      ],
     });
     mockParams.orderId = order.id;
 

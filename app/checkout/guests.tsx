@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import {
   Avatar,
@@ -28,6 +28,7 @@ import {
 } from '../../src/lib/phone';
 import type { CountryCode } from 'libphonenumber-js/mobile';
 import { guestSlots, useCheckoutStore } from '../../src/stores/checkout';
+import { useHoldsTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 
@@ -58,7 +59,20 @@ export default function GuestsScreen() {
   const [countrySheetOpen, setCountrySheetOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const slots = guestSlots(quantity);
+  // Already holding a ticket for this event means none of these are yours, so every one of
+  // them is a guest slot rather than quantity minus your own.
+  const { holdsTicket, isPending: holdsTicketPending } = useHoldsTicketForEvent(
+    validEventId ?? null,
+  );
+  const setBuyerTakesTicket = useCheckoutStore((s) => s.setBuyerTakesTicket);
+
+  // The draft caps how many guests it will hold, so it needs the same answer this screen uses
+  // to count slots - otherwise it silently drops the guest attached to the buyer's own seat.
+  useEffect(() => {
+    if (!holdsTicketPending) setBuyerTakesTicket(!holdsTicket);
+  }, [holdsTicket, holdsTicketPending, setBuyerTakesTicket]);
+
+  const slots = guestSlots(quantity, !holdsTicket);
   const picked = guests.length;
   const full = picked >= slots;
 
@@ -161,9 +175,13 @@ export default function GuestsScreen() {
       <Text variant="bodyMuted" style={styles.blurb}>
         {slots === 0
           ? 'You bought 1 ticket, so there is no guest to add. Continue to review.'
-          : `You bought ${quantity} tickets. Attach ${slots} ${
-              slots === 1 ? 'guest' : 'guests'
-            } from your contacts.`}
+          : holdsTicket
+            ? `You already have a ticket for this event, so all ${slots} ${
+                slots === 1 ? 'ticket is' : 'tickets are'
+              } for your guests. Attach ${slots === 1 ? 'them' : 'them all'} from your contacts.`
+            : `You bought ${quantity} tickets. Attach ${slots} ${
+                slots === 1 ? 'guest' : 'guests'
+              } from your contacts.`}
       </Text>
 
       {slots > 0 ? (
@@ -301,6 +319,9 @@ export default function GuestsScreen() {
         label="Continue"
         onPress={onContinue}
         loading={validateGuests.isPending}
+        // `holdsTicket` reads false until the ticket check settles, which understates the slot
+        // count by one. Leaving early on that number sends an order a guest short.
+        disabled={holdsTicketPending}
         style={styles.continue}
       />
     </Screen>

@@ -44,6 +44,8 @@ const MESSAGES: Record<string, string> = {
   DUPLICATE_IN_ORDER: "You've already added that number.",
   SAME_AS_BUYER: "That's your own number. Your ticket is already included.",
   GUEST_ALREADY_HAS_TICKET: 'That guest already has a ticket to this event.',
+  BUYER_ALREADY_HAS_TICKET:
+    'You already have a ticket for this event. These ones go to your guests.',
 
   PROMO_CODE_INVALID: 'That promo code is not valid.',
   // The live backend's own promo vocabulary — `PROMO_CODE_INVALID` above is the mock's.

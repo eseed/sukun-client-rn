@@ -298,7 +298,11 @@ export interface OrderGuestInput {
 /** `CreateOrderRequestDto` */
 export interface CreateOrderInput {
   eventId: string;
-  buyerTierId: string;
+  /**
+   * The tier the buyer is taking for themselves, or null when every ticket in the order is for
+   * someone else - which is the shape once you already hold a ticket for the event.
+   */
+  buyerTierId: string | null;
   items: { tierId: string; quantity: number }[];
   guests: OrderGuestInput[];
   promoCode?: string;
@@ -325,7 +329,7 @@ export interface OrderDetail {
   orderNumber: string;
   eventId: string;
   status: OrderStatus;
-  buyerTierId: string;
+  buyerTierId: string | null;
   subtotalEgp: string;
   discountEgp: string;
   netEgp: string;

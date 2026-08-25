@@ -32,6 +32,7 @@ import type { OrderDetail } from '../../src/api/types';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
+import { useHoldsTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
 
 /**
  * Design screen 10 · Checkout, review & pay.
@@ -69,6 +70,9 @@ export default function ReviewScreen() {
   const [heldOrderId, setHeldOrderId] = useState<string | null>(null);
 
   const eventQuery = useEvent(validEventId);
+  const { holdsTicket, isPending: holdsTicketPending } = useHoldsTicketForEvent(
+    validEventId ?? null,
+  );
   const { data: event } = eventQuery;
   const items = useMemo(() => (tierId ? [{ tierId, quantity }] : []), [quantity, tierId]);
   const priceQuery = usePricePreview({
@@ -171,7 +175,9 @@ export default function ReviewScreen() {
         order ??
         (await createOrder.mutateAsync({
           eventId: validEventId,
-          buyerTierId: tierId,
+          // Null when a ticket for this event is already held: the order is then entirely for
+          // guests, and asking for one of our own would be refused as a duplicate.
+          buyerTierId: holdsTicket ? null : tierId,
           items,
           guests: guests.map((g) => ({ phoneNumber: g.phoneNumber, name: g.name, tierId })),
           ...(promoCode ? { promoCode } : {}),
@@ -386,7 +392,10 @@ export default function ReviewScreen() {
       <Button
         label="Continue to payment"
         onPress={onContinue}
-        disabled={!termsAccepted || pricePending || invalidSelection}
+        // Held until the ticket check settles: `holdsTicket` reads false while the query is
+        // in flight, and building the order on that answer asks for a ticket the buyer
+        // already has - refused, after they have committed to paying.
+        disabled={!termsAccepted || pricePending || holdsTicketPending || invalidSelection}
         loading={createOrder.isPending || initiatePayment.isPending || validatePromo.isPending}
       />
     </Screen>

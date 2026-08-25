@@ -185,6 +185,26 @@ function requireUser(): CurrentUser {
 }
 
 /**
+ * Whether the signed-in buyer already holds a ticket for this event. One usable ticket per
+ * phone per event, so this decides whether a new order can include one for them.
+ *
+ * A ticket with no guest phone against it is the buyer's own; one whose guest phone is their
+ * number is a ticket somebody bought them, and occupies the same slot.
+ */
+function buyerHoldsTicketForEvent(eventId: string): boolean {
+  const phone = state.user?.phoneNumber ?? null;
+
+  return state.tickets.some((ticket) => {
+    if (ticket.event.id !== eventId) return false;
+    if (ticket.status !== 'active' && ticket.status !== 'pending_claim') return false;
+
+    const guestPhone = state.ticketOwnerPhones.get(ticket.id) ?? null;
+
+    return guestPhone === null || guestPhone === phone;
+  });
+}
+
+/**
  * The fields that gate purchase (CLAUDE.md rule 8). Email verification is NOT one, and the
  * living area only applies to Egyptian numbers.
  */
@@ -740,7 +760,8 @@ export const mockApi: SukunApi = {
       const event = findEvent(eventId);
       const issues: GuestValidationIssue[] = [];
       const seen = new Set<string>();
-      if (guests.length + 1 > event.maxTicketsPerOrder) {
+      const buyerSeats = buyerHoldsTicketForEvent(eventId) ? 0 : 1;
+      if (guests.length + buyerSeats > event.maxTicketsPerOrder) {
         throw new MockApiError(
           'MAX_TICKETS_PER_ORDER_EXCEEDED',
           'That is more tickets than this event allows in one order.',
@@ -823,11 +844,23 @@ export const mockApi: SukunApi = {
       if (!input.items.length || input.items.some((item) => item.quantity < 1)) {
         throw new MockApiError('VALIDATION_ERROR', 'Add at least one ticket.', 400);
       }
-      if (totalQuantity !== input.guests.length + 1) {
+      const buyerTakesTicket = input.buyerTierId !== null && input.buyerTierId !== undefined;
+      if (totalQuantity !== input.guests.length + (buyerTakesTicket ? 1 : 0)) {
         throw new MockApiError(
           'GUEST_ALLOCATION_INVALID',
-          'Attach one guest for each additional ticket.',
+          buyerTakesTicket
+            ? 'Attach one guest for each additional ticket.'
+            : 'Attach a guest for every ticket in this order.',
           400,
+        );
+      }
+      // One usable ticket per phone per event. Asking for a second of your own is refused here
+      // rather than after payment, which is where the backend's unique index would catch it.
+      if (buyerTakesTicket && buyerHoldsTicketForEvent(input.eventId)) {
+        throw new MockApiError(
+          'BUYER_ALREADY_HAS_TICKET',
+          'You already have a ticket for this event. Buy these for your guests instead.',
+          409,
         );
       }
       if (totalQuantity > event.maxTicketsPerOrder) {
@@ -852,7 +885,7 @@ export const mockApi: SukunApi = {
         orderNumber: nextOrderNumber(),
         eventId: input.eventId,
         status: 'awaiting_payment',
-        buyerTierId: input.buyerTierId,
+        buyerTierId: input.buyerTierId ?? null,
         subtotalEgp: pricing.subtotalEgp,
         discountEgp: pricing.discountEgp,
         netEgp: pricing.netEgp,

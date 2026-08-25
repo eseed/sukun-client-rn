@@ -23,10 +23,16 @@ interface CheckoutState {
   promoCode: string | null;
   termsAccepted: boolean;
   orderId: string | null;
+  /**
+   * Whether one of the order's tickets is the buyer's own. False once they are known to
+   * already hold a ticket for the event, which makes every ticket in the order a guest's.
+   */
+  buyerTakesTicket: boolean;
 
   start: (eventId: string, tierId: string) => void;
   setTier: (tierId: string) => void;
   setQuantity: (quantity: number) => void;
+  setBuyerTakesTicket: (takes: boolean) => void;
   addGuest: (guest: DraftGuest) => void;
   removeGuest: (phoneNumber: string) => void;
   toggleGuest: (guest: DraftGuest) => void;
@@ -44,6 +50,7 @@ const initial = {
   promoCode: null,
   termsAccepted: false,
   orderId: null,
+  buyerTakesTicket: true,
 } satisfies Partial<CheckoutState>;
 
 export const useCheckoutStore = create<CheckoutState>((set, get) => ({
@@ -59,13 +66,25 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
 
   setQuantity(quantity) {
     const next = Math.max(1, quantity);
-    // Guest slots are (quantity − 1): the buyer always holds one ticket.
-    set({ quantity: next, guests: get().guests.slice(0, Math.max(0, next - 1)) });
+    set({
+      quantity: next,
+      guests: get().guests.slice(0, guestSlots(next, get().buyerTakesTicket)),
+    });
+  },
+
+  setBuyerTakesTicket(buyerTakesTicket) {
+    // Trims when the allowance shrinks, so the draft can never hold more guests than tickets.
+    set({
+      buyerTakesTicket,
+      guests: get().guests.slice(0, guestSlots(get().quantity, buyerTakesTicket)),
+    });
   },
 
   addGuest(guest) {
-    const { guests, quantity } = get();
-    if (guests.length >= quantity - 1) return;
+    const { guests, quantity, buyerTakesTicket } = get();
+    // The cap is the slot count, not quantity − 1: an order bought entirely for other people
+    // has a guest against every ticket, and the last one was being dropped here.
+    if (guests.length >= guestSlots(quantity, buyerTakesTicket)) return;
     if (guests.some((g) => g.phoneNumber === guest.phoneNumber)) return;
     set({ guests: [...guests, guest] });
   },
@@ -100,7 +119,11 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
   },
 }));
 
-/** Guest slots available for this order: one ticket is always the buyer's. */
-export function guestSlots(quantity: number): number {
-  return Math.max(0, quantity - 1);
+/**
+ * Guest slots available for this order. One ticket is the buyer's own, unless they already
+ * hold a ticket for the event - then every ticket in the order is for someone else, and the
+ * whole quantity is guest slots.
+ */
+export function guestSlots(quantity: number, buyerTakesTicket = true): number {
+  return Math.max(0, quantity - (buyerTakesTicket ? 1 : 0));
 }

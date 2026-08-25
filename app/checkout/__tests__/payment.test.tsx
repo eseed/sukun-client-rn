@@ -70,11 +70,16 @@ beforeEach(() => {
 
 async function openPaymentSheet() {
   await signInAndComplete();
+  // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
+  // Two tickets cost the same either way, so the totals asserted below are unchanged.
   const order = await mockApi.orders.create({
     eventId: TULUA_ID,
-    buyerTierId: TIER_WEEKEND,
+    buyerTierId: null,
     items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-    guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    guests: [
+      { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+      { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+    ],
   });
   mockParams.orderId = order.id;
 
@@ -91,11 +96,16 @@ async function openPaymentSheet() {
 
 it('opens Paymob native checkout while waiting for the payment to complete', async () => {
   await signInAndComplete();
+  // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
+  // Two tickets cost the same either way, so the totals asserted below are unchanged.
   const order = await mockApi.orders.create({
     eventId: TULUA_ID,
-    buyerTierId: TIER_WEEKEND,
+    buyerTierId: null,
     items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-    guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    guests: [
+      { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+      { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+    ],
   });
   mockParams.orderId = order.id;
 

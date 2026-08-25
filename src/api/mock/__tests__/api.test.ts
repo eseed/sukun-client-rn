@@ -5,7 +5,7 @@ import {
   MOCK_OTP_CODE,
   resetMockState,
 } from '..';
-import { TIER_DAY1, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../fixtures';
+import { SOUND_BATH_ID, TIER_DAY1, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../fixtures';
 
 /** Drives the mock's clock so webhook timing can be asserted without sleeping. */
 let clock = Date.parse('2026-08-12T12:00:00.000Z');
@@ -73,10 +73,12 @@ describe('auth', () => {
   it('binds pending tickets by phone, not guest name', async () => {
     await signIn();
     await completeProfile();
+    // completeProfile seeds this user a Tulua ticket, so a further Tulua order is entirely
+    // for other people - one usable ticket per phone per event.
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
-      buyerTierId: TIER_WEEKEND,
-      items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
       guests: [{ phoneNumber: '+201022334455', name: 'Same name', tierId: TIER_WEEKEND }],
     });
     await mockApi.payments.initiate(order.id);
@@ -232,24 +234,31 @@ describe('order and ticket lifecycle', () => {
   it('creates an order awaiting payment with server-priced totals', async () => {
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
-      buyerTierId: TIER_WEEKEND,
+      buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+      ],
       promoCode: 'SUKUN10',
     });
 
     expect(order.status).toBe('awaiting_payment');
+    // Two tickets cost the same whoever holds them.
     expect(order.totalEgp).toBe('3283.20');
     expect(order.orderNumber).toMatch(/^SKN-2026-\d{6}$/);
-    expect(order.guests).toHaveLength(1);
+    expect(order.guests).toHaveLength(2);
   });
 
   it('issues tickets only after the webhook settles, not on redirect', async () => {
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
-      buyerTierId: TIER_WEEKEND,
+      buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+      ],
     });
 
     await mockApi.payments.initiate(order.id);
@@ -268,10 +277,12 @@ describe('order and ticket lifecycle', () => {
 
   it("issues the guest's ticket as pending_claim, so it exists before its owner", async () => {
     const order = await mockApi.orders.create({
-      eventId: TULUA_ID,
-      buyerTierId: TIER_WEEKEND,
-      items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+      // The seeded ticket is for Tulua, so this buys somewhere the buyer holds nothing and
+      // can still take one of the tickets themselves.
+      eventId: SOUND_BATH_ID,
+      buyerTierId: TIER_SOUND_GA,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 2 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_SOUND_GA }],
     });
 
     await mockApi.payments.initiate(order.id);
@@ -294,9 +305,9 @@ describe('order and ticket lifecycle', () => {
   it('cancels an unpaid order', async () => {
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
-      buyerTierId: TIER_DAY1,
+      buyerTierId: null,
       items: [{ tierId: TIER_DAY1, quantity: 1 }],
-      guests: [],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_DAY1 }],
     });
     const cancelled = await mockApi.orders.cancel(order.id);
     expect(cancelled.status).toBe('cancelled');
@@ -365,9 +376,9 @@ describe('mock parity', () => {
     await completeProfile();
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
-      buyerTierId: TIER_DAY1,
+      buyerTierId: null,
       items: [{ tierId: TIER_DAY1, quantity: 1 }],
-      guests: [],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_DAY1 }],
     });
     const orders = await mockApi.orders.list(null, 1);
     expect(orders.data[0]?.id).toBe(order.id);
@@ -380,9 +391,9 @@ describe('mock parity', () => {
     await completeProfile();
     const order = await mockApi.orders.create({
       eventId: TULUA_ID,
-      buyerTierId: TIER_DAY1,
+      buyerTierId: null,
       items: [{ tierId: TIER_DAY1, quantity: 1 }],
-      guests: [],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_DAY1 }],
     });
     await mockApi.payments.initiate(order.id);
     advance(16 * 60 * 1000);
