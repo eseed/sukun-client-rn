@@ -1,5 +1,6 @@
-import * as Clarity from '@microsoft/react-native-clarity';
-import { Mixpanel } from 'mixpanel-react-native';
+import type * as ClarityModule from '@microsoft/react-native-clarity';
+import type { Mixpanel } from 'mixpanel-react-native';
+import { hasReactNativeModule } from './nativeModules';
 
 /**
  * The single gate in front of every analytics SDK in the app. Screens never call an SDK
@@ -9,7 +10,12 @@ import { Mixpanel } from 'mixpanel-react-native';
  * silenced events but left session recording running would not be consent.
  *
  * Both SDKs are native modules. A missing or failed native module must degrade rather than
- * crash the app, so every call across the bridge is guarded.
+ * crash the app, so every call across the bridge is guarded — including the module load
+ * itself. Clarity builds a `NativeEventEmitter` as it imports and throws outright when its
+ * native side is absent (a dev client built before the package was added, or Expo Go), and
+ * Metro reports a throw during a module load as a fatal error that no `try` at the call site
+ * can catch. So neither SDK is imported at the top of this file: both are loaded on first use,
+ * and Clarity only once the registry confirms this binary carries it. See `nativeModules.ts`.
  *
  * EU data residency: this project stores EU user data, so Mixpanel talks to
  * `api-eu.mixpanel.com` rather than the default US endpoint.
@@ -26,13 +32,60 @@ let mixpanel: Mixpanel | null = null;
 let initPromise: Promise<Mixpanel | null> | null = null;
 let clarityInitialized = false;
 
+// A separate "looked up" flag rather than an `undefined` sentinel: a load Metro has swallowed
+// returns `undefined` too, and reading that as "not looked up yet" would retry the load, and
+// warn, on every event.
+let clarityLookedUp = false;
+let clarityModule: typeof ClarityModule | null = null;
+let mixpanelLookedUp = false;
+let mixpanelClass: typeof Mixpanel | null = null;
+
+function getClarity(): typeof ClarityModule | null {
+  if (clarityLookedUp) return clarityModule;
+  clarityLookedUp = true;
+
+  // `ClarityEmitter` is the module Clarity turns into a `NativeEventEmitter` while importing,
+  // so it is the one whose absence brings the app down. Leave the package unloaded without it.
+  if (!hasReactNativeModule('ClarityEmitter')) {
+    console.warn('[analytics] no Clarity module in this build, session replay is off');
+    return null;
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    clarityModule = (require('@microsoft/react-native-clarity') as typeof ClarityModule) ?? null;
+  } catch (error) {
+    console.warn('[analytics] Clarity failed to load', error);
+  }
+  return clarityModule;
+}
+
+function getMixpanelClass(): typeof Mixpanel | null {
+  if (mixpanelLookedUp) return mixpanelClass;
+  mixpanelLookedUp = true;
+
+  try {
+    // Mixpanel reads `NativeModules` without dereferencing it, so its import survives a binary
+    // that lacks it and only the calls fail, which `getInstance` already handles.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const loaded = require('mixpanel-react-native') as { Mixpanel: typeof Mixpanel } | undefined;
+    mixpanelClass = loaded?.Mixpanel ?? null;
+  } catch (error) {
+    console.warn('[analytics] Mixpanel failed to load', error);
+  }
+  return mixpanelClass;
+}
+
 async function getInstance(): Promise<Mixpanel | null> {
   if (!enabled) return null;
   if (mixpanel) return mixpanel;
   if (!initPromise) {
     initPromise = (async () => {
       try {
-        const instance = new Mixpanel(MIXPANEL_TOKEN, true);
+        const MixpanelClass = getMixpanelClass();
+        if (!MixpanelClass) return null;
+
+        const instance = new MixpanelClass(MIXPANEL_TOKEN, true);
         await instance.init(false, undefined, MIXPANEL_EU_SERVER_URL);
         mixpanel = instance;
         return instance;
@@ -47,6 +100,9 @@ async function getInstance(): Promise<Mixpanel | null> {
 
 /** Clarity cannot be re-initialized, so the first start initializes and later ones resume. */
 function startClarity(): void {
+  const Clarity = getClarity();
+  if (!Clarity) return;
+
   try {
     if (!clarityInitialized) {
       Clarity.initialize(CLARITY_PROJECT_ID, { logLevel: Clarity.LogLevel.None });
@@ -62,7 +118,9 @@ function startClarity(): void {
 }
 
 function pauseClarity(): void {
-  if (!clarityInitialized) return;
+  const Clarity = getClarity();
+  if (!clarityInitialized || !Clarity) return;
+
   try {
     void Clarity.pause().catch((error: unknown) =>
       console.warn('[analytics] Clarity pause failed', error),
@@ -136,7 +194,8 @@ export function identify(userId: string): void {
     .then((instance) => instance?.identify(userId))
     .catch((error: unknown) => console.warn('[analytics] identify failed', error));
 
-  if (!enabled || !clarityInitialized) return;
+  const Clarity = getClarity();
+  if (!enabled || !clarityInitialized || !Clarity) return;
 
   try {
     void Clarity.setCustomUserId(userId).catch((error: unknown) =>
@@ -162,7 +221,8 @@ export function resetAnalytics(): void {
     .then((instance) => instance?.reset())
     .catch((error: unknown) => console.warn('[analytics] reset failed', error));
 
-  if (!enabled || !clarityInitialized) return;
+  const Clarity = getClarity();
+  if (!enabled || !clarityInitialized || !Clarity) return;
 
   try {
     Clarity.startNewSession(() => undefined);

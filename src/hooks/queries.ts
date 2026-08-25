@@ -541,7 +541,9 @@ export function useClaimTicket() {
  * The rotating entry pass. Refetches on the cadence the server dictates, so a screenshot
  * goes stale (CLAUDE.md rule 3).
  *
- * PENDING BACKEND — served by the mock only; see `EntryPass` in `src/api/types.ts`.
+ * PENDING BACKEND — the live route is wired but not deployed, so it answers 404 until the
+ * backend adds it; the screen reads that as "not issued yet" and this build picks up the real
+ * pass with no rebuild. See `EntryPass` in `src/api/types.ts`.
  */
 export function useEntryPass(
   ticketId: string | undefined,

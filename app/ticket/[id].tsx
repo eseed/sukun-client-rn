@@ -13,7 +13,7 @@ import {
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useClaimTicket, useEntryPass, useTicket } from '../../src/hooks/queries';
-import { messageForError } from '../../src/lib/errors';
+import { isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { colors } from '../../src/theme/tokens';
 
@@ -26,6 +26,11 @@ const QR_SIZE = 200;
  * exposes list / detail / claim only. The mock issues a payload that rotates every 30
  * seconds so the screen, its countdown and its refresh behaviour are all real. See
  * `EntryPass` in `src/api/types.ts` for the shape the endpoint should return.
+ *
+ * Until it lands the live api's call 404s, and the QR panel says the code will appear closer
+ * to the event rather than showing an error. That placeholder is driven entirely by the
+ * response, so the same installed build renders the real rotating QR the moment the endpoint
+ * starts answering: no rebuild, no release.
  *
  * The rotation is what makes a screenshot useless; the selfie is what stops someone else
  * walking in with a shared code (CLAUDE.md rule 3).
@@ -88,12 +93,23 @@ export default function EntryPassScreen() {
   const needsProfile = usageStatus === 'profile_incomplete';
   const unusable = usageStatus === 'voided' || usageStatus === 'refunded';
 
-  const rotation = passQuery.data?.refreshAfterSeconds ?? 30;
+  const pass = passQuery.data;
+  const rotation = pass?.refreshAfterSeconds ?? 30;
+  const hasPass = Boolean(pass?.payload);
+
+  /*
+   * "No pass yet" is not a failure: either the endpoint is not deployed, or the backend has it
+   * and will not mint a code this far out from the event. Both get the placeholder, and a pass
+   * that arrives without a payload is treated the same way.
+   */
+  const passNotIssued =
+    (passQuery.error ? isEntryPassNotIssued(passQuery.error) : false) ||
+    (pass !== undefined && !pass.payload);
 
   // The countdown is derived from the pass's own expiry rather than held in state.
 
-  const secondsLeft = passQuery.data
-    ? Math.max(0, Math.ceil((Date.parse(passQuery.data.expiresAt) - now) / 1000))
+  const secondsLeft = pass
+    ? Math.max(0, Math.ceil((Date.parse(pass.expiresAt) - now) / 1000))
     : rotation;
 
   const venue = ticket.event.venueName ?? '';
@@ -176,6 +192,15 @@ export default function EntryPassScreen() {
                   style={styles.compactState}
                 />
               </View>
+            ) : passNotIssued ? (
+              <View style={styles.passPending}>
+                <ResourceState
+                  status="empty"
+                  emptyTitle="QR Code will show here."
+                  emptyMessage="Check back 2 days before the event."
+                  style={styles.compactState}
+                />
+              </View>
             ) : passQuery.error ? (
               <View style={styles.qrPlaceholder}>
                 <ResourceState
@@ -187,20 +212,23 @@ export default function EntryPassScreen() {
               </View>
             ) : (
               <QRCode
-                value={passQuery.data?.payload ?? ''}
+                value={pass?.payload ?? ''}
                 size={QR_SIZE}
                 color={colors.black}
                 backgroundColor={colors.creme}
               />
             )}
 
-            <View style={styles.refreshRow}>
-              <View style={styles.refreshTrack}>
-                <View style={[styles.refreshFill, { flex: progress }]} />
-                <View style={{ flex: 1 - progress }} />
+            {/* Nothing is rotating until there is a code, so neither is the countdown. */}
+            {hasPass ? (
+              <View style={styles.refreshRow}>
+                <View style={styles.refreshTrack}>
+                  <View style={[styles.refreshFill, { flex: progress }]} />
+                  <View style={{ flex: 1 - progress }} />
+                </View>
+                <Text variant="metaSm">Refreshes in {secondsLeft}s</Text>
               </View>
-              <Text variant="metaSm">Refreshes in {secondsLeft}s</Text>
-            </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -213,7 +241,7 @@ export default function EntryPassScreen() {
           <Text style={styles.detailValue}>{venue}</Text>
         </View>
 
-        {!needsClaim && !needsSelfie && !needsProfile && !unusable ? (
+        {hasPass ? (
           <Text style={styles.footnote}>
             This code regenerates every ~{rotation} seconds. A screenshot won&apos;t get anyone in.
           </Text>
@@ -271,6 +299,12 @@ const styles = StyleSheet.create({
   qrPlaceholder: {
     width: QR_SIZE,
     height: QR_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  passPending: {
+    alignSelf: 'stretch',
+    minHeight: QR_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },

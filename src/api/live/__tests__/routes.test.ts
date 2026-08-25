@@ -1,4 +1,4 @@
-import type { AccountDeletionPreview, OrderDetail, OrderSummary } from '../../types';
+import type { AccountDeletionPreview, EntryPass, OrderDetail, OrderSummary } from '../../types';
 import { liveApi } from '../index';
 import { request } from '../http';
 
@@ -56,6 +56,20 @@ describe('live order and account routes', () => {
     expect(requestMock.mock.calls[3]?.[1]).toMatchObject({
       query: { cursor: 'cursor-1', limit: 20 },
     });
+  });
+
+  /*
+   * The entry pass has no route on staging yet. It is still called rather than refused in the
+   * client so the endpoint can light up without an app release — which only holds while the
+   * path and the `EntryPass` shape stay as asserted here.
+   */
+  it('asks the backend for the entry pass instead of refusing locally', async () => {
+    const pass = { ticketId: 'ticket-1', payload: 'SKN1.x' } as EntryPass;
+    requestMock.mockResolvedValueOnce(pass);
+
+    await expect(liveApi.tickets.entryPass('ticket-1')).resolves.toBe(pass);
+
+    expect(requestMock).toHaveBeenCalledWith('mobile/tickets/ticket-1/entry-pass');
   });
 
   it('uses the account lifecycle routes and wire names', async () => {

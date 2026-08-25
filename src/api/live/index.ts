@@ -11,6 +11,7 @@ import type {
   EventMeta,
   EmailVerificationResult,
   EmailVerificationSent,
+  EntryPass,
   GuestValidationInput,
   ListEventsQuery,
   OrderDetail,
@@ -35,8 +36,8 @@ import { normalizePhone } from '../../lib/phone';
 
 /**
  * Live backend implementation. Endpoint paths and DTO shapes are verified against the staging
- * OpenAPI schema (`GET /api/docs-json` on the deployed backend) — see each method. Two methods
- * have no endpoint yet and throw a clearly-labelled error rather than guessing a URL — see
+ * OpenAPI schema (`GET /api/docs-json` on the deployed backend) — see each method. One method
+ * has no endpoint yet and throws a clearly-labelled error rather than guessing a URL — see
  * `NOT_IMPLEMENTED` below.
  */
 
@@ -333,10 +334,14 @@ export const liveApi: SukunApi = {
       ),
 
     /**
-     * PENDING BACKEND — the rotating entry pass has no endpoint. `MobileTicketsController`
-     * exposes list / detail / claim only. Expected shape is `EntryPass` in `../types`.
+     * PENDING BACKEND — `MobileTicketsController` exposes list / detail / claim only, so this
+     * route answers 404 today. It is wired anyway rather than thrown locally on purpose: the
+     * day the backend serves it at this path, installed apps start rendering real QRs with no
+     * new build. Until then the 404 reaches the screen as `isEntryPassNotIssued`, which shows
+     * the "check back" placeholder instead of an error. Response shape: `EntryPass` in
+     * `../types` — the endpoint must match that contract, path included.
      */
-    entryPass: () => notImplemented('Rotating entry pass'),
+    entryPass: (ticketId) => request<EntryPass>(`mobile/tickets/${ticketId}/entry-pass`),
   },
 
   account: {

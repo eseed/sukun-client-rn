@@ -1,4 +1,10 @@
-import { getCalendars, getLocales } from 'expo-localization';
+import type { getCalendars, getLocales } from 'expo-localization';
+import { hasExpoModule } from './nativeModules';
+
+type LocalizationModule = {
+  getLocales: typeof getLocales;
+  getCalendars: typeof getCalendars;
+};
 
 /** EU + EEA member states, plus UK (UK GDPR) and Switzerland (FADP) — all GDPR-equivalent. */
 const GDPR_EQUIVALENT_REGION_CODES = new Set([
@@ -51,7 +57,20 @@ const CALIFORNIA_TIMEZONE_PROXIES = new Set(['America/Los_Angeles', 'America/Tij
  * is resolved would itself send data off-device pre-consent.
  */
 export function requiresPrivacyConsentGate(): boolean {
+  // Loaded here rather than imported at the top of the file, and only once the binary is known
+  // to carry it: expo-localization throws while it imports when its native module is missing,
+  // and Metro reports that throw as a fatal error the `catch` below never sees. This module is
+  // pulled in by the root layout, so an unguarded import took the app down on launch. See
+  // `nativeModules.ts` for why the registry is consulted first.
+  if (!hasExpoModule('ExpoLocalization')) {
+    console.warn('[privacy] no localization module in this build, asking for consent');
+    return true;
+  }
+
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getLocales, getCalendars } = require('expo-localization') as LocalizationModule;
+
     const region = getLocales()[0]?.regionCode ?? null;
     if (region && GDPR_EQUIVALENT_REGION_CODES.has(region)) return true;
     if (region === 'US') {
@@ -59,8 +78,9 @@ export function requiresPrivacyConsentGate(): boolean {
       if (timeZone && CALIFORNIA_TIMEZONE_PROXIES.has(timeZone)) return true;
     }
     return false;
-  } catch {
+  } catch (error) {
     // Detection failing is not a signal that consent is safe to skip — fail toward asking.
+    console.warn('[privacy] region detection unavailable, asking for consent', error);
     return true;
   }
 }

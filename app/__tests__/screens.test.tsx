@@ -1,5 +1,5 @@
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
-import { TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
+import { SOUND_BATH_ID, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
 import { useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
@@ -233,7 +233,7 @@ describe('09 Guests', () => {
 
     expect(screen.getByText('Bringing anyone?')).toBeTruthy();
     expect(
-      screen.getByText('You bought 2 tickets. Attach 1 guest from your contacts.'),
+      screen.getByText('Your order has 2 tickets. Attach 1 guest from your contacts.'),
     ).toBeTruthy();
     expect(screen.getByText('0 of 1 picked')).toBeTruthy();
     expect(screen.getByText('Not in your contacts?')).toBeTruthy();
@@ -246,6 +246,84 @@ describe('09 Guests', () => {
 
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
     expect(screen.getByText('010 22334455')).toBeTruthy();
+  });
+
+  /**
+   * The buyer holds no ticket for this event, so their single ticket is their own and there
+   * is no guest slot: the screen offers tickets for friends rather than a dead end.
+   */
+  it('lets a single-ticket buyer bring friends, or continue alone', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+
+    renderWithProviders(<GuestsScreen />);
+
+    expect(screen.getByText('Go with friends')).toBeTruthy();
+    expect(screen.getByText('1 ticket')).toBeTruthy();
+    expect(screen.queryByText('Not in your contacts?')).toBeNull();
+    expect(screen.getByText('Continue')).toBeTruthy();
+
+    // The ceiling comes from the event, so the stepper stays put until that lands.
+    const plus = () => screen.getByLabelText('Add one ticket');
+    await waitFor(() => expect(plus().props.accessibilityState?.disabled).toBe(false));
+    fireEvent.press(plus());
+
+    expect(screen.getByText('2 tickets')).toBeTruthy();
+    expect(screen.getByText('0 of 1 picked')).toBeTruthy();
+    expect(screen.getByText('Not in your contacts?')).toBeTruthy();
+
+    // And back down: taking the ticket off returns the screen to the single-ticket state.
+    fireEvent.press(screen.getByLabelText('Remove one ticket'));
+
+    expect(screen.getByText('1 ticket')).toBeTruthy();
+    expect(screen.queryByText('0 of 1 picked')).toBeNull();
+  });
+
+  /**
+   * One usable ticket per phone per event, so a buyer who already holds one cannot buy a
+   * second for themselves. Every ticket in the order is a guest's, including a lone one, and
+   * the order api refuses an allocation that does not add up. The screen has to say so here,
+   * while there is still somebody to pick.
+   */
+  it('makes a buyer who already holds a ticket name the guest, even for one ticket', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<GuestsScreen />);
+
+    // The seeded user already holds a Tulua ticket, so their single ticket is a guest slot.
+    await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
+    expect(
+      screen.getByText(
+        'You already have a ticket for this event, so this ticket is for a guest. Attach them from your contacts.',
+      ),
+    ).toBeTruthy();
+    // Nothing here is theirs to keep, so there are no tickets to add for friends either.
+    expect(screen.queryByText('Go with friends')).toBeNull();
+
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'You already have a ticket for this event, so this one is for a guest. Pick who it is for.',
+        ),
+      ).toBeTruthy(),
+    );
+    expect(mockRouter.push).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
+    fireEvent.press(screen.getByText('Nour Hassan'));
+
+    await waitFor(() => expect(screen.getByText('1 of 1 picked')).toBeTruthy());
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() =>
+      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${TULUA_ID}`),
+    );
   });
 });
 
@@ -409,6 +487,53 @@ describe('14 Entry pass', () => {
     // The pass shows the ticket's full venue string, as the design draws it.
     expect(screen.getByText('Tunis Village, Fayoum')).toBeTruthy();
     expect(screen.getByText(/This code regenerates every ~/)).toBeTruthy();
+  });
+
+  /*
+   * The entry-pass endpoint is not deployed, so the live api's request 404s. That is not
+   * something the holder can retry, and the panel must not claim a code is rotating when there
+   * is none. The same build renders the QR above as soon as the endpoint answers.
+   */
+  it('says the code will appear later while the endpoint is not serving a pass', async () => {
+    await signInAndComplete();
+    const { data } = await mockApi.tickets.list();
+    mockParams.id = data[0]!.id;
+    const notDeployed = Object.assign(new Error('Cannot GET'), { code: 'UNKNOWN', status: 404 });
+    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(notDeployed);
+
+    renderWithProviders(<EntryPassScreen />);
+
+    await waitFor(() => expect(screen.getByText('QR Code will show here.')).toBeTruthy());
+    expect(screen.getByText('Check back 2 days before the event.')).toBeTruthy();
+    expect(screen.queryByText('Try again')).toBeNull();
+    expect(screen.queryByText(/Refreshes in/)).toBeNull();
+    expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
+    // The ticket's own details still belong on the screen.
+    expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+
+    entryPass.mockRestore();
+  });
+
+  // A pass that genuinely failed to load is still an error the holder can retry.
+  it('keeps the retry state for a real entry pass failure', async () => {
+    await signInAndComplete();
+    const { data } = await mockApi.tickets.list();
+    mockParams.id = data[0]!.id;
+    const serverError = Object.assign(new Error('boom'), {
+      code: 'INTERNAL_SERVER_ERROR',
+      status: 500,
+    });
+    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(serverError);
+
+    renderWithProviders(<EntryPassScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText('Something went wrong on our side. Try again in a moment.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Try again')).toBeTruthy();
+    expect(screen.queryByText('QR Code will show here.')).toBeNull();
+
+    entryPass.mockRestore();
   });
 });
 

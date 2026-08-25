@@ -62,9 +62,20 @@ jest.mock('@microsoft/react-native-clarity', () => ({
   LogLevel: { None: 'None', Verbose: 'Verbose' },
 }));
 
+// `src/lib/nativeModules.ts` refuses to load a package whose native module is not in the
+// binary, and it reads the same registries at test time. So every package mocked here also
+// needs its native module registered, or the code under test will skip the mock as missing.
+const { NativeModules } = require('react-native');
+NativeModules.Clarity = NativeModules.Clarity ?? {};
+NativeModules.ClarityEmitter = NativeModules.ClarityEmitter ?? {};
+NativeModules.MixpanelReactNative = NativeModules.MixpanelReactNative ?? {};
+if (globalThis.expo?.modules) {
+  globalThis.expo.modules.ExpoLocalization = globalThis.expo.modules.ExpoLocalization ?? {};
+}
+
 jest.mock('expo-localization', () => ({
-  getLocales: () => [{ regionCode: 'EG' }],
-  getCalendars: () => [{ timeZone: 'Africa/Cairo' }],
+  getLocales: jest.fn(() => [{ regionCode: 'EG' }]),
+  getCalendars: jest.fn(() => [{ timeZone: 'Africa/Cairo' }]),
 }));
 
 jest.mock(

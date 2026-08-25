@@ -10,12 +10,13 @@ import {
   CheckCircle,
   CountryPrefix,
   CountrySheet,
+  QuantityStepper,
   Screen,
   StepLabel,
   Text,
 } from '../../src/components/ui';
 import { useContacts, type PhoneContact } from '../../src/hooks/useContacts';
-import { useValidateGuests } from '../../src/hooks/queries';
+import { useEvent, useValidateGuests } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForCode, messageForError } from '../../src/lib/errors';
 import {
@@ -47,6 +48,8 @@ export default function GuestsScreen() {
   const access = useCheckoutAccess();
 
   const quantity = useCheckoutStore((s) => s.quantity);
+  const tierId = useCheckoutStore((s) => s.tierId);
+  const setQuantity = useCheckoutStore((s) => s.setQuantity);
   const guests = useCheckoutStore((s) => s.guests);
   const toggleGuest = useCheckoutStore((s) => s.toggleGuest);
   const addGuest = useCheckoutStore((s) => s.addGuest);
@@ -55,6 +58,9 @@ export default function GuestsScreen() {
   const validateGuests = useValidateGuests();
 
   const [manual, setManual] = useState('');
+  // Sticky once they touch the stepper, so adding a ticket here does not hide the control
+  // that would take it back off. Arriving with more than one ticket leaves the screen as it was.
+  const [ticketsAdjusted, setTicketsAdjusted] = useState(false);
   const [manualCountry, setManualCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
   const [countrySheetOpen, setCountrySheetOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +81,15 @@ export default function GuestsScreen() {
   const slots = guestSlots(quantity, !holdsTicket);
   const picked = guests.length;
   const full = picked >= slots;
+
+  // The same ceiling step 1 enforces: the event's per-order cap, and what the tier has left.
+  // Until the event loads there is no ceiling to trust, so the stepper cannot go up.
+  const { data: event } = useEvent(validEventId);
+  const tier = event?.tiers.find((item) => item.id === tierId);
+  const quantityLimit = event
+    ? Math.min(event.maxTicketsPerOrder, tier?.quantityRemaining ?? event.maxTicketsPerOrder)
+    : quantity;
+  const showTicketPicker = slots === 0 || ticketsAdjusted;
 
   const selectedNumbers = useMemo(() => new Set(guests.map((g) => g.phoneNumber)), [guests]);
 
@@ -110,6 +125,20 @@ export default function GuestsScreen() {
     setError(null);
     if (!validEventId) {
       setError('This checkout link is incomplete. Go back and choose an event again.');
+      return;
+    }
+
+    // Every ticket that is not the buyer's own belongs to someone, and the order api refuses
+    // an allocation that does not add up. Holding it here keeps that refusal from landing on
+    // the review screen, a step too late to pick anybody.
+    if (guests.length < slots) {
+      setError(
+        holdsTicket
+          ? slots === 1
+            ? 'You already have a ticket for this event, so this one is for a guest. Pick who it is for.'
+            : `You already have a ticket for this event, so every ticket here is a guest's. Pick ${slots}.`
+          : `Attach a guest to each ticket beyond your own. ${picked} of ${slots} picked.`,
+      );
       return;
     }
 
@@ -174,15 +203,38 @@ export default function GuestsScreen() {
 
       <Text variant="bodyMuted" style={styles.blurb}>
         {slots === 0
-          ? 'You bought 1 ticket, so there is no guest to add. Continue to review.'
+          ? 'Your order has 1 ticket, and it is yours. Continue to review, or add tickets for the people coming with you.'
           : holdsTicket
-            ? `You already have a ticket for this event, so all ${slots} ${
-                slots === 1 ? 'ticket is' : 'tickets are'
-              } for your guests. Attach ${slots === 1 ? 'them' : 'them all'} from your contacts.`
-            : `You bought ${quantity} tickets. Attach ${slots} ${
+            ? slots === 1
+              ? 'You already have a ticket for this event, so this ticket is for a guest. Attach them from your contacts.'
+              : `You already have a ticket for this event, so all ${slots} tickets are for your guests. Attach them all from your contacts.`
+            : `Your order has ${quantity} tickets. Attach ${slots} ${
                 slots === 1 ? 'guest' : 'guests'
               } from your contacts.`}
       </Text>
+
+      {showTicketPicker ? (
+        <View style={styles.friends}>
+          <Text style={styles.listHeaderLabel}>Go with friends</Text>
+          <Text variant="metaSm" color={colors.textMuted}>
+            Every ticket you add is a guest you attach by phone number.
+          </Text>
+          <View style={styles.friendsRow}>
+            <Text style={styles.friendsCount}>
+              {quantity} {quantity === 1 ? 'ticket' : 'tickets'}
+            </Text>
+            <QuantityStepper
+              value={quantity}
+              min={1}
+              max={quantityLimit}
+              onChange={(next) => {
+                setTicketsAdjusted(true);
+                setQuantity(next);
+              }}
+            />
+          </View>
+        </View>
+      ) : null}
 
       {slots > 0 ? (
         <>
@@ -341,6 +393,25 @@ const styles = StyleSheet.create({
   },
   blurb: {
     marginBottom: 20,
+  },
+  friends: {
+    borderWidth: 1.5,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface,
+    borderRadius: 12,
+    padding: 16,
+    gap: 10,
+    marginBottom: 20,
+  },
+  friendsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  friendsCount: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textPrimary,
   },
   listHeader: {
     flexDirection: 'row',

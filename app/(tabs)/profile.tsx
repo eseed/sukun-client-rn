@@ -88,7 +88,13 @@ export default function ProfileScreen() {
             <ListRow label="Privacy policy & terms" />
           </Pressable>
 
-          <Pressable onPress={() => void signOut()} accessibilityRole="button">
+          <Pressable
+            onPress={async () => {
+              await signOut();
+              router.replace('/(onboarding)/welcome');
+            }}
+            accessibilityRole="button"
+          >
             <ListRow label="Sign out" />
           </Pressable>
 

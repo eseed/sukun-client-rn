@@ -92,6 +92,10 @@ const styles = StyleSheet.create({
   },
   title: {
     flexShrink: 1,
+    // The display face is italic, so the last glyph leans past the width the text box is
+    // measured at and gets clipped: "Bringing anyone?" lost the right half of its question
+    // mark. The padding is inside the box, which gives the overhang somewhere to land.
+    paddingRight: 6,
   },
   back: {
     width: 40,
