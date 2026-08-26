@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
 import { SOUND_BATH_ID, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
 import { useAuthStore } from '../../src/stores/auth';
@@ -30,6 +31,31 @@ import GalleryScreen from '../gallery';
  */
 
 const mockPaymob = jest.requireMock('paymob-reactnative').default as Record<string, jest.Mock>;
+
+const mockContacts = jest.requireMock('expo-contacts') as {
+  requestPermissionsAsync: jest.Mock;
+  getPermissionsAsync: jest.Mock;
+  Contact: { getAllDetails: jest.Mock };
+};
+
+/** Both entry points answer the same way, since the app asks once and re-checks silently. */
+function contactsPermission(response: {
+  status: string;
+  canAskAgain?: boolean;
+  accessPrivileges?: string;
+}) {
+  mockContacts.requestPermissionsAsync.mockResolvedValue(response);
+  mockContacts.getPermissionsAsync.mockResolvedValue(response);
+}
+
+/** Stands in for the app being brought back from Settings. */
+async function returnToForeground() {
+  const calls = (AppState.addEventListener as jest.Mock).mock.calls;
+  const listener = calls[calls.length - 1]?.[1] as ((state: string) => void) | undefined;
+  await act(async () => {
+    listener?.('active');
+  });
+}
 
 const mockParams: Record<string, string> = {};
 const mockRouter = {
@@ -83,6 +109,7 @@ async function signInAndComplete() {
 }
 
 beforeEach(() => {
+  contactsPermission({ status: 'granted' });
   resetMockState();
   mockConfig.latencyMs = 0;
   for (const key of Object.keys(mockParams)) delete mockParams[key];
@@ -233,11 +260,10 @@ describe('09 Guests', () => {
 
     expect(screen.getByText('Bringing anyone?')).toBeTruthy();
     expect(
-      screen.getByText('Your order has 2 tickets. Attach 1 guest from your contacts.'),
+      screen.getByText('1 of your 2 tickets is for a guest.'),
     ).toBeTruthy();
     expect(screen.getByText('0 of 1 picked')).toBeTruthy();
-    expect(screen.getByText('Not in your contacts?')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Enter phone number')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Add by phone number')).toBeTruthy();
 
     // Opening checkout must not touch the address book; the button is the only way in.
     expect(screen.queryByText('Nour Hassan')).toBeNull();
@@ -285,7 +311,7 @@ describe('09 Guests', () => {
 
     expect(screen.getByText('Go with friends')).toBeTruthy();
     expect(screen.getByText('1 ticket')).toBeTruthy();
-    expect(screen.queryByText('Not in your contacts?')).toBeNull();
+    expect(screen.queryByPlaceholderText('Add by phone number')).toBeNull();
     expect(screen.getByText('Continue')).toBeTruthy();
 
     // The ceiling comes from the event, so the stepper stays put until that lands.
@@ -295,7 +321,7 @@ describe('09 Guests', () => {
 
     expect(screen.getByText('2 tickets')).toBeTruthy();
     expect(screen.getByText('0 of 1 picked')).toBeTruthy();
-    expect(screen.getByText('Not in your contacts?')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Add by phone number')).toBeTruthy();
 
     // And back down: taking the ticket off returns the screen to the single-ticket state.
     fireEvent.press(screen.getByLabelText('Remove one ticket'));
@@ -321,7 +347,7 @@ describe('09 Guests', () => {
     await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
     expect(
       screen.getByText(
-        'You already have a ticket for this event, so this ticket is for a guest. Attach them from your contacts.',
+        'You already have a ticket, so this one is for a guest.',
       ),
     ).toBeTruthy();
     // Nothing here is theirs to keep, so there are no tickets to add for friends either.
@@ -348,6 +374,145 @@ describe('09 Guests', () => {
     await waitFor(() =>
       expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${TULUA_ID}`),
     );
+  });
+
+  /**
+   * The address book is a convenience, never the thing holding the order together. A number
+   * typed by hand has to be attachable, visible and removable with contacts switched off.
+   */
+  it('attaches and removes a guest with contacts refused outright', async () => {
+    contactsPermission({ status: 'denied', canAskAgain: false });
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+    useCheckoutStore.getState().setQuantity(2);
+
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Open Settings')).toBeTruthy());
+    // Asking again is pointless once the OS has stopped offering, so it is not offered.
+    expect(screen.queryByText('Add from Contacts')).toBeNull();
+
+    fireEvent.changeText(screen.getByLabelText('Guest phone number'), '1022334455');
+    fireEvent.press(screen.getByText('Add'));
+
+    expect(screen.getByText('1 of 1 picked')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Remove 010 22334455'));
+    expect(screen.getByText('0 of 1 picked')).toBeTruthy();
+  });
+
+  /**
+   * Nothing tells the app that the switch was flipped in Settings, so coming back to the
+   * foreground is what has to notice. Without this the Settings button is a dead end.
+   */
+  it('recovers the contact list after access is granted in Settings', async () => {
+    contactsPermission({ status: 'denied', canAskAgain: false });
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+    useCheckoutStore.getState().setQuantity(2);
+
+    renderWithProviders(<GuestsScreen />);
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Open Settings')).toBeTruthy());
+
+    contactsPermission({ status: 'granted' });
+    await returnToForeground();
+
+    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
+    expect(screen.queryByText('Open Settings')).toBeNull();
+  });
+
+  /**
+   * "One of these guests already has a ticket" is useless if it does not say which. The
+   * refusal is pinned to that guest's row so they can be taken off and replaced.
+   */
+  it('names the guest the server refuses, and lets them be swapped out', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    // The seeded buyer already holds a Tulua ticket, so their one ticket is a guest's. This
+    // draft carries a number the server will refuse: the buyer's own.
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    useCheckoutStore.getState().addGuest({
+      phoneNumber: '+201012345678',
+      name: 'My Other Line',
+      fromContacts: false,
+    });
+
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByText('1 of 1 picked')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('Continue'));
+    await waitFor(() =>
+      expect(
+        screen.getAllByText("That's your own number. Your ticket is already included.").length,
+      ).toBeGreaterThan(1),
+    );
+    expect(mockRouter.push).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByLabelText('Remove My Other Line'));
+    expect(screen.getByText('0 of 1 picked')).toBeTruthy();
+    expect(
+      screen.queryByText("That's your own number. Your ticket is already included."),
+    ).toBeNull();
+
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
+    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() =>
+      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${TULUA_ID}`),
+    );
+  });
+
+  /** Filling the last slot must not trap the order: swapping someone out has to work. */
+  it('explains a full order instead of going quiet, and swaps a guest out', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+    useCheckoutStore.getState().setQuantity(2);
+
+    renderWithProviders(<GuestsScreen />);
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
+
+    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
+    expect(screen.getByText('1 of 1 picked')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Add Dana Ward as a guest'));
+    expect(
+      screen.getByText(
+        'You have 1 guest slot on this order. Remove someone first, or add a ticket.',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Remove Nour Hassan'));
+    fireEvent.press(screen.getByLabelText('Add Dana Ward as a guest'));
+    expect(screen.getByText('1 of 1 picked')).toBeTruthy();
+  });
+
+  /** An address book of any real size is only usable through search. */
+  it('narrows a long contact list by name', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+    useCheckoutStore.getState().setQuantity(2);
+
+    renderWithProviders(<GuestsScreen />);
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
+
+    fireEvent.changeText(screen.getByLabelText('Search contacts'), 'dana');
+
+    expect(screen.getByText('Dana Ward')).toBeTruthy();
+    expect(screen.queryByText('Nour Hassan')).toBeNull();
+
+    fireEvent.press(screen.getByLabelText('Clear contact search'));
+    expect(screen.getByText('Nour Hassan')).toBeTruthy();
   });
 });
 
@@ -552,7 +717,9 @@ describe('14 Entry pass', () => {
     renderWithProviders(<EntryPassScreen />);
 
     await waitFor(() =>
-      expect(screen.getByText('Something went wrong on our side. Try again in a moment.')).toBeTruthy(),
+      expect(
+        screen.getByText('Something went wrong on our side. Try again in a moment.'),
+      ).toBeTruthy(),
     );
     expect(screen.getByText('Try again')).toBeTruthy();
     expect(screen.queryByText('QR Code will show here.')).toBeNull();

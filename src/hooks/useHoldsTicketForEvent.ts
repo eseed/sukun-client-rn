@@ -20,5 +20,11 @@ export function useHoldsTicketForEvent(eventId: string | null): {
     return (ticketsQuery.data?.data ?? []).some((ticket) => ticket.event.id === eventId);
   }, [eventId, ticketsQuery.data]);
 
-  return { holdsTicket, isPending: ticketsQuery.isPending };
+  // `isPending` stays true forever for a query that is switched off (nobody signed in), which
+  // would leave the guests step's Continue button disabled with nothing to wait for. Only a
+  // fetch that is actually in flight counts as undecided.
+  return {
+    holdsTicket,
+    isPending: ticketsQuery.isPending && ticketsQuery.fetchStatus !== 'idle',
+  };
 }

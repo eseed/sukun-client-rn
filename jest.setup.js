@@ -22,10 +22,32 @@ jest.mock('expo-font', () => ({
   isLoaded: () => true,
 }));
 
+/**
+ * The real `AppState` opens a native event subscription the moment it is touched, and under
+ * Jest nothing ever closes it: the runner finishes the suite and then hangs forever. The
+ * contacts hook only needs the listener contract, so this stands in for it.
+ */
+jest.mock('react-native/Libraries/AppState/AppState', () => ({
+  __esModule: true,
+  default: {
+    currentState: 'active',
+    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+    removeEventListener: jest.fn(),
+  },
+}));
+
 jest.mock('expo-contacts', () => ({
   requestPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
-  Contact: { getAllDetails: jest.fn(async () => []) },
+  // Never raises a sheet, which is what the hook uses for every background re-check.
+  getPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
+  Contact: {
+    getAllDetails: jest.fn(async () => []),
+    presentAccessPicker: jest.fn(async () => []),
+  },
   ContactField: { FULL_NAME: 'fullName', PHONES: 'phones' },
+  addContactsChangeListener: jest.fn(() => ({ remove: jest.fn() })),
+  // iOS 18 only, so it reports itself unavailable and never renders under test.
+  ContactAccessButton: { isAvailable: () => false },
 }));
 
 jest.mock('expo-camera', () => ({

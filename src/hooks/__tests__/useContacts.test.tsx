@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import { PermissionStatus } from 'expo-modules-core';
 import * as Contacts from 'expo-contacts';
 import type { ReactNode } from 'react';
@@ -11,14 +12,22 @@ jest.mock('expo-contacts', () => ({
   ContactField: { FULL_NAME: 'fullName', PHONES: 'phones' },
   Contact: { getAllDetails: jest.fn() },
   requestPermissionsAsync: jest.fn(),
+  getPermissionsAsync: jest.fn(),
+  addContactsChangeListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
 
 const requestPermissionsMock = Contacts.requestPermissionsAsync as jest.MockedFunction<
   typeof Contacts.requestPermissionsAsync
 >;
+const getPermissionsMock = Contacts.getPermissionsAsync as jest.MockedFunction<
+  typeof Contacts.getPermissionsAsync
+>;
 const getAllDetailsMock = Contacts.Contact.getAllDetails as jest.MockedFunction<
   typeof Contacts.Contact.getAllDetails
 >;
+
+/** Lets a test drive the foreground event the hook re-checks the permission on. */
+let foreground: ((state: AppStateStatus) => void) | null = null;
 
 function wrapper({ children }: { children: ReactNode }) {
   return (
@@ -30,21 +39,30 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 
-function granted() {
-  requestPermissionsMock.mockResolvedValue({
-    status: PermissionStatus.GRANTED,
+function permission(
+  status: PermissionStatus,
+  extra: Partial<Contacts.ContactsPermissionResponse> = {},
+): Contacts.ContactsPermissionResponse {
+  return {
+    status,
     expires: 'never',
-    granted: true,
+    granted: status === PermissionStatus.GRANTED,
     canAskAgain: true,
-  });
+    ...extra,
+  };
 }
 
-/** Nothing is read until the guest picker asks, so every case has to drive `load()` first. */
+function answer(response: Contacts.ContactsPermissionResponse) {
+  requestPermissionsMock.mockResolvedValue(response);
+  getPermissionsMock.mockResolvedValue(response);
+}
+
+/** Nothing is read until the guest picker asks, so every case has to drive `request()` first. */
 async function renderLoaded() {
   const rendered = renderHook(() => useContacts(), { wrapper });
 
   await act(async () => {
-    rendered.result.current.load();
+    rendered.result.current.request();
   });
   await waitFor(() => expect(rendered.result.current.loading).toBe(false));
 
@@ -53,16 +71,20 @@ async function renderLoaded() {
 
 describe('contacts hook', () => {
   beforeEach(() => {
-    requestPermissionsMock.mockResolvedValue({
-      status: PermissionStatus.DENIED,
-      expires: 'never',
-      granted: false,
-      canAskAgain: true,
-    });
+    foreground = null;
+    // Stubbed globally in jest.setup.js; this only reaches in to keep hold of the listener.
+    (AppState.addEventListener as jest.Mock).mockImplementation(
+      (_type: string, listener: (state: AppStateStatus) => void) => {
+        foreground = listener;
+        return { remove: jest.fn() };
+      },
+    );
+    answer(permission(PermissionStatus.DENIED));
     getAllDetailsMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
   });
 
@@ -72,23 +94,48 @@ describe('contacts hook', () => {
     await waitFor(() => expect(rendered.result.current.loading).toBe(false));
 
     expect(requestPermissionsMock).not.toHaveBeenCalled();
+    expect(getPermissionsMock).not.toHaveBeenCalled();
     expect(getAllDetailsMock).not.toHaveBeenCalled();
-    expect(rendered.result.current.permission).toBeNull();
+    expect(rendered.result.current.access).toBe('unasked');
   });
 
   it('returns no fabricated contacts when permission is denied', async () => {
     const rendered = await renderLoaded();
 
     expect(rendered.result.current.contacts).toEqual([]);
-    expect(rendered.result.current.permission).toBe('denied');
+    expect(rendered.result.current.access).toBe('denied');
+  });
+
+  /**
+   * A refusal the OS will not raise again is a different screen: asking a second time does
+   * nothing, so the only honest offer is Settings.
+   */
+  it('separates a refusal that can be asked again from one that cannot', async () => {
+    answer(permission(PermissionStatus.DENIED, { canAskAgain: false }));
+    const rendered = await renderLoaded();
+
+    expect(rendered.result.current.access).toBe('blocked');
+  });
+
+  /** iOS 18 hands over a chosen few. It reads fine, it just has more to give. */
+  it('reports limited access as its own state, with a way to widen it', async () => {
+    answer(permission(PermissionStatus.GRANTED, { accessPrivileges: 'limited' }));
+    getAllDetailsMock.mockResolvedValue([
+      { id: '1', fullName: 'Nour Hassan', phones: [{ id: 'p1', number: '01022334455' }] },
+    ] as never);
+
+    const rendered = await renderLoaded();
+
+    expect(rendered.result.current.access).toBe('limited');
+    expect(rendered.result.current.contacts).toHaveLength(1);
   });
 
   it('returns no fabricated contacts when the address book is empty', async () => {
-    granted();
+    answer(permission(PermissionStatus.GRANTED));
     const rendered = await renderLoaded();
 
     expect(rendered.result.current.contacts).toEqual([]);
-    expect(rendered.result.current.permission).toBe('granted');
+    expect(rendered.result.current.access).toBe('full');
   });
 
   /**
@@ -97,7 +144,7 @@ describe('contacts hook', () => {
    * empty picker. This one fails unless real contacts actually come back mapped.
    */
   it('maps mobile numbers out of the address book, from any country', async () => {
-    granted();
+    answer(permission(PermissionStatus.GRANTED));
     getAllDetailsMock.mockResolvedValue([
       { id: '1', fullName: 'Yasmin El Sayed', phones: [{ id: 'p1', number: '01012345678' }] },
       { id: '2', fullName: 'Omar Farouk', phones: [{ id: 'p2', number: '+20 100 111 2233' }] },
@@ -105,11 +152,14 @@ describe('contacts hook', () => {
       { id: '3', fullName: 'Dana Ward', phones: [{ id: 'p3', number: '+1 (213) 373-4253' }] },
       // Not a mobile anywhere — must not appear at all.
       { id: '4', fullName: 'Landline Only', phones: [{ id: 'p4', number: '0223456789' }] },
+      // A malformed entry must cost only itself, never the whole list.
+      null,
+      { id: '5', fullName: 'No Phones', phones: null },
     ] as never);
 
     const rendered = await renderLoaded();
 
-    expect(rendered.result.current.permission).toBe('granted');
+    expect(rendered.result.current.access).toBe('full');
     expect(rendered.result.current.contacts).toEqual([
       { id: '3:+12133734253', name: 'Dana Ward', phoneNumber: '+12133734253' },
       { id: '2:+201001112233', name: 'Omar Farouk', phoneNumber: '+201001112233' },
@@ -123,6 +173,57 @@ describe('contacts hook', () => {
     const rendered = await renderLoaded();
 
     expect(rendered.result.current.contacts).toEqual([]);
-    expect(rendered.result.current.permission).toBe('error');
+    expect(rendered.result.current.access).toBe('unavailable');
+  });
+
+  /**
+   * The whole point of the Settings button: nothing tells the app the switch was flipped, so
+   * coming back to the foreground has to be what re-reads it.
+   */
+  it('picks up access granted in Settings when the app comes back', async () => {
+    answer(permission(PermissionStatus.DENIED, { canAskAgain: false }));
+    const rendered = await renderLoaded();
+    expect(rendered.result.current.access).toBe('blocked');
+
+    answer(permission(PermissionStatus.GRANTED));
+    getAllDetailsMock.mockResolvedValue([
+      { id: '1', fullName: 'Nour Hassan', phones: [{ id: 'p1', number: '01022334455' }] },
+    ] as never);
+
+    await act(async () => {
+      foreground?.('active');
+    });
+
+    await waitFor(() => expect(rendered.result.current.access).toBe('full'));
+    expect(rendered.result.current.contacts).toHaveLength(1);
+  });
+
+  /** Coming back to the app must never be what raises a permission sheet. */
+  it('re-checks silently, without asking the OS again', async () => {
+    answer(permission(PermissionStatus.DENIED));
+    const rendered = await renderLoaded();
+    expect(requestPermissionsMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      foreground?.('active');
+    });
+    await waitFor(() => expect(rendered.result.current.loading).toBe(false));
+
+    expect(requestPermissionsMock).toHaveBeenCalledTimes(1);
+    expect(getPermissionsMock).toHaveBeenCalled();
+  });
+
+  /** A first refusal on Android can be asked again, and the button has to actually re-ask. */
+  it('asks the OS again when the picker asks a second time', async () => {
+    const rendered = await renderLoaded();
+    expect(rendered.result.current.access).toBe('denied');
+
+    answer(permission(PermissionStatus.GRANTED));
+    await act(async () => {
+      rendered.result.current.request();
+    });
+    await waitFor(() => expect(rendered.result.current.access).toBe('full'));
+
+    expect(requestPermissionsMock).toHaveBeenCalledTimes(2);
   });
 });
