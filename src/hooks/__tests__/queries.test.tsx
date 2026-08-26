@@ -3,7 +3,13 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { api } from '../../api';
 import type { CursorPage, PaymentStatus, Ticket } from '../../api/types';
-import { queryKeys, useCreateOrder, usePaymentStatus, useTickets } from '../queries';
+import {
+  queryKeys,
+  useCreateOrder,
+  usePaymentStatus,
+  usePromoDiscount,
+  useTickets,
+} from '../queries';
 import { isHeldOrderError } from '../../lib/errors';
 import { useAuthStore } from '../../stores/auth';
 import {
@@ -18,7 +24,12 @@ jest.mock('../../api', () => ({
     payments: { status: jest.fn() },
     auth: { logout: jest.fn() },
     tickets: { list: jest.fn() },
-    orders: { create: jest.fn(), list: jest.fn(), detail: jest.fn() },
+    orders: {
+      create: jest.fn(),
+      list: jest.fn(),
+      detail: jest.fn(),
+      validatePromoCode: jest.fn(),
+    },
   },
 }));
 
@@ -27,6 +38,9 @@ const ticketsListMock = api.tickets.list as jest.MockedFunction<typeof api.ticke
 const ordersCreateMock = api.orders.create as jest.MockedFunction<typeof api.orders.create>;
 const ordersListMock = api.orders.list as jest.MockedFunction<typeof api.orders.list>;
 const ordersDetailMock = api.orders.detail as jest.MockedFunction<typeof api.orders.detail>;
+const validatePromoMock = api.orders.validatePromoCode as jest.MockedFunction<
+  typeof api.orders.validatePromoCode
+>;
 
 function wrapper(client: QueryClient) {
   return function QueryWrapper({ children }: { children: ReactNode }) {
@@ -149,6 +163,87 @@ describe('tickets hook', () => {
       'ticket-1',
       'ticket-2',
     ]);
+    rendered.unmount();
+    client.clear();
+  });
+});
+
+/**
+ * Staging prices an order only at `POST /orders`, so this validation response is the only
+ * discount figure the review screen has before the buyer commits. It showed nothing at all
+ * until this hook existed: an applied code, no discount row, and the full undiscounted total.
+ */
+describe('promo discount hook', () => {
+  beforeEach(() => {
+    useAuthStore.setState({ status: 'signed-in', user: null, pendingPhone: null });
+    validatePromoMock.mockImplementation((items, promoCode) =>
+      Promise.resolve({
+        valid: true,
+        code: promoCode,
+        discountAmountEgp: '100.00',
+        discountAppliedEgp: '100.00',
+        fullyApplied: true,
+        items: items.map((item) => ({ tierId: item.tierId, discountAmountEgp: '100.00' })),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('asks the server for the discount on an applied code', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const items = [{ tierId: 'tier-weekend', quantity: 1 }];
+
+    const rendered = renderHook(() => usePromoDiscount({ items, promoCode: 'TULUA10' }), {
+      wrapper: wrapper(client),
+    });
+
+    await waitFor(() => expect(rendered.result.current.data?.discountAppliedEgp).toBe('100.00'));
+    expect(validatePromoMock).toHaveBeenCalledWith(items, 'TULUA10');
+    rendered.unmount();
+    client.clear();
+  });
+
+  it('stays idle with no code applied', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const rendered = renderHook(
+      () => usePromoDiscount({ items: [{ tierId: 'tier-weekend', quantity: 1 }], promoCode: null }),
+      { wrapper: wrapper(client) },
+    );
+
+    await waitFor(() => expect(rendered.result.current.fetchStatus).toBe('idle'));
+    expect(validatePromoMock).not.toHaveBeenCalled();
+    rendered.unmount();
+    client.clear();
+  });
+
+  /**
+   * The discount is clamped to the subtotal, so a basket the buyer changed after applying the
+   * code has to be re-priced by the server rather than carrying the old figure forward.
+   */
+  it('re-asks when the basket changes under an applied code', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const rendered = renderHook(
+      ({ quantity }: { quantity: number }) =>
+        usePromoDiscount({
+          items: [{ tierId: 'tier-weekend', quantity }],
+          promoCode: 'TULUA10',
+        }),
+      { wrapper: wrapper(client), initialProps: { quantity: 1 } },
+    );
+
+    await waitFor(() => expect(validatePromoMock).toHaveBeenCalledTimes(1));
+    rendered.rerender({ quantity: 3 });
+
+    await waitFor(() => expect(validatePromoMock).toHaveBeenCalledTimes(2));
+    expect(validatePromoMock).toHaveBeenLastCalledWith(
+      [{ tierId: 'tier-weekend', quantity: 3 }],
+      'TULUA10',
+    );
     rendered.unmount();
     client.clear();
   });

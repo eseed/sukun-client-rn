@@ -48,6 +48,8 @@ export const queryKeys = {
     items: { tierId: string; quantity: number }[],
     promoCode?: string | null,
   ) => ['price-preview', eventId, items, promoCode ?? null] as const,
+  promoDiscount: (items: { tierId: string; quantity: number }[], promoCode: string) =>
+    ['promo-discount', items, promoCode] as const,
   deletionPreview: ['deletion-preview'] as const,
 };
 
@@ -327,6 +329,33 @@ export function usePricePreview(input: {
     // Staging has no preview endpoint. Live checkout creates the order on the review CTA,
     // which is the first server-authoritative pricing response.
     enabled: API_MODE !== 'live' && signedIn && Boolean(eventId) && items.length > 0,
+  });
+}
+
+/**
+ * The server's own discount for a promo code against this basket.
+ *
+ * Staging prices an order only at `POST /orders`, so until the review CTA creates one this
+ * validation response is the only place a discount figure exists — and it is the server's
+ * figure, not one derived here (CLAUDE.md rule 7). Without it the review screen showed an
+ * applied code with no discount and an undiscounted total.
+ *
+ * A query rather than the apply-time mutation result, because the basket outlives the tap: the
+ * code stays in the draft when the buyer steps back and changes the quantity, and the discount
+ * is clamped to the subtotal, so it has to be re-asked rather than remembered.
+ */
+export function usePromoDiscount(input: {
+  items: { tierId: string; quantity: number }[];
+  promoCode?: string | null;
+}) {
+  const { items, promoCode } = input;
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  return useQuery({
+    queryKey: queryKeys.promoDiscount(items, promoCode ?? ''),
+    queryFn: () => api.orders.validatePromoCode(items, promoCode as string),
+    enabled: signedIn && Boolean(promoCode) && items.length > 0,
+    // A code the server rejects is an answer, not a blip worth retrying.
+    retry: false,
   });
 }
 

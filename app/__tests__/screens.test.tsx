@@ -629,6 +629,36 @@ describe('10 Review & pay', () => {
   });
 
   /**
+   * An accepted promo code used to leave nothing behind but the "Remove promo code" link: no
+   * discount row, and a total still carrying the full price and its VAT. The discount is the
+   * server's own figure, and it comes off the subtotal before VAT, exactly as an order is priced.
+   */
+  it('shows the discount an accepted promo code buys, and takes it off before VAT', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ReviewScreen />);
+
+    await waitFor(() => expect(screen.getByText('1,824.00 EGP')).toBeTruthy());
+
+    fireEvent.changeText(screen.getByLabelText('Promo code'), 'tulua500');
+    fireEvent.press(screen.getByText('Apply'));
+
+    await waitFor(() => expect(screen.getByText('Promo · TULUA500')).toBeTruthy());
+    expect(screen.getByText('Remove promo code')).toBeTruthy();
+    // 1,600.00 subtotal − 500.00 = 1,100.00 net, VAT 154.00, total 1,254.00.
+    expect(screen.getByText('−500.00 EGP')).toBeTruthy();
+    expect(screen.getByText('154.00 EGP')).toBeTruthy();
+    expect(screen.getByText('1,254.00 EGP')).toBeTruthy();
+
+    fireEvent.press(screen.getByText('Remove promo code'));
+
+    await waitFor(() => expect(screen.queryByText('Promo · TULUA500')).toBeNull());
+    await waitFor(() => expect(screen.getByText('1,824.00 EGP')).toBeTruthy());
+  });
+
+  /**
    * Card entry belongs to Paymob's sheet, so "Continue to payment" holds the order and calls
    * `presentPayVC` itself — there is no intermediate card screen between review and the sheet.
    */

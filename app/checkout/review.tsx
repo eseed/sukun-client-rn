@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -16,17 +17,19 @@ import {
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
 import {
+  queryKeys,
   useCreateOrder,
   useEvent,
   useInitiatePayment,
   usePaymentStatus,
   usePricePreview,
+  usePromoDiscount,
   useValidatePromoCode,
 } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { isHeldOrderError, messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
-import { addEgp, multiplyEgp, vatOnEgp, VAT_RATE } from '../../src/lib/money';
+import { addEgp, multiplyEgp, subtractEgp, vatOnEgp, VAT_RATE } from '../../src/lib/money';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import type { OrderDetail } from '../../src/api/types';
 import { colors, fontFamily } from '../../src/theme/tokens';
@@ -46,7 +49,11 @@ import { useHoldsTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
  * why that is a sanctioned exception to CLAUDE.md rule 7. The VAT rate stays dynamic: whenever
  * the backend has supplied one (on the created order, or a price preview in mock mode) that
  * rate and its figures win, and `VAT_RATE` is only the fallback so the total is never blank.
- * Promo discounts are never estimated — they are priced server-side only.
+ *
+ * A promo discount is not estimated either: it is the server's own figure from
+ * `validate-promo-code`, taken off the subtotal before VAT exactly as the backend prices an
+ * order. Leaving it out is what showed an applied code with no discount row and the full
+ * undiscounted total on live, where there is no price preview to carry it.
  */
 export default function ReviewScreen() {
   const router = useRouter();
@@ -82,9 +89,14 @@ export default function ReviewScreen() {
   });
   const { data: price, isPending: previewPending } = priceQuery;
   const pricePending = API_MODE !== 'live' && previewPending;
+  const promoQuery = usePromoDiscount({ items, promoCode });
+  // A disabled query reports `isPending`, so the code has to be the thing that says it is in
+  // flight — the same guard `pricePending` needs above.
+  const promoPending = Boolean(promoCode) && promoQuery.isPending;
   const createOrder = useCreateOrder();
   const initiatePayment = useInitiatePayment();
   const validatePromo = useValidatePromoCode();
+  const queryClient = useQueryClient();
   const sheet = usePaymobSheet();
   const reset = useCheckoutStore((s) => s.reset);
 
@@ -140,6 +152,9 @@ export default function ReviewScreen() {
         return;
       }
       track('promo_applied', { event_id: validEventId ?? '', promo_code: result.code });
+      // This response is exactly what `usePromoDiscount` is about to ask for, so hand it over
+      // rather than making the buyer wait through a second identical round trip.
+      queryClient.setQueryData(queryKeys.promoDiscount(items, result.code), result);
       setPromoCode(result.code);
       setPromoDraft('');
       // The held order was priced without this code, and `onContinue` reuses `order` when it is
@@ -218,23 +233,29 @@ export default function ReviewScreen() {
     setHeldOrderId(null);
   }
 
-  // Before the order exists the backend has priced nothing, so the screen estimates from the
+  // Before the order exists the backend has priced no order, so the screen estimates from the
   // tier's server-provided unit price and the standard VAT rate (see `src/lib/money.ts`). The
   // created order's own figures replace all of these the moment it exists, and it stays the
-  // authority on what is charged — a promo code, for instance, is only ever priced server-side.
+  // authority on what is charged.
   const previewSubtotal = tier ? multiplyEgp(tier.priceEgp, quantity) : undefined;
-  const previewVat =
-    previewSubtotal && event?.vatEnabled ? vatOnEgp(previewSubtotal, VAT_RATE) : undefined;
-  const previewTotal = previewSubtotal
+  // The discount is the server's answer for this exact basket, and VAT follows the backend in
+  // falling on the net: subtotal − discount, then VAT, then the total.
+  const previewDiscount = promoQuery.data?.valid ? promoQuery.data.discountAppliedEgp : undefined;
+  const previewNet =
+    previewSubtotal && previewDiscount
+      ? subtractEgp(previewSubtotal, previewDiscount)
+      : previewSubtotal;
+  const previewVat = previewNet && event?.vatEnabled ? vatOnEgp(previewNet, VAT_RATE) : undefined;
+  const previewTotal = previewNet
     ? previewVat
-      ? addEgp(previewSubtotal, previewVat)
-      : previewSubtotal
+      ? addEgp(previewNet, previewVat)
+      : previewNet
     : undefined;
 
   const displayedSubtotal = order?.subtotalEgp ?? price?.subtotalEgp ?? previewSubtotal;
   const displayedVat = order?.vatEgp ?? price?.vatEgp ?? previewVat;
   const displayedTotal = order?.totalEgp ?? price?.totalEgp ?? previewTotal;
-  const displayedDiscount = order?.discountEgp ?? price?.discountEgp;
+  const displayedDiscount = order?.discountEgp ?? price?.discountEgp ?? previewDiscount;
   const displayedVatRate = order?.vatRate ?? price?.vatRate ?? (previewVat ? VAT_RATE : undefined);
   // Label the VAT row with the same rate the amount was derived from — reading the rate from a
   // separate expression is how this row ended up showing a 14% amount under a "VAT (0%)" label.
@@ -381,6 +402,12 @@ export default function ReviewScreen() {
         />
       ) : null}
 
+      {promoCode && promoQuery.isError ? (
+        <Text variant="metaSm" color={colors.rose700} style={styles.error}>
+          {messageForError(promoQuery.error)}
+        </Text>
+      ) : null}
+
       {API_MODE !== 'live' && priceQuery.isError ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {messageForError(priceQuery.error)}
@@ -395,7 +422,9 @@ export default function ReviewScreen() {
         // Held until the ticket check settles: `holdsTicket` reads false while the query is
         // in flight, and building the order on that answer asks for a ticket the buyer
         // already has - refused, after they have committed to paying.
-        disabled={!termsAccepted || pricePending || holdsTicketPending || invalidSelection}
+        disabled={
+          !termsAccepted || pricePending || promoPending || holdsTicketPending || invalidSelection
+        }
         loading={createOrder.isPending || initiatePayment.isPending || validatePromo.isPending}
       />
     </Screen>

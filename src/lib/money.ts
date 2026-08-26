@@ -3,9 +3,10 @@
  * checkout screens show a running subtotal, VAT and total before any order exists to price them
  * authoritatively, because the backend prices only at `POST /orders` (which also holds
  * capacity). Every figure here is an on-screen estimate built from server-provided inputs — the
- * tier's public unit price and the standard Egyptian VAT rate. The order created on the review
- * screen remains the single source of truth for what is actually charged, and its own
- * `subtotalEgp` / `vatEgp` / `totalEgp` always replace these once it exists.
+ * tier's public unit price, the discount `validate-promo-code` returns for the basket, and the
+ * standard Egyptian VAT rate. The order created on the review screen remains the single source
+ * of truth for what is actually charged, and its own `subtotalEgp` / `discountEgp` / `vatEgp` /
+ * `totalEgp` always replace these once it exists.
  *
  * All arithmetic runs in integer piastres so repeated decimal maths cannot drift.
  */
@@ -38,4 +39,13 @@ export function vatOnEgp(amountEgp: string, rate: number = VAT_RATE): string {
 /** Adds two EGP amounts. */
 export function addEgp(a: string, b: string): string {
   return toEgp(toPiastres(a) + toPiastres(b));
+}
+
+/**
+ * Takes one EGP amount off another, floored at zero — the discount side of the estimate. The
+ * floor mirrors the backend, which clamps a promo discount to the subtotal it is applied to, so
+ * an over-large code can never push a net amount below zero here either.
+ */
+export function subtractEgp(a: string, b: string): string {
+  return toEgp(Math.max(0, toPiastres(a) - toPiastres(b)));
 }
