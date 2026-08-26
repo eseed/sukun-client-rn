@@ -577,13 +577,16 @@ export function useRequestDeletionOtp() {
 
 export function useDeleteAccount() {
   const signOut = useAuthStore((s) => s.signOut);
-  const client = useQueryClient();
   return useMutation({
     mutationFn: (input: { code: string; reason?: string; confirmForfeit?: boolean }) =>
       api.account.delete(input.code, input.reason, input.confirmForfeit),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: queryKeys.deletionPreview });
-      await signOut();
-    },
+    /**
+     * Deleting the account revokes every session server-side, so there is nothing left to ask
+     * it. Invalidating the deletion preview here refetched an authenticated endpoint with a
+     * token that had just been revoked: a guaranteed 401, a doomed refresh behind it, and a
+     * failure surfacing on a screen whose work had already succeeded. `signOut` empties the
+     * query cache anyway, and skips the logout round-trip for the same reason.
+     */
+    onSuccess: () => signOut({ remote: false }),
   });
 }
