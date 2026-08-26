@@ -100,6 +100,39 @@ export type PickResult =
   | { status: 'failed' };
 
 /**
+ * The name to show for somebody the OS picker handed over.
+ *
+ * `name`, the one field documented to carry a formatted full name, never arrives on this path.
+ * expo-contacts serializes it only when "name" is in the list of fields asked for, and the
+ * default list it builds when nothing is asked for is derived from a mapping that has no
+ * "name" entry. Every other call passes fields explicitly and has `name` appended for it; the
+ * picker passes none and is the one caller that loses it. What came back instead was a guest
+ * row showing a phone number where the name belongs.
+ *
+ * So the name is composed from the parts, which are always serialized. Falls through to the
+ * labels a contact can carry instead of a personal name, because somebody saved under a
+ * company or a nickname still has a name worth showing.
+ */
+export function pickedName(contact: {
+  name?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  nickname?: string;
+  company?: string;
+}): string {
+  const formatted = contact.name?.trim();
+  if (formatted) return formatted;
+
+  const parts = [contact.firstName, contact.middleName, contact.lastName]
+    .map((part) => part?.trim())
+    .filter((part) => Boolean(part));
+  if (parts.length > 0) return parts.join(' ');
+
+  return contact.nickname?.trim() || contact.company?.trim() || '';
+}
+
+/**
  * Whether the OS will show its own contact picker.
  *
  * iOS only, and not for want of trying on Android: `ACTION_PICK` hands back an id that
@@ -323,7 +356,7 @@ export function useContacts() {
     // The picker resolves with nothing when it is dismissed without a choice.
     if (!picked) return { status: 'cancelled' };
 
-    const name = picked.name?.trim() ?? '';
+    const name = pickedName(picked);
     const numbers: string[] = [];
     for (const phone of picked.phoneNumbers ?? []) {
       const e164 = normalizePhone(phone?.number ?? '');

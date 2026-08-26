@@ -309,8 +309,11 @@ describe('09 Guests', () => {
   it('attaches whoever the OS picker hands over, under limited access', async () => {
     mockParams.eventId = TULUA_ID;
     contactsPermission({ status: 'granted', accessPrivileges: 'limited' });
+    // The OS picker hands back the name in parts and never formats it, so the screen has to
+    // put it together itself. Passing a ready-made `name` here would test nothing.
     mockPicker.mockResolvedValue({
-      name: 'Omar Fathy',
+      firstName: 'Omar',
+      lastName: 'Fathy',
       phoneNumbers: [{ number: '01555000111' }],
     });
     await signInAndComplete();
@@ -336,7 +339,8 @@ describe('09 Guests', () => {
     mockParams.eventId = TULUA_ID;
     contactsPermission({ status: 'granted', accessPrivileges: 'limited' });
     mockPicker.mockResolvedValue({
-      name: 'Omar Fathy',
+      firstName: 'Omar',
+      lastName: 'Fathy',
       phoneNumbers: [{ number: '01555000111' }, { number: '01555000222' }],
     });
     await signInAndComplete();

@@ -5,7 +5,7 @@ import { PermissionStatus } from 'expo-modules-core';
 import * as Contacts from 'expo-contacts';
 import { presentContactPickerAsync } from 'expo-contacts/legacy';
 import type { ReactNode } from 'react';
-import { useContacts } from '../useContacts';
+import { pickedName, useContacts } from '../useContacts';
 
 jest.mock('../../api', () => ({ API_MODE: 'live' }));
 
@@ -32,9 +32,15 @@ const pickerMock = presentContactPickerAsync as jest.MockedFunction<
   typeof presentContactPickerAsync
 >;
 
-/** Only the two fields the hook reads; the OS hands back a great deal more. */
-function pickedContact(name: string, numbers: string[]) {
-  return { name, phoneNumbers: numbers.map((number) => ({ number })) } as never;
+/**
+ * What the OS picker actually hands back: the name in parts, never formatted. Anything that
+ * passes a `name` here is testing a path expo-contacts does not currently take.
+ */
+function pickedContact(
+  identity: { firstName?: string; lastName?: string; nickname?: string; company?: string },
+  numbers: string[],
+) {
+  return { ...identity, phoneNumbers: numbers.map((number) => ({ number })) } as never;
 }
 
 /** Lets a test drive the foreground event the hook re-checks the permission on. */
@@ -79,6 +85,30 @@ async function renderLoaded() {
 
   return rendered;
 }
+
+describe('naming a picked contact', () => {
+  it('joins the name parts the way the OS would have formatted them', () => {
+    expect(pickedName({ firstName: 'Nour', middleName: 'A', lastName: 'Hassan' })).toBe(
+      'Nour A Hassan',
+    );
+    expect(pickedName({ firstName: 'Nour' })).toBe('Nour');
+    expect(pickedName({ lastName: 'Hassan' })).toBe('Hassan');
+  });
+
+  /** Should expo-contacts ever start sending it, the formatted name is the better answer. */
+  it('prefers the formatted name when there is one', () => {
+    expect(pickedName({ name: 'Dr Nour Hassan', firstName: 'Nour', lastName: 'Hassan' })).toBe(
+      'Dr Nour Hassan',
+    );
+  });
+
+  /** A contact can be a business or a nickname and no person at all. */
+  it('falls back to a nickname, then a company, then nothing', () => {
+    expect(pickedName({ nickname: 'Nono', company: 'Sukun' })).toBe('Nono');
+    expect(pickedName({ company: 'Sukun' })).toBe('Sukun');
+    expect(pickedName({ firstName: '  ', company: '' })).toBe('');
+  });
+});
 
 describe('contacts hook', () => {
   beforeEach(() => {
@@ -244,7 +274,9 @@ describe('contacts hook', () => {
    * that makes it worth having.
    */
   it('picks a contact without asking for any permission', async () => {
-    pickerMock.mockResolvedValue(pickedContact('Nour Hassan', ['01022334455']));
+    pickerMock.mockResolvedValue(
+      pickedContact({ firstName: 'Nour', lastName: 'Hassan' }, ['01022334455']),
+    );
     const rendered = renderHook(() => useContacts(), { wrapper });
 
     const result = await act(async () => rendered.result.current.pickContact());
@@ -260,7 +292,12 @@ describe('contacts hook', () => {
   /** One person saved twice under one number is one guest, and one question not worth asking. */
   it('keeps every distinct number and drops the repeats', async () => {
     pickerMock.mockResolvedValue(
-      pickedContact('Nour Hassan', ['01022334455', '+20 102 233 4455', '+4915112345678', 'x']),
+      pickedContact({ firstName: 'Nour', lastName: 'Hassan' }, [
+        '01022334455',
+        '+20 102 233 4455',
+        '+4915112345678',
+        'x',
+      ]),
     );
     const rendered = renderHook(() => useContacts(), { wrapper });
 
@@ -287,9 +324,29 @@ describe('contacts hook', () => {
     });
   });
 
+  /**
+   * The formatted `name` field never survives the OS picker, so a guest attached from it was
+   * showing a phone number where the name belongs. The parts always come through.
+   */
+  it('names a picked contact from its parts, not the formatted field', async () => {
+    pickerMock.mockResolvedValue(
+      pickedContact({ firstName: 'Nadine', lastName: 'Serageldin' }, ['01159737778']),
+    );
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    const result = await act(async () => rendered.result.current.pickContact());
+
+    expect(result).toEqual({
+      status: 'picked',
+      contact: { name: 'Nadine Serageldin', numbers: ['+201159737778'] },
+    });
+  });
+
   /** Only mobile numbers can be texted, so a landline is the same as no number at all. */
   it('reports a contact with no mobile number by name', async () => {
-    pickerMock.mockResolvedValue(pickedContact('Nour Hassan', ['0223456789']));
+    pickerMock.mockResolvedValue(
+      pickedContact({ firstName: 'Nour', lastName: 'Hassan' }, ['0223456789']),
+    );
     const rendered = renderHook(() => useContacts(), { wrapper });
 
     expect(await act(async () => rendered.result.current.pickContact())).toEqual({
