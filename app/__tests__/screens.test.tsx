@@ -38,6 +38,11 @@ const mockContacts = jest.requireMock('expo-contacts') as {
   Contact: { getAllDetails: jest.Mock };
 };
 
+/** The OS contact picker. Its own module path, so its own mock. */
+const mockPicker = (
+  jest.requireMock('expo-contacts/legacy') as { presentContactPickerAsync: jest.Mock }
+).presentContactPickerAsync;
+
 /** Both entry points answer the same way, since the app asks once and re-checks silently. */
 function contactsPermission(response: {
   status: string;
@@ -110,6 +115,7 @@ async function signInAndComplete() {
 
 beforeEach(() => {
   contactsPermission({ status: 'granted' });
+  mockPicker.mockResolvedValue(null);
   resetMockState();
   mockConfig.latencyMs = 0;
   for (const key of Object.keys(mockParams)) delete mockParams[key];
@@ -272,6 +278,87 @@ describe('09 Guests', () => {
 
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
     expect(screen.getByText('010 22334455')).toBeTruthy();
+  });
+
+  /**
+   * A search that finds nobody and a list with nobody left in it are different situations,
+   * and only one of them is the buyer's fault. Saying the wrong one reads as a broken screen.
+   */
+  it('says the search found nobody, not that everyone is already attached', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(2);
+
+    renderWithProviders(<GuestsScreen />);
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
+
+    fireEvent.changeText(screen.getByLabelText('Search contacts'), 'nobody by that name');
+
+    await waitFor(() => expect(screen.getByText('No match.')).toBeTruthy());
+    expect(screen.queryByText('Nour Hassan')).toBeNull();
+    expect(screen.queryByText('Everyone here is already attached.')).toBeNull();
+  });
+
+  /**
+   * Limited access is the one state the in-app list cannot mend from inside itself: it holds
+   * only the handful of people already shared. The OS picker is the way to everybody else,
+   * and whoever it hands back has to land in the draft, because they never join that list.
+   */
+  it('attaches whoever the OS picker hands over, under limited access', async () => {
+    mockParams.eventId = TULUA_ID;
+    contactsPermission({ status: 'granted', accessPrivileges: 'limited' });
+    mockPicker.mockResolvedValue({
+      name: 'Omar Fathy',
+      phoneNumbers: [{ number: '01555000111' }],
+    });
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(2);
+
+    renderWithProviders(<GuestsScreen />);
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Choose from all contacts')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Choose from all contacts'));
+    });
+
+    expect(screen.getByText('Omar Fathy')).toBeTruthy();
+    expect(useCheckoutStore.getState().guests).toEqual([
+      expect.objectContaining({ phoneNumber: '+201555000111', name: 'Omar Fathy' }),
+    ]);
+  });
+
+  /** A ticket binds to one number, so a contact saved with several is asked about, not guessed. */
+  it('asks which number when the picked contact has more than one', async () => {
+    mockParams.eventId = TULUA_ID;
+    contactsPermission({ status: 'granted', accessPrivileges: 'limited' });
+    mockPicker.mockResolvedValue({
+      name: 'Omar Fathy',
+      phoneNumbers: [{ number: '01555000111' }, { number: '01555000222' }],
+    });
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(2);
+
+    renderWithProviders(<GuestsScreen />);
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Choose from all contacts')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Choose from all contacts'));
+    });
+
+    // Nobody is attached on the strength of a guess.
+    expect(useCheckoutStore.getState().guests).toEqual([]);
+
+    fireEvent.press(screen.getByText('015 55000222'));
+
+    expect(useCheckoutStore.getState().guests).toEqual([
+      expect.objectContaining({ phoneNumber: '+201555000222', name: 'Omar Fathy' }),
+    ]);
   });
 
   /**

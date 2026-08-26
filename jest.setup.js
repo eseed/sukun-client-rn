@@ -50,6 +50,13 @@ jest.mock('expo-contacts', () => ({
   ContactAccessButton: { isAvailable: () => false },
 }));
 
+// The OS contact picker lives on the legacy entry point, which is a separate module path from
+// 'expo-contacts' and so needs its own mock. Cancelled by default: a test that wants a contact
+// back says so.
+jest.mock('expo-contacts/legacy', () => ({
+  presentContactPickerAsync: jest.fn(async () => null),
+}));
+
 jest.mock('expo-camera', () => ({
   CameraView: 'CameraView',
   useCameraPermissions: () => [{ granted: true }, jest.fn()],

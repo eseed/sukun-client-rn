@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import { PermissionStatus } from 'expo-modules-core';
 import * as Contacts from 'expo-contacts';
+import { presentContactPickerAsync } from 'expo-contacts/legacy';
 import type { ReactNode } from 'react';
 import { useContacts } from '../useContacts';
 
@@ -25,6 +26,16 @@ const getPermissionsMock = Contacts.getPermissionsAsync as jest.MockedFunction<
 const getAllDetailsMock = Contacts.Contact.getAllDetails as jest.MockedFunction<
   typeof Contacts.Contact.getAllDetails
 >;
+// Stubbed in jest.setup.js. The OS picker lives on the legacy entry point, a module path of
+// its own, so mocking 'expo-contacts' above does not cover it.
+const pickerMock = presentContactPickerAsync as jest.MockedFunction<
+  typeof presentContactPickerAsync
+>;
+
+/** Only the two fields the hook reads; the OS hands back a great deal more. */
+function pickedContact(name: string, numbers: string[]) {
+  return { name, phoneNumbers: numbers.map((number) => ({ number })) } as never;
+}
 
 /** Lets a test drive the foreground event the hook re-checks the permission on. */
 let foreground: ((state: AppStateStatus) => void) | null = null;
@@ -225,5 +236,65 @@ describe('contacts hook', () => {
     await waitFor(() => expect(rendered.result.current.access).toBe('full'));
 
     expect(requestPermissionsMock).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * The whole point of the OS picker: it runs outside the app, so a refusal the app is still
+   * living under has no bearing on it. Asking permission first would give away the one thing
+   * that makes it worth having.
+   */
+  it('picks a contact without asking for any permission', async () => {
+    pickerMock.mockResolvedValue(pickedContact('Nour Hassan', ['01022334455']));
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    const result = await act(async () => rendered.result.current.pickContact());
+
+    expect(result).toEqual({
+      status: 'picked',
+      contact: { name: 'Nour Hassan', numbers: ['+201022334455'] },
+    });
+    expect(requestPermissionsMock).not.toHaveBeenCalled();
+    expect(getPermissionsMock).not.toHaveBeenCalled();
+  });
+
+  /** One person saved twice under one number is one guest, and one question not worth asking. */
+  it('keeps every distinct number and drops the repeats', async () => {
+    pickerMock.mockResolvedValue(
+      pickedContact('Nour Hassan', ['01022334455', '+20 102 233 4455', '+4915112345678', 'x']),
+    );
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    const result = await act(async () => rendered.result.current.pickContact());
+
+    expect(result).toEqual({
+      status: 'picked',
+      contact: { name: 'Nour Hassan', numbers: ['+201022334455', '+4915112345678'] },
+    });
+  });
+
+  /** A dismissal is an answer. Reporting it as a failure would put an error on the screen. */
+  it('tells a dismissal apart from a failure', async () => {
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    pickerMock.mockResolvedValue(null);
+    expect(await act(async () => rendered.result.current.pickContact())).toEqual({
+      status: 'cancelled',
+    });
+
+    pickerMock.mockRejectedValue(new Error('no view controller'));
+    expect(await act(async () => rendered.result.current.pickContact())).toEqual({
+      status: 'failed',
+    });
+  });
+
+  /** Only mobile numbers can be texted, so a landline is the same as no number at all. */
+  it('reports a contact with no mobile number by name', async () => {
+    pickerMock.mockResolvedValue(pickedContact('Nour Hassan', ['0223456789']));
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    expect(await act(async () => rendered.result.current.pickContact())).toEqual({
+      status: 'no-number',
+      name: 'Nour Hassan',
+    });
   });
 });

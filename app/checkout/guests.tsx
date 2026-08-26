@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { ContactAccessButton } from 'expo-contacts';
 import {
   Avatar,
   avatarColor,
@@ -11,13 +10,19 @@ import {
   CheckCircle,
   CountryPrefix,
   CountrySheet,
+  OptionSheet,
   QuantityStepper,
   Screen,
   SearchIcon,
   StepLabel,
   Text,
 } from '../../src/components/ui';
-import { canReadContacts, useContacts, type PhoneContact } from '../../src/hooks/useContacts';
+import {
+  canReadContacts,
+  useContacts,
+  type PhoneContact,
+  type PickedContact,
+} from '../../src/hooks/useContacts';
 import { useEvent, useValidateGuests } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForCode, messageForError } from '../../src/lib/errors';
@@ -43,10 +48,6 @@ import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
  * nobody gets through. Everything past this is reached by searching.
  */
 const MAX_VISIBLE_CONTACTS = 25;
-
-/** iOS 18 and up. Read once: it cannot change while the app is running. */
-const accessButtonAvailable =
-  typeof ContactAccessButton?.isAvailable === 'function' && ContactAccessButton.isAvailable();
 
 /**
  * Design screen 09 · Checkout, guests.
@@ -86,9 +87,9 @@ export default function GuestsScreen() {
     access: contactsAccess,
     loading: contactsLoading,
     request: requestContacts,
-    addMore: addMoreContacts,
+    pickContact,
     openSettings,
-    canAddMore,
+    canPickContact,
   } = useContacts();
   const validateGuests = useValidateGuests();
 
@@ -103,9 +104,9 @@ export default function GuestsScreen() {
   // Per-guest refusals from validation, keyed by number so they survive a re-order of the
   // list and disappear the moment that guest is swapped out.
   const [issues, setIssues] = useState<Record<string, string>>({});
-  // Numbers handed over by the iOS 18 limited-access sheet, floated to the top of the list so
-  // the person just shared is not lost among hundreds.
-  const [justAdded, setJustAdded] = useState<string[]>([]);
+  // The person the OS picker handed back, held only while they are asked which of several
+  // numbers the ticket is for. One number needs no question and never lands here.
+  const [numberChoice, setNumberChoice] = useState<PickedContact | null>(null);
 
   // Already holding a ticket for this event means none of these are yours, so every one of
   // them is a guest slot rather than quantity minus your own.
@@ -160,7 +161,7 @@ export default function GuestsScreen() {
     [guests],
   );
 
-  /** Contacts not yet attached, newest share first, narrowed by the search box. */
+  /** Contacts not yet attached, narrowed by the search box. */
   const suggestions: PhoneContact[] = useMemo(() => {
     const query = search.trim().toLowerCase();
     const digits = query.replace(/\D/g, '');
@@ -169,24 +170,22 @@ export default function GuestsScreen() {
       (contact) => !selectedNumbers.has(contact.phoneNumber) && contact.phoneNumber !== buyerPhone,
     );
 
-    const matched = query
-      ? available.filter(
-          (contact) =>
-            contact.name.toLowerCase().includes(query) ||
-            (digits.length > 0 && contact.phoneNumber.includes(digits)),
-        )
-      : available;
-
-    if (justAdded.length === 0) return matched;
-    const fresh = new Set(justAdded);
-    return [
-      ...matched.filter((contact) => fresh.has(contact.phoneNumber)),
-      ...matched.filter((contact) => !fresh.has(contact.phoneNumber)),
-    ];
-  }, [buyerPhone, contacts, justAdded, search, selectedNumbers]);
+    if (!query) return available;
+    return available.filter(
+      (contact) =>
+        contact.name.toLowerCase().includes(query) ||
+        (digits.length > 0 && contact.phoneNumber.includes(digits)),
+    );
+  }, [buyerPhone, contacts, search, selectedNumbers]);
 
   const visible = suggestions.slice(0, MAX_VISIBLE_CONTACTS);
   const hidden = suggestions.length - visible.length;
+
+  /**
+   * Under limited access the list above holds only the handful of people already shared, so
+   * everything it says about what it did not find has to be read in that light.
+   */
+  const sharedSubsetOnly = contactsAccess === 'limited';
 
   /** Any change to who is attached invalidates the last verdict from the server. */
   function clearVerdict() {
@@ -257,10 +256,58 @@ export default function GuestsScreen() {
     setManual('');
   }
 
-  async function onAddMore() {
+  /**
+   * Attaches somebody the OS picker handed over. They are not in `contacts` and never will
+   * be: the picker grants no access, it just passes on the one person who was tapped. So the
+   * guards the list gets for free (already attached, already yours) are applied here instead.
+   */
+  function attachPicked(name: string, phoneNumber: string) {
+    if (phoneNumber === buyerPhone) {
+      setError(messageForCode('GUEST_IS_BUYER'));
+      return;
+    }
+    if (selectedNumbers.has(phoneNumber)) {
+      setError(messageForCode('GUEST_DUPLICATE'));
+      return;
+    }
+    if (full) {
+      setError(
+        `You have ${slots} guest ${slots === 1 ? 'slot' : 'slots'} on this order. Remove someone first, or add a ticket.`,
+      );
+      return;
+    }
+    addGuest({ phoneNumber, name: name || formatPhoneLocal(phoneNumber), fromContacts: true });
+    setSearch('');
+  }
+
+  /**
+   * The OS picker: the whole address book, no permission, one person back.
+   *
+   * A dismissal is an answer, not a fault, so it says nothing. Everything else does, because
+   * a sheet that closes leaving no guest and no reason reads as a broken screen.
+   */
+  async function onPickContact() {
     clearVerdict();
-    const added = await addMoreContacts();
-    if (added.length > 0) setJustAdded(added.map((contact) => contact.phoneNumber));
+    const result = await pickContact();
+
+    if (result.status === 'cancelled') return;
+    if (result.status === 'failed') {
+      setError("We couldn't open your contacts. Add their number below instead.");
+      return;
+    }
+    if (result.status === 'no-number') {
+      setError(
+        `${result.name || 'That contact'} has no mobile number saved. Add their number below instead.`,
+      );
+      return;
+    }
+
+    const { contact } = result;
+    const only = contact.numbers.length === 1 ? contact.numbers[0] : undefined;
+    // One number is not a question worth asking. Several is: a ticket binds to exactly one,
+    // and picking the wrong one hands the ticket to a landline.
+    if (only) attachPicked(contact.name, only);
+    else setNumberChoice(contact);
   }
 
   async function onContinue() {
@@ -451,27 +498,6 @@ export default function GuestsScreen() {
                 />
               ))}
 
-              {/*
-                iOS 18 only. Under limited access the address book holds just the people
-                already shared, so the one contact being searched for may not be in it at all.
-                This is Apple's own control: tapping a match hands that person over without
-                leaving the screen or widening access to everyone else.
-              */}
-              {contactsAccess === 'limited' &&
-              Platform.OS === 'ios' &&
-              accessButtonAvailable &&
-              search.trim().length > 0 ? (
-                <ContactAccessButton
-                  query={search}
-                  caption="phone"
-                  ignoredPhoneNumbers={contacts.map((contact) => contact.phoneNumber)}
-                  backgroundColor={colors.bgSurface}
-                  textColor={colors.textPrimary}
-                  tintColor={colors.black}
-                  style={styles.accessButton}
-                />
-              ) : null}
-
               {hidden > 0 ? (
                 <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
                   {`Showing ${visible.length} of ${suggestions.length}.`}
@@ -480,7 +506,13 @@ export default function GuestsScreen() {
 
               {suggestions.length === 0 ? (
                 <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
-                  {search.trim().length > 0 ? 'No match.' : 'Everyone here is already attached.'}
+                  {search.trim().length === 0
+                    ? 'Everyone here is already attached.'
+                    : // "No match." would be untrue under limited access: the search only ever
+                      // ran against the handful of people shared with the app.
+                      sharedSubsetOnly
+                      ? 'No match in the contacts you shared.'
+                      : 'No match.'}
                 </Text>
               ) : null}
             </>
@@ -490,9 +522,9 @@ export default function GuestsScreen() {
             access={contactsAccess}
             loading={contactsLoading}
             contactCount={contacts.length}
-            canAddMore={canAddMore}
+            canPickContact={canPickContact}
             onRequest={requestContacts}
-            onAddMore={() => void onAddMore()}
+            onPickContact={() => void onPickContact()}
             onOpenSettings={openSettings}
           />
 
@@ -532,6 +564,25 @@ export default function GuestsScreen() {
           setManualCountry(code as CountryCode);
         }}
         onClose={() => setCountrySheetOpen(false)}
+      />
+
+      {/*
+        Someone saved with a mobile, a landline and a work line is one contact and three
+        numbers, and a ticket binds to exactly one of them. Guessing picks the landline often
+        enough to be worth the question.
+      */}
+      <OptionSheet
+        visible={numberChoice !== null}
+        title={numberChoice?.name || 'Which number?'}
+        options={(numberChoice?.numbers ?? []).map((number) => ({
+          value: number,
+          label: formatPhoneLocal(number),
+        }))}
+        selectedValue={null}
+        onSelect={(number) => {
+          if (numberChoice) attachPicked(numberChoice.name, number);
+        }}
+        onClose={() => setNumberChoice(null)}
       />
 
       {error ? (
@@ -601,34 +652,29 @@ function GuestRow({
 }
 
 /**
- * The one control whose job is to get contacts working, whatever state they are in.
- *
- * Each branch offers something that actually changes the situation: an ask the OS will still
- * honour, a trip to Settings when it will not, a wider selection under limited access, or a
- * retry when the read itself failed. Nothing here is a dead end, and none of it is the only
- * way forward, because the number field below never stops working.
- */
-/**
  * The one control whose job is to get contacts working, whatever state they are in: an ask the
- * OS will still honour, a trip to Settings when it will not, a wider selection under limited
+ * OS will still honour, a trip to Settings when it will not, the OS picker under limited
  * access, or a retry when the read itself failed. Each button says what it does, so only the
  * two states a button cannot explain on its own carry a line of text.
+ *
+ * Nothing here is a dead end, and none of it is the only way forward, because the number field
+ * below never stops working.
  */
 function ContactsAccessFooter({
   access,
   loading,
   contactCount,
-  canAddMore,
+  canPickContact,
   onRequest,
-  onAddMore,
+  onPickContact,
   onOpenSettings,
 }: {
   access: ReturnType<typeof useContacts>['access'];
   loading: boolean;
   contactCount: number;
-  canAddMore: boolean;
+  canPickContact: boolean;
   onRequest: () => void;
-  onAddMore: () => void;
+  onPickContact: () => void;
   onOpenSettings: () => void;
 }) {
   if (access === 'unasked' || access === 'undetermined') {
@@ -697,12 +743,16 @@ function ContactsAccessFooter({
           No mobile numbers in your contacts.
         </Text>
       ) : null}
-      {canAddMore ? (
+      {/*
+        Limited access only. The list above is the shared subset and cannot grow from in here,
+        so this is the way to reach the rest: the OS's own picker, which shows the whole
+        address book and passes back the one person tapped without granting anything.
+      */}
+      {canPickContact && access === 'limited' ? (
         <Button
-          label="Choose more contacts"
+          label="Choose from all contacts"
           variant="secondary"
-          onPress={onAddMore}
-          loading={loading}
+          onPress={onPickContact}
           style={styles.contactsButton}
         />
       ) : null}
@@ -790,10 +840,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: colors.textMuted,
-  },
-  accessButton: {
-    height: 46,
-    marginTop: 6,
   },
   contactsButton: {
     marginTop: 12,

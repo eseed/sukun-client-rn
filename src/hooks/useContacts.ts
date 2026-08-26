@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 import * as Contacts from 'expo-contacts';
+import { presentContactPickerAsync } from 'expo-contacts/legacy';
 import { API_MODE } from '../api';
 import { fallbackContacts } from '../api/mock/fixtures';
 import { normalizePhone } from '../lib/phone';
@@ -80,6 +81,33 @@ export function canReadContacts(access: ContactsAccess): boolean {
 export function canAskAgain(access: ContactsAccess): boolean {
   return access === 'unasked' || access === 'undetermined' || access === 'denied';
 }
+
+/** Someone handed over by the OS contact picker, with the numbers they were saved under. */
+export interface PickedContact {
+  name: string;
+  /** Every distinct number on the contact, E.164, in the order the address book keeps them. */
+  numbers: string[];
+}
+
+/**
+ * What came back from the OS contact picker. A dismissal and a failure look the same to the
+ * caller unless they are told apart here, and only one of them is worth a message.
+ */
+export type PickResult =
+  | { status: 'picked'; contact: PickedContact }
+  | { status: 'no-number'; name: string }
+  | { status: 'cancelled' }
+  | { status: 'failed' };
+
+/**
+ * Whether the OS will show its own contact picker.
+ *
+ * iOS only, and not for want of trying on Android: `ACTION_PICK` hands back an id that
+ * expo-contacts reads through the content resolver, so it still needs READ_CONTACTS. Android
+ * contacts permission is all or nothing anyway, so once it is granted the in-app list already
+ * holds everyone and the picker has nothing left to offer.
+ */
+const CAN_PICK_CONTACT = Platform.OS === 'ios' && typeof presentContactPickerAsync === 'function';
 
 interface RawPhone {
   number?: string | null;
@@ -267,37 +295,47 @@ export function useContacts() {
   }, [access, refresh]);
 
   /**
-   * iOS 18 only: opens the system sheet that widens a limited-access grant. Resolves with the
-   * contacts that were just shared, so the picker can float them to the top of a long list.
+   * Opens the OS contact picker and reports back whoever was chosen.
+   *
+   * This is not the machinery above it. `CNContactPickerViewController` runs outside the app,
+   * in the OS: it shows the whole address book, hands back only the one person tapped, and
+   * needs no contacts permission of any kind. That is what makes it the way out of limited
+   * access, where this hook's own list holds just the handful already shared and the sheet
+   * that would widen it comes up empty on device (Apple's FB20929400, still open).
+   *
+   * It has to come from `expo-contacts/legacy`. The class API's `Contact.presentPicker`
+   * resolves with an id and nothing else, and reading a number off that id goes back through
+   * `CNContactStore`, which is the very permission this picker exists to do without.
+   *
+   * Nothing here touches the query: picking somebody grants no access, so the address book
+   * this hook holds is exactly as wide afterwards as it was before.
    */
-  const addMore = useCallback(async (): Promise<PhoneContact[]> => {
-    if (Platform.OS !== 'ios' || typeof Contacts.Contact.presentAccessPicker !== 'function') {
-      return [];
-    }
+  const pickContact = useCallback(async (): Promise<PickResult> => {
+    if (!CAN_PICK_CONTACT) return { status: 'failed' };
+
+    let picked: Awaited<ReturnType<typeof presentContactPickerAsync>>;
     try {
-      const picked = await Contacts.Contact.presentAccessPicker();
-      const details = await Promise.all(
-        picked.map(async (contact) => {
-          try {
-            const detail = await contact.getDetails([
-              Contacts.ContactField.FULL_NAME,
-              Contacts.ContactField.PHONES,
-            ]);
-            return { ...detail, id: contact.id };
-          } catch {
-            return null;
-          }
-        }),
-      );
-      return toPhoneContacts(details.filter((detail) => detail !== null));
+      picked = await presentContactPickerAsync();
     } catch (error) {
-      console.warn('[contacts] access picker failed', error);
-      return [];
-    } finally {
-      // The picker may have granted something even when reading the selection failed.
-      refresh();
+      console.warn('[contacts] contact picker failed', error);
+      return { status: 'failed' };
     }
-  }, [refresh]);
+    // The picker resolves with nothing when it is dismissed without a choice.
+    if (!picked) return { status: 'cancelled' };
+
+    const name = picked.name?.trim() ?? '';
+    const numbers: string[] = [];
+    for (const phone of picked.phoneNumbers ?? []) {
+      const e164 = normalizePhone(phone?.number ?? '');
+      // A contact saved twice under the same number is one guest, not two.
+      if (e164 && !numbers.includes(e164)) numbers.push(e164);
+    }
+
+    // `normalizePhone` keeps mobile numbers only, so a contact with nothing but a landline or
+    // an email address arrives here empty. A ticket needs a number that can be texted.
+    if (numbers.length === 0) return { status: 'no-number', name };
+    return { status: 'picked', contact: { name, numbers } };
+  }, []);
 
   const openSettings = useCallback(() => {
     void Linking.openSettings().catch((error: unknown) =>
@@ -313,9 +351,9 @@ export function useContacts() {
     loading: asked && query.isFetching,
     request,
     refresh,
-    addMore,
+    pickContact,
     openSettings,
-    /** iOS 18 limited access is the only state with more contacts to hand over. */
-    canAddMore: access === 'limited' && Platform.OS === 'ios',
+    /** Whether `pickContact` has an OS picker to open. */
+    canPickContact: CAN_PICK_CONTACT,
   };
 }
