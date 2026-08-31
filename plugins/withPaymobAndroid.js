@@ -1,4 +1,8 @@
-const { withProjectBuildGradle, withAppBuildGradle } = require('expo/config-plugins');
+const {
+  withAndroidManifest,
+  withProjectBuildGradle,
+  withAppBuildGradle,
+} = require('expo/config-plugins');
 
 /**
  * paymob-reactnative ships a native Android module that isn't Expo-autolinked config: its
@@ -14,13 +18,14 @@ function withPaymobProjectRepositories(config) {
       return config;
     }
 
-    const marker = 'allprojects {\n    repositories {';
-    if (!contents.includes(marker)) {
+    const markerMatch = contents.match(/allprojects\s*\{\s*repositories\s*\{/);
+    if (!markerMatch) {
       throw new Error(
         'withPaymobAndroid: could not find `allprojects { repositories {` in the project build.gradle to insert the Paymob maven repos.',
       );
     }
 
+    const marker = markerMatch[0];
     config.modResults.contents = contents.replace(
       marker,
       `${marker}\n` +
@@ -60,8 +65,31 @@ function withPaymobDataBinding(config) {
   });
 }
 
+function withPaymobManifest(config) {
+  return withAndroidManifest(config, (config) => {
+    const manifest = config.modResults.manifest;
+    manifest.$ = manifest.$ || {};
+    manifest.$['xmlns:tools'] =
+      manifest.$['xmlns:tools'] || 'http://schemas.android.com/tools';
+
+    const application = manifest.application?.[0];
+    if (!application) {
+      throw new Error(
+        'withPaymobAndroid: could not find the application element in AndroidManifest.xml.',
+      );
+    }
+
+    application.$ = application.$ || {};
+    application.$['android:enableOnBackInvokedCallback'] = 'false';
+    application.$['tools:replace'] =
+      'android:enableOnBackInvokedCallback';
+    return config;
+  });
+}
+
 module.exports = function withPaymobAndroid(config) {
   config = withPaymobProjectRepositories(config);
   config = withPaymobDataBinding(config);
+  config = withPaymobManifest(config);
   return config;
 };
