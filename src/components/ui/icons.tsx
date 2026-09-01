@@ -97,3 +97,29 @@ export function PinIcon({ size = 22, color = colors.sage500 }: IconProps) {
     </Svg>
   );
 }
+
+/**
+ * Arrow leaving a bracket: the conventional "this opens somewhere else" mark. Used on the
+ * venue card, which hands off to Google Maps rather than navigating inside the app.
+ */
+export function ExternalLinkIcon({ size = 16, color = colors.sage500 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M14 4h6v6"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Line x1="20" y1="4" x2="11" y2="13" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path
+        d="M18 14.5V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

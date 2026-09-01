@@ -21,6 +21,7 @@ export { PageHeader, type PageHeaderProps } from './PageHeader';
 export {
   CameraIcon,
   DiscoverIcon,
+  ExternalLinkIcon,
   type IconProps,
   PinIcon,
   ProfileIcon,

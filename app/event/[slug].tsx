@@ -6,6 +6,7 @@ import {
   BackButton,
   Badge,
   Button,
+  ExternalLinkIcon,
   ImageSlot,
   MarkdownText,
   PinIcon,
@@ -16,6 +17,7 @@ import { useEvent } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
+import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
@@ -63,6 +65,13 @@ export default function EventDetailScreen() {
             ? 'Sales for this event are closed.'
             : 'Tickets are not on sale yet.';
   const eventId = event.id;
+
+  const mapUrl = venueMapUrl(event.venue);
+
+  function onOpenVenue() {
+    track('venue_map_opened', { event_id: eventId, event_slug: eventSlug ?? '' });
+    void openVenueInMaps(event?.venue);
+  }
 
   function onGetTickets() {
     if (!firstPurchasableTier) return;
@@ -167,7 +176,22 @@ export default function EventDetailScreen() {
           <Text variant="eyebrow" style={styles.sectionLabel}>
             Venue
           </Text>
-          <View style={styles.venue}>
+          <Pressable
+            accessibilityRole={mapUrl ? 'link' : undefined}
+            accessibilityLabel={
+              mapUrl
+                ? `Open ${event.venue?.name ?? 'the venue'} in Google Maps`
+                : undefined
+            }
+            accessibilityHint={mapUrl ? 'Opens Google Maps outside the app' : undefined}
+            disabled={!mapUrl}
+            onPress={onOpenVenue}
+            style={({ pressed }) => [
+              styles.venue,
+              mapUrl ? styles.venueLink : null,
+              pressed && mapUrl ? styles.venuePressed : null,
+            ]}
+          >
             <View style={styles.venueIcon}>
               <PinIcon />
             </View>
@@ -178,8 +202,14 @@ export default function EventDetailScreen() {
               {event.venue?.address ? (
                 <Text style={styles.venueAddress}>{event.venue.address}</Text>
               ) : null}
+              {mapUrl ? (
+                <View style={styles.venueAction}>
+                  <ExternalLinkIcon size={13} />
+                  <Text style={styles.venueActionText}>Open in Google Maps</Text>
+                </View>
+              ) : null}
             </View>
-          </View>
+          </Pressable>
 
           <Text variant="bodyMuted" style={styles.availability}>
             {availability}
@@ -366,6 +396,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
+  },
+  venueLink: {
+    borderColor: colors.sage100,
+  },
+  venuePressed: {
+    opacity: 0.7,
+  },
+  venueAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 7,
+  },
+  venueActionText: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    color: colors.sage500,
   },
   venueIcon: {
     width: 48,
