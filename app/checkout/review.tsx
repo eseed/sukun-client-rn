@@ -24,6 +24,7 @@ import {
   usePaymentStatus,
   usePricePreview,
   usePromoDiscount,
+  useOrder,
   useValidatePromoCode,
 } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
@@ -36,6 +37,7 @@ import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
 import { useHoldsTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
+import { HoldTimer } from '../../src/components/checkout/HoldTimer';
 
 /**
  * Design screen 10 · Checkout, review & pay.
@@ -99,6 +101,30 @@ export default function ReviewScreen() {
   const queryClient = useQueryClient();
   const sheet = usePaymobSheet();
   const reset = useCheckoutStore((s) => s.reset);
+
+  /*
+   * The refused-create error names the held order but carries none of its figures, and that
+   * order was priced when it was created: a promo applied afterwards is not in it. Sending
+   * people straight to pay it therefore charged the undiscounted total under a discounted
+   * summary. Load the held order so the screen can state its real total before anyone pays it;
+   * cancelling it is the payment screen's job, and this screen clears the reference once that
+   * has happened.
+   */
+  const heldOrderQuery = useOrder(heldOrderId ?? undefined);
+  const heldOrder = heldOrderQuery.data;
+  const heldOrderStatusQuery = usePaymentStatus(heldOrderId ?? undefined, {
+    poll: Boolean(heldOrderId),
+  });
+  /*
+   * Cancelling happens on the payment screen, so this screen watches the held order instead:
+   * once it is no longer awaiting payment there is nothing to continue, and offering the button
+   * would route people to an order that cannot be paid.
+   */
+  const heldOrderStatus = heldOrderStatusQuery.data?.orderStatus;
+  const stillHeld =
+    heldOrderId && (heldOrderStatus === undefined || heldOrderStatus === 'awaiting_payment')
+      ? heldOrderId
+      : null;
 
   /**
    * The sheet's verdict is a hint, not the truth. Paymob's own SDK reports CANCELLED when the
@@ -260,6 +286,11 @@ export default function ReviewScreen() {
   // Label the VAT row with the same rate the amount was derived from — reading the rate from a
   // separate expression is how this row ended up showing a 14% amount under a "VAT (0%)" label.
   const vatPercent = Math.round(Number(displayedVatRate ?? 0) * 100);
+  // Only worth warning about when the two actually disagree, which is what a promo applied
+  // after the held order was created does.
+  const heldOrderTotalDiffers = Boolean(
+    heldOrder && displayedTotal && heldOrder.totalEgp !== displayedTotal,
+  );
 
   if (access.loading) {
     return (
@@ -393,13 +424,24 @@ export default function ReviewScreen() {
         </Text>
       ) : null}
 
-      {heldOrderId ? (
-        <Button
-          label="Continue your held order"
-          variant="secondary"
-          onPress={() => router.push(`/checkout/payment?orderId=${heldOrderId}`)}
-          style={styles.heldOrder}
-        />
+      {stillHeld ? (
+        <View style={styles.heldOrder}>
+          <HoldTimer holdExpiresAt={heldOrder?.holdExpiresAt} />
+
+          {heldOrder ? (
+            <Text variant="metaSm" style={styles.heldOrderNote}>
+              {heldOrderTotalDiffers
+                ? `That order was priced when it was created, at ${formatEgp(heldOrder.totalEgp)}, so paying it charges that amount and not the total above. Open it to pay it or to cancel it, then start again with this basket.`
+                : `That order is for ${formatEgp(heldOrder.totalEgp)}. You can pay it or cancel it from that screen.`}
+            </Text>
+          ) : null}
+
+          <Button
+            label="Continue your held order"
+            variant="secondary"
+            onPress={() => router.push(`/checkout/payment?orderId=${stillHeld}`)}
+          />
+        </View>
       ) : null}
 
       {promoCode && promoQuery.isError ? (
@@ -415,6 +457,8 @@ export default function ReviewScreen() {
       ) : null}
 
       <View style={styles.spacer} />
+
+      {order ? <HoldTimer holdExpiresAt={order.holdExpiresAt} /> : null}
 
       <Button
         label="Continue to payment"
@@ -496,6 +540,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   heldOrder: {
+    marginBottom: 12,
+  },
+  heldOrderNote: {
     marginBottom: 12,
   },
   pressed: {

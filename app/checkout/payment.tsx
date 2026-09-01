@@ -11,11 +11,14 @@ import {
   Text,
 } from '../../src/components/ui';
 import {
+  useCancelOrder,
   useInitiatePayment,
   useOrder,
   usePaymentStatus,
   useRetryPayment,
 } from '../../src/hooks/queries';
+import { HoldTimer } from '../../src/components/checkout/HoldTimer';
+import { isOrderCancellable } from '../../src/lib/orders';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
@@ -42,10 +45,12 @@ export default function PaymentScreen() {
   const validOrderId = typeof orderId === 'string' && orderId.length > 0 ? orderId : undefined;
 
   const reset = useCheckoutStore((s) => s.reset);
+  const setOrderId = useCheckoutStore((s) => s.setOrderId);
   const orderQuery = useOrder(validOrderId);
   const { data: order } = orderQuery;
   const initiate = useInitiatePayment();
   const retry = useRetryPayment();
+  const cancel = useCancelOrder();
 
   /**
    * Whether a sheet has been presented at all. Not the switch for the status query below, which
@@ -154,6 +159,26 @@ export default function PaymentScreen() {
     }
   }
 
+  /**
+   * Releases the order and its capacity hold. The basket itself is deliberately left alone:
+   * cancelling is how a buyer gets back to a selection they want to re-price (a promo applied
+   * after the order was created is not in that order), so wiping the draft would make them
+   * assemble it again. Only the reference to the dead order is cleared.
+   */
+  async function onCancel() {
+    if (!validOrderId) return;
+    setError(null);
+    try {
+      await cancel.mutateAsync(validOrderId);
+      track('order_cancelled', { order_id: validOrderId });
+      setOrderId(null);
+      if (router.canGoBack()) router.back();
+      else router.replace('/(tabs)/discover');
+    } catch (err) {
+      setError(messageForError(err));
+    }
+  }
+
   function presentPaymob(intent: { clientSecret: string; publicKey: string }) {
     if (!sheet.available) return;
     sheet.present(intent);
@@ -203,6 +228,13 @@ export default function PaymentScreen() {
    */
   const awaitingVerdict = sheetPresented && sdkResult === null;
   const busy = initiate.isPending || retry.isPending || awaitingVerdict;
+  /*
+   * The cancel button waits for the server to say the attempt has settled. Paymob's CANCELLED
+   * verdict is not that: the attempt stays pending until the webhook lands or the five-minute
+   * reconciliation sweep fails it, and cancelling before then is refused outright. Showing the
+   * button only when it would work is better than handing people a button that 409s.
+   */
+  const cancellable = !busy && !terminal && isOrderCancellable(status);
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -224,6 +256,8 @@ export default function PaymentScreen() {
       <Text variant="metaSm" style={styles.note}>
         Tapping pay opens Paymob&apos;s secure sheet, where you enter your card.
       </Text>
+
+      {!terminal ? <HoldTimer holdExpiresAt={order.holdExpiresAt} /> : null}
 
       {(awaitingVerdict || pending) && !failed && !settled ? (
         <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
@@ -265,6 +299,17 @@ export default function PaymentScreen() {
           onPress={() => void onRetry()}
           loading={retry.isPending}
           disabled={busy}
+          style={styles.retryButton}
+        />
+      ) : null}
+
+      {cancellable ? (
+        <Button
+          label="Cancel this order"
+          variant="secondary"
+          onPress={() => void onCancel()}
+          loading={cancel.isPending}
+          disabled={cancel.isPending}
           style={styles.retryButton}
         />
       ) : null}

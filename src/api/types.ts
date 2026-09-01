@@ -489,6 +489,8 @@ export interface PaymentIntent {
 export interface PaymentStatus {
   orderStatus: OrderStatus;
   paymentStatus:
+    /** No payment attempt exists yet: the backend sends `payment?.status ?? ''`. */
+    | ''
     | 'creating'
     | 'pending'
     | 'provider_status_unknown'

@@ -1004,7 +1004,12 @@ export const mockApi: SukunApi = {
               ? 'expired'
               : order.status === 'cancelled'
                 ? 'voided'
-                : 'pending',
+                : // No attempt has been opened yet, which the backend reports as an empty
+                  // status. Only a live intention counts as pending, and only that blocks a
+                  // cancel - see `isOrderCancellable`.
+                  state.settleAt.has(orderId)
+                  ? 'pending'
+                  : '',
           ticketsIssued: paid ? order.items.reduce((acc, i) => acc + i.quantity, 0) : 0,
           paidAt: paid ? (state.paidAt.get(orderId) ?? null) : null,
         },
