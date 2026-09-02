@@ -63,11 +63,6 @@ jest.mock('expo-contacts/legacy', () => ({
   presentContactPickerAsync: jest.fn(async () => null),
 }));
 
-jest.mock('expo-camera', () => ({
-  CameraView: 'CameraView',
-  useCameraPermissions: () => [{ granted: true }, jest.fn()],
-}));
-
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(async () => ({ canceled: true })),
   requestCameraPermissionsAsync: jest.fn(async () => ({ granted: true })),
