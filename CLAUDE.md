@@ -95,7 +95,7 @@ npm run verify     all three (run this before every commit)
 When the user says to release on iOS (e.g. "release this on iOS", "ship an iOS build"), run:
 
 ```
-npm run verify && npx eas build --platform ios --profile production --auto-submit
+npm run release:ios
 ```
 
 This builds in the cloud and auto-submits to TestFlight (App Store Connect handles

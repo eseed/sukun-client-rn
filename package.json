@@ -14,7 +14,8 @@
     "format": "prettier --write .",
     "test": "jest",
     "test:watch": "jest --watch",
-    "verify": "npm run typecheck && npm run lint && npm test -- --ci"
+    "verify": "npm run typecheck && npm run lint && npm test -- --ci",
+    "release:ios": "npm run verify && eas build --platform ios --profile production --auto-submit"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.14",
@@ -61,6 +62,7 @@
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.2.2",
+    "eas-cli": "^23.2.0",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
     "eslint-config-prettier": "^10.1.8",
