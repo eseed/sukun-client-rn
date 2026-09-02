@@ -1,20 +1,21 @@
 import { Platform } from 'react-native';
 
 /**
- * The brand `.otf` files are licensed assets held in the Claude Design project
+ * The brand faces are licensed assets held in the Claude Design project
  * (`_ds/.../assets/fonts/`), committed under `assets/fonts/` and registered via `useFonts`
- * in `app/_layout.tsx` — see `assets/fonts/README.md`.
+ * in `app/_layout.tsx`. The registered files are the `.ttf` conversions, not the `.otf`
+ * masters, because Android cannot parse PostScript outlines — see `assets/fonts/README.md`.
  */
 export const BRAND_FONTS_AVAILABLE = true;
 
 export const brandFontFiles = {
-  SeriouslyNostalgic: 'SeriouslyNostalgicFine-Regular.otf',
-  SeriouslyNostalgicItalic: 'SeriouslyNostalgic-RegularItalic.otf',
-  BananaGrotesk: 'BananaGrotesk-Regular.otf',
-  BananaGroteskLight: 'BananaGrotesk-Light.otf',
-  BananaGroteskMedium: 'BananaGrotesk-Medium.otf',
-  BananaGroteskThin: 'BananaGrotesk-Thin.otf',
-  MinionPro: 'MinionPro-Regular.otf',
+  SeriouslyNostalgic: 'SeriouslyNostalgicFine-Regular.ttf',
+  SeriouslyNostalgicItalic: 'SeriouslyNostalgic-RegularItalic.ttf',
+  BananaGrotesk: 'BananaGrotesk-Regular.ttf',
+  BananaGroteskLight: 'BananaGrotesk-Light.ttf',
+  BananaGroteskMedium: 'BananaGrotesk-Medium.ttf',
+  BananaGroteskThin: 'BananaGrotesk-Thin.ttf',
+  MinionPro: 'MinionPro-Regular.ttf',
 } as const;
 
 export type BrandFamily = keyof typeof brandFontFiles;

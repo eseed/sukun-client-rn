@@ -24,14 +24,17 @@ type ConsentStatus = 'loading' | 'unknown' | 'granted' | 'denied';
 export default function RootLayout() {
   const restore = useAuthStore((s) => s.restore);
   const [consentStatus, setConsentStatus] = useState<ConsentStatus>('loading');
+  // TrueType, not the licensed OpenType masters beside them: Android's typeface loader does not
+  // parse PostScript (CFF) outlines and falls back to the system face without raising, so the
+  // .otf files rendered correctly on iOS and as Roboto on Android. See assets/fonts/README.md.
   const [fontsLoaded, fontError] = useFonts({
-    SeriouslyNostalgic: require('../assets/fonts/SeriouslyNostalgicFine-Regular.otf'),
-    SeriouslyNostalgicItalic: require('../assets/fonts/SeriouslyNostalgic-RegularItalic.otf'),
-    BananaGrotesk: require('../assets/fonts/BananaGrotesk-Regular.otf'),
-    BananaGroteskLight: require('../assets/fonts/BananaGrotesk-Light.otf'),
-    BananaGroteskMedium: require('../assets/fonts/BananaGrotesk-Medium.otf'),
-    BananaGroteskThin: require('../assets/fonts/BananaGrotesk-Thin.otf'),
-    MinionPro: require('../assets/fonts/MinionPro-Regular.otf'),
+    SeriouslyNostalgic: require('../assets/fonts/SeriouslyNostalgicFine-Regular.ttf'),
+    SeriouslyNostalgicItalic: require('../assets/fonts/SeriouslyNostalgic-RegularItalic.ttf'),
+    BananaGrotesk: require('../assets/fonts/BananaGrotesk-Regular.ttf'),
+    BananaGroteskLight: require('../assets/fonts/BananaGrotesk-Light.ttf'),
+    BananaGroteskMedium: require('../assets/fonts/BananaGrotesk-Medium.ttf'),
+    BananaGroteskThin: require('../assets/fonts/BananaGrotesk-Thin.ttf'),
+    MinionPro: require('../assets/fonts/MinionPro-Regular.ttf'),
   });
 
   useEffect(() => {
