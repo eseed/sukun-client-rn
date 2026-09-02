@@ -19,11 +19,23 @@ import { hasReactNativeModule } from './nativeModules';
  *
  * EU data residency: this project stores EU user data, so Mixpanel talks to
  * `api-eu.mixpanel.com` rather than the default US endpoint.
+ *
+ * Environments are kept apart by giving each build its own Mixpanel project and its own
+ * Clarity project, wired per EAS build profile. The ids are read from `EXPO_PUBLIC_*`, which
+ * Expo inlines at build time, so a binary carries exactly one environment's ids and cannot be
+ * pointed at another at runtime. They must be read as whole `process.env.EXPO_PUBLIC_X`
+ * expressions for that inlining to happen: destructuring `process.env` breaks it.
+ *
+ * An id that is missing turns its SDK off rather than falling back to a default, so a
+ * misconfigured build sends nothing instead of writing into the wrong project. `environment`
+ * is also attached to every event and to the replay session, as a second line of defence: if
+ * an id is ever wrong, the two datasets are still separable after the fact.
  */
 
-const MIXPANEL_TOKEN = '71571cdae3de3136c0c4318927206845';
+const MIXPANEL_TOKEN = process.env.EXPO_PUBLIC_MIXPANEL_TOKEN ?? '';
 const MIXPANEL_EU_SERVER_URL = 'https://api-eu.mixpanel.com';
-const CLARITY_PROJECT_ID = 'y6tknxh6u4';
+const CLARITY_PROJECT_ID = process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID ?? '';
+const ANALYTICS_ENV = process.env.EXPO_PUBLIC_ANALYTICS_ENV ?? 'unknown';
 
 type Properties = Record<string, string | number | boolean>;
 
@@ -44,6 +56,11 @@ function getClarity(): typeof ClarityModule | null {
   if (clarityLookedUp) return clarityModule;
   clarityLookedUp = true;
 
+  if (!CLARITY_PROJECT_ID) {
+    console.warn('[analytics] no Clarity project id configured, session replay is off');
+    return null;
+  }
+
   // `ClarityEmitter` is the module Clarity turns into a `NativeEventEmitter` while importing,
   // so it is the one whose absence brings the app down. Leave the package unloaded without it.
   if (!hasReactNativeModule('ClarityEmitter')) {
@@ -63,6 +80,11 @@ function getClarity(): typeof ClarityModule | null {
 function getMixpanelClass(): typeof Mixpanel | null {
   if (mixpanelLookedUp) return mixpanelClass;
   mixpanelLookedUp = true;
+
+  if (!MIXPANEL_TOKEN) {
+    console.warn('[analytics] no Mixpanel token configured, events are off');
+    return null;
+  }
 
   try {
     // Mixpanel reads `NativeModules` without dereferencing it, so its import survives a binary
@@ -87,6 +109,7 @@ async function getInstance(): Promise<Mixpanel | null> {
 
         const instance = new MixpanelClass(MIXPANEL_TOKEN, true);
         await instance.init(false, undefined, MIXPANEL_EU_SERVER_URL);
+        instance.registerSuperProperties({ environment: ANALYTICS_ENV });
         mixpanel = instance;
         return instance;
       } catch (error) {
@@ -107,6 +130,9 @@ function startClarity(): void {
     if (!clarityInitialized) {
       Clarity.initialize(CLARITY_PROJECT_ID, { logLevel: Clarity.LogLevel.None });
       clarityInitialized = true;
+      void Clarity.setCustomTag('environment', ANALYTICS_ENV).catch((error: unknown) =>
+        console.warn('[analytics] Clarity setCustomTag failed', error),
+      );
       return;
     }
     void Clarity.resume().catch((error: unknown) =>

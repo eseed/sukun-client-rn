@@ -119,3 +119,11 @@ as a side effect of another task.
   import, so a consent answer stops events _and_ session replay. Never put a name, email, or
   phone number in an event property or user property — identify by the app user id.
   `requiresPrivacyConsentGate()` decides who is asked; everyone else is not prompted.
+- Analytics environments are separate projects, never a shared one with a filter: staging and
+  production each have their own Mixpanel project and their own Clarity project. The ids are
+  read from `EXPO_PUBLIC_MIXPANEL_TOKEN` / `EXPO_PUBLIC_CLARITY_PROJECT_ID` and set per EAS
+  build profile in `eas.json`; `EXPO_PUBLIC_ANALYTICS_ENV` tags every event and replay session.
+  Never hardcode an id back into `analytics.ts`, and never give a missing id a default: an
+  unset id turns that SDK off, so a misconfigured build sends nothing rather than polluting the
+  other environment. A new Mixpanel project must be created in the **EU** region, since the app
+  posts to `api-eu.mixpanel.com`.

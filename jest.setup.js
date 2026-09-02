@@ -3,6 +3,12 @@
 // Screen and mock-api tests must not inherit a developer's live .env setting.
 process.env.EXPO_PUBLIC_API_MODE = 'mock';
 
+// Analytics ids likewise: without them every SDK stays off, which is a case its own test
+// covers deliberately rather than one the whole suite should run under.
+process.env.EXPO_PUBLIC_ANALYTICS_ENV = 'test';
+process.env.EXPO_PUBLIC_MIXPANEL_TOKEN = 'test-mixpanel-token';
+process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID = 'test-clarity-id';
+
 jest.mock('expo-secure-store', () => {
   const store = new Map();
   return {
@@ -78,6 +84,7 @@ jest.mock('mixpanel-react-native', () => {
       getPeople: () => people,
       reset: jest.fn(),
       setServerURL: jest.fn(),
+      registerSuperProperties: jest.fn(),
     })),
   };
 });
@@ -87,6 +94,7 @@ jest.mock('@microsoft/react-native-clarity', () => ({
   pause: jest.fn(async () => true),
   resume: jest.fn(async () => true),
   setCustomUserId: jest.fn(async () => true),
+  setCustomTag: jest.fn(async () => true),
   startNewSession: jest.fn((cb) => cb && cb('session-id')),
   LogLevel: { None: 'None', Verbose: 'Verbose' },
 }));
