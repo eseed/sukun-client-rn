@@ -158,8 +158,7 @@ export const eventDetails: Record<string, EventDetail> = {
     venue: {
       name: 'Tunis Village',
       address: 'Fayoum, Egypt',
-      latitude: '29.4561',
-      longitude: '30.6431',
+      mapUrl: 'https://www.google.com/maps/search/?api=1&query=29.4561%2C30.6431',
     },
     tags: ['festivals'],
     whatToBring: 'Comfortable layers, a refillable bottle, and a mat if you have one.',
@@ -244,8 +243,7 @@ export const eventDetails: Record<string, EventDetail> = {
     venue: {
       name: 'Sukun West rooftop',
       address: 'Sheikh Zayed, Giza',
-      latitude: '30.0131',
-      longitude: '30.9755',
+      mapUrl: 'https://www.google.com/maps/search/?api=1&query=30.0131%2C30.9755',
     },
     tags: ['sound'],
     whatToBring: 'A blanket. We provide mats.',
@@ -296,8 +294,7 @@ export const eventDetails: Record<string, EventDetail> = {
     venue: {
       name: 'Wadi Degla',
       address: 'Maadi, Cairo',
-      latitude: '29.9601',
-      longitude: '31.3221',
+      mapUrl: 'https://www.google.com/maps/search/?api=1&query=29.9601%2C31.3221',
     },
     tags: ['sound'],
     whatToBring: 'Warm layers for the early hour.',
@@ -382,8 +379,7 @@ export function seedTickets(holderName: string): Ticket[] {
         title: 'Tulua',
         coverImageUrl: null,
         venueName: 'Tunis Village, Fayoum',
-        venueLat: 29.4561,
-        venueLng: 30.6431,
+        venueMapUrl: 'https://www.google.com/maps/search/?api=1&query=29.4561%2C30.6431',
       },
       tier: { id: TIER_WEEKEND, name: 'Full Weekend Pass' },
       days: [

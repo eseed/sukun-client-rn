@@ -1,13 +1,7 @@
 import { venueMapUrl } from '../maps';
 
-function venue(overrides: Partial<Parameters<typeof venueMapUrl>[0] & object> = {}) {
-  return {
-    name: 'Il Monte Galala',
-    address: 'Ain El Sokhna, Suez Governorate',
-    latitude: null,
-    longitude: null,
-    ...overrides,
-  };
+function venue(mapUrl: string | null) {
+  return { name: 'Il Monte Galala', address: 'Ain El Sokhna, Suez Governorate', mapUrl };
 }
 
 describe('venueMapUrl', () => {
@@ -16,27 +10,23 @@ describe('venueMapUrl', () => {
     expect(venueMapUrl(undefined)).toBeNull();
   });
 
-  it('returns null when the venue carries nothing to search for', () => {
-    expect(venueMapUrl(venue({ name: null, address: '  ' }))).toBeNull();
+  it('returns the link the backend stored, untouched', () => {
+    const link = 'https://maps.app.goo.gl/8xKQ2mNvRb3TgUq7A';
+    expect(venueMapUrl(venue(link))).toBe(link);
   });
 
-  it('prefers coordinates over the address', () => {
-    const url = venueMapUrl(venue({ latitude: '29.4561', longitude: '32.3421' }));
-    expect(url).toBe('https://www.google.com/maps/search/?api=1&query=29.4561%2C32.3421');
+  it('keeps a long place URL intact rather than rewriting it', () => {
+    const link = 'https://www.google.com/maps/place/Il+Monte+Galala/@29.6,32.3,17z';
+    expect(venueMapUrl(venue(link))).toBe(link);
   });
 
-  it('falls back to the name and address when coordinates are missing', () => {
-    expect(venueMapUrl(venue())).toBe(
-      'https://www.google.com/maps/search/?api=1&query=Il%20Monte%20Galala%2C%20Ain%20El%20Sokhna%2C%20Suez%20Governorate',
-    );
+  it('treats an empty or whitespace-only link as absent', () => {
+    expect(venueMapUrl(venue(null))).toBeNull();
+    expect(venueMapUrl(venue('   '))).toBeNull();
   });
 
-  it('ignores a half-populated or unparseable coordinate pair', () => {
-    expect(venueMapUrl(venue({ latitude: '29.4561', longitude: null }))).toContain(
-      'Il%20Monte%20Galala',
-    );
-    expect(venueMapUrl(venue({ latitude: 'north', longitude: 'east' }))).toContain(
-      'Il%20Monte%20Galala',
-    );
+  it('refuses a link that is not http or https', () => {
+    expect(venueMapUrl(venue('javascript:alert(1)'))).toBeNull();
+    expect(venueMapUrl(venue('maps.app.goo.gl/8xKQ2mNvRb3TgUq7A'))).toBeNull();
   });
 });

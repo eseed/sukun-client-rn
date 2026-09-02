@@ -2,47 +2,23 @@ import { Linking } from 'react-native';
 import type { EventVenue } from '../api/types';
 
 /**
- * Venue map links. The backend sends the venue as a name, a free-text address and an optional
- * decimal lat/lng pair (`PublicEventDetailVenueDto`), not a ready-made URL, so the link is
- * built here from whichever of those is present.
- *
- * The Google Maps universal URL scheme is deliberate: `https://www.google.com/maps/search/`
- * opens the Google Maps app when it is installed on either platform and falls back to the web
- * map in a browser when it is not, so one URL covers iOS, Android and a simulator with no
- * Maps app. See https://developers.google.com/maps/documentation/urls/get-started.
+ * Venue map links. The backend stores one field, `mapUrl`, holding the Google Maps link an admin
+ * pasted whole, and sends it back untouched. The app treats it as opaque: it opens it and never
+ * parses it, because Google mints several shapes of these (`maps.app.goo.gl` short links,
+ * `/maps/place/...`, `?q=` searches) and only Google can resolve them. Nothing here builds a URL.
  */
-
-const MAPS_SEARCH_URL = 'https://www.google.com/maps/search/?api=1&query=';
-
-function coordinate(value: string | null): number | null {
-  if (value === null) return null;
-  const trimmed = value.trim();
-  if (trimmed === '') return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
 
 /**
- * A Google Maps URL for a venue, or `null` when there is nothing to point at. Coordinates win
- * over the address: they drop the pin exactly, where a text search only guesses at it. An
- * address with no coordinates still searches usefully, so it is worth the fallback, and the
- * venue name is prepended to give that search something more specific than a street.
+ * The venue's map link, or `null` when there is none to offer. Whitespace-only is treated as
+ * absent so a link field an admin cleared does not render as a tappable row that goes nowhere.
+ * A link that is not http(s) is refused as well: the admin form validates for that, but a row
+ * predating the rule must not hand the OS an arbitrary scheme to launch.
  */
 export function venueMapUrl(venue: EventVenue | null | undefined): string | null {
-  if (!venue) return null;
+  const url = venue?.mapUrl?.trim();
+  if (!url) return null;
 
-  const latitude = coordinate(venue.latitude);
-  const longitude = coordinate(venue.longitude);
-  if (latitude !== null && longitude !== null) {
-    return `${MAPS_SEARCH_URL}${encodeURIComponent(`${latitude},${longitude}`)}`;
-  }
-
-  const query = [venue.name, venue.address]
-    .map((part) => part?.trim())
-    .filter((part): part is string => Boolean(part))
-    .join(', ');
-
-  return query === '' ? null : `${MAPS_SEARCH_URL}${encodeURIComponent(query)}`;
+  return /^https?:\/\//i.test(url) ? url : null;
 }
 
 /**

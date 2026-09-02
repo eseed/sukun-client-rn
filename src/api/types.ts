@@ -223,8 +223,8 @@ export interface EventTier {
 export interface EventVenue {
   name: string | null;
   address: string | null;
-  latitude: string | null;
-  longitude: string | null;
+  /** The venue's Google Maps link, pasted by an admin. Open it; never parse it. */
+  mapUrl: string | null;
 }
 
 export interface EventGalleryItem {
@@ -426,8 +426,7 @@ export interface TicketEvent {
   title: string;
   coverImageUrl: string | null;
   venueName: string | null;
-  venueLat: number | null;
-  venueLng: number | null;
+  venueMapUrl: string | null;
 }
 
 export interface TicketDay {
@@ -529,8 +528,7 @@ export interface LiveTicket {
     title: string;
     coverImageUrl: string | null;
     venueName: string | null;
-    venueLat: number | null;
-    venueLng: number | null;
+    venueMapUrl: string | null;
   };
   tier: { id: string; name: string };
   days: { id: string; date: string; startsAt: string; gatesOpenAt: string | null }[];

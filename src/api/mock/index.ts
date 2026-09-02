@@ -448,8 +448,7 @@ function issueTicketsFor(order: OrderDetail): void {
     title: event.title,
     coverImageUrl: event.coverImageUrl,
     venueName: event.venue?.name ?? null,
-    venueLat: event.venue?.latitude ? Number(event.venue.latitude) : null,
-    venueLng: event.venue?.longitude ? Number(event.venue.longitude) : null,
+    venueMapUrl: event.venue?.mapUrl ?? null,
   };
 
   for (const item of order.items) {
