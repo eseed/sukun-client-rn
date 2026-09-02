@@ -42,7 +42,6 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fontFamily.bodyMedium,
     fontSize: 28,
-    fontWeight: '500',
     letterSpacing: -0.28,
   },
   copy: {

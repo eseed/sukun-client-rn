@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { colors } from '../../theme/tokens';
+import { colors, fontFamily } from '../../theme/tokens';
 import { Text } from './Text';
 
 /**
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   },
   digit: {
     fontSize: 24,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   hidden: {

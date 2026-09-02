@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import type { EventListItem } from '../../api/types';
 import { formatDateRange } from '../../lib/format';
 import { designAsset, type DesignAssetKey } from '../../theme/assets';
-import { colors, shadow } from '../../theme/tokens';
+import { colors, fontFamily, shadow } from '../../theme/tokens';
 import { ImageSlot, OverlayPill, Text } from '../ui';
 
 /**
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   rowMeta: {

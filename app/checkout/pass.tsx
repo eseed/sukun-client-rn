@@ -19,7 +19,7 @@ import { messageForError } from '../../src/lib/errors';
 import { useEvent, usePricePreview } from '../../src/hooks/queries';
 import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 
 /**
@@ -216,16 +216,21 @@ const styles = StyleSheet.create({
   },
   tierTop: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: 12,
   },
   tierName: {
+    flexShrink: 1,
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   tierPrice: {
+    flexShrink: 0,
+    textAlign: 'right',
     fontSize: 15,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   tierDescription: {
@@ -240,9 +245,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 8,
   },
   subtotal: {
+    flexShrink: 1,
     alignItems: 'flex-end',
   },
   subtotalLabel: {
@@ -252,8 +259,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   subtotalValue: {
+    textAlign: 'right',
     fontSize: 17,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   spacer: {

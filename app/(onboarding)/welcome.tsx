@@ -67,7 +67,6 @@ const styles = StyleSheet.create({
   tagline: {
     fontFamily: fontFamily.bodyMedium,
     fontSize: 28,
-    fontWeight: '500',
     letterSpacing: -0.28,
     color: colors.textPrimary,
   },

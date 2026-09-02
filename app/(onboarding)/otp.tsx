@@ -16,7 +16,7 @@ import { isAccountRestorationRequired, messageForError } from '../../src/lib/err
 import { formatCountdown } from '../../src/lib/format';
 import { formatPhoneForDisplay, isValidPhone } from '../../src/lib/phone';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 
 const CODE_LENGTH = 4;
 const RESEND_SECONDS = 30;
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   strong: {
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
   },
   inputWrap: {
     marginBottom: 22,
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   resend: {
-    fontWeight: '500',
+    fontFamily: fontFamily.bodyMedium,
   },
   spacer: {
     flex: 1,

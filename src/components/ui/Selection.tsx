@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
-import { colors, fontSize, lineHeightRatio, radius } from '../../theme/tokens';
+import { colors, fontFamily, fontSize, lineHeightRatio, radius } from '../../theme/tokens';
 import { Text } from './Text';
 
 /** The filled/outlined radio dot used by the pass selector and the contact list. */
@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     minWidth: 44,
     textAlign: 'center',
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
 });

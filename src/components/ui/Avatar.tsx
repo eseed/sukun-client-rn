@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { colors } from '../../theme/tokens';
+import { colors, fontFamily } from '../../theme/tokens';
 import { initials } from '../../lib/format';
 import { Text } from './Text';
 
@@ -69,6 +69,6 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   label: {
-    fontWeight: '700',
+    fontFamily: fontFamily.bodyMedium,
   },
 });

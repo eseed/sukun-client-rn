@@ -207,7 +207,6 @@ function headingStyle(level: number): TextStyle {
     return {
       ...text.bodyLead,
       fontFamily: fontFamily.bodyMedium,
-      fontWeight: '600',
       fontSize: 18,
       lineHeight: 18 * 1.3,
     };
@@ -215,7 +214,6 @@ function headingStyle(level: number): TextStyle {
   return {
     ...text.bodyLead,
     fontFamily: fontFamily.bodyMedium,
-    fontWeight: '600',
     fontSize: Math.max(15, 20 - level),
     lineHeight: Math.max(15, 20 - level) * 1.35,
   };
@@ -309,7 +307,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   bold: {
-    fontWeight: '700',
+    fontFamily: fontFamily.bodyMedium,
   },
   italic: {
     fontStyle: 'italic',

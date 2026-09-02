@@ -787,27 +787,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
   },
   friendsCount: {
+    flexShrink: 1,
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   listHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 8,
   },
   listHeaderLabel: {
+    flexShrink: 1,
     fontSize: 12,
     letterSpacing: 12 * 0.08,
     textTransform: 'uppercase',
     color: colors.textMuted,
   },
   listHeaderCount: {
+    flexShrink: 0,
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   attached: {
@@ -838,7 +843,7 @@ const styles = StyleSheet.create({
   },
   clearSearch: {
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textMuted,
   },
   contactsButton: {
@@ -873,7 +878,7 @@ const styles = StyleSheet.create({
   },
   contactName: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   contactPhone: {
@@ -916,7 +921,7 @@ const styles = StyleSheet.create({
   addLabel: {
     color: colors.creme,
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     letterSpacing: 12 * 0.08,
     textTransform: 'uppercase',
   },

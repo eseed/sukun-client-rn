@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { Image, type ImageSourcePropType, StyleSheet, View, type ViewStyle } from 'react-native';
-import { colors, shadow } from '../../theme/tokens';
+import { colors, fontFamily, shadow } from '../../theme/tokens';
 import { Text } from './Text';
 
 /**
@@ -93,10 +93,15 @@ export function SummaryRow({
 
   return (
     <View style={styles.summaryRow}>
-      <Text style={[styles.summaryText, emphasis && styles.summaryTotal, { color }]}>{label}</Text>
+      <Text
+        style={[styles.summaryText, styles.summaryLabelText, emphasis && styles.summaryTotal, { color }]}
+      >
+        {label}
+      </Text>
       <Text
         style={[
           styles.summaryText,
+          styles.summaryValueText,
           emphasis && styles.summaryTotal,
           !emphasis && styles.summaryValue,
           { color },
@@ -157,21 +162,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
   },
   summaryText: {
     fontSize: 14,
   },
+  summaryLabelText: {
+    flexShrink: 1,
+  },
+  summaryValueText: {
+    flexShrink: 0,
+    textAlign: 'right',
+  },
   summaryValue: {
-    fontWeight: '500',
+    fontFamily: fontFamily.bodyMedium,
   },
   summaryTotal: {
     fontSize: 19,
-    fontWeight: '700',
+    fontFamily: fontFamily.bodyMedium,
   },
   listRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     paddingVertical: 15,
     paddingHorizontal: 16,
     backgroundColor: colors.bgSurface,
@@ -180,9 +194,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   listLabel: {
+    flexShrink: 1,
     fontSize: 14,
   },
   chevron: {
+    flexShrink: 0,
     fontSize: 19,
   },
 });

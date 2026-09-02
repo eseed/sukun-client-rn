@@ -12,7 +12,7 @@ import { useAvatarUri, useTickets } from '../../src/hooks/queries';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 
 /** Design screen 15 · Profile. */
 export default function ProfileScreen() {
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   stats: {
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 24,
-    fontWeight: '700',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   statLabel: {

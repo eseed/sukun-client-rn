@@ -24,7 +24,7 @@ import { messageForError } from '../../src/lib/errors';
 import { formatDate } from '../../src/lib/format';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 
 /**
  * Account deletion, reached from the Profile tab.
@@ -267,6 +267,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   strong: {
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
   },
 });

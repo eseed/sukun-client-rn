@@ -21,7 +21,7 @@ import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 
 const HERO_HEIGHT = 280;
 
@@ -227,7 +227,7 @@ export default function EventDetailScreen() {
       </ScrollView>
 
       <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}>
-        <View>
+        <View style={styles.barPriceBlock}>
           <Text style={styles.barLabel}>From</Text>
           <Text style={styles.barPrice}>
             {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
   },
   venueActionText: {
     fontSize: 12.5,
-    fontWeight: '500',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.sage500,
   },
   venueIcon: {
@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
   },
   venueName: {
     fontSize: 14,
-    fontWeight: '500',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   venueAddress: {
@@ -451,6 +451,10 @@ const styles = StyleSheet.create({
     borderTopColor: colors.borderDefault,
     paddingTop: 16,
     paddingHorizontal: 24,
+    gap: 16,
+  },
+  barPriceBlock: {
+    flexShrink: 1,
   },
   barLabel: {
     fontSize: 10,
@@ -460,7 +464,7 @@ const styles = StyleSheet.create({
   },
   barPrice: {
     fontSize: 19,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
 });

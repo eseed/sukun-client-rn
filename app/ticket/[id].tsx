@@ -15,7 +15,7 @@ import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useClaimTicket, useEntryPass, useTicket } from '../../src/hooks/queries';
 import { isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 
 const QR_SIZE = 200;
 
@@ -349,6 +349,7 @@ const styles = StyleSheet.create({
   detailRowFirst: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
     paddingVertical: 14,
     borderTopWidth: 1,
     borderTopColor: 'rgba(247,240,224,0.18)',
@@ -356,6 +357,7 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
     paddingVertical: 14,
     borderTopWidth: 1,
     borderBottomWidth: 1,
@@ -363,13 +365,16 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(247,240,224,0.18)',
   },
   detailLabel: {
+    flexShrink: 0,
     fontSize: 13,
     color: colors.creme,
     opacity: 0.65,
   },
   detailValue: {
+    flexShrink: 1,
+    textAlign: 'right',
     fontSize: 13,
-    fontWeight: '500',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.creme,
   },
   footnote: {

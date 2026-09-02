@@ -14,7 +14,7 @@ import { ConicRing } from '../../src/components/ui/ConicRing';
 import { useUploadSelfie } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/stores/auth';
 
 const RING_SIZE = 236;
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   },
   targetLabel: {
     textAlign: 'center',
-    fontWeight: '500',
+    fontFamily: fontFamily.bodyMedium,
     lineHeight: 18,
   },
   preview: {

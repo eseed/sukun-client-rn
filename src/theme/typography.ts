@@ -109,7 +109,6 @@ export const text = {
   buttonLabel: {
     fontFamily: fontFamily.bodyMedium,
     fontSize: 14,
-    fontWeight: '600',
     letterSpacing: tracking.wide(14),
     textTransform: 'uppercase',
   },

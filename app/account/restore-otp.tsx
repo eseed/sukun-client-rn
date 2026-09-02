@@ -11,7 +11,7 @@ import { messageForError } from '../../src/lib/errors';
 import { formatCountdown } from '../../src/lib/format';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
-import { colors, space } from '../../src/theme/tokens';
+import { colors, fontFamily, space } from '../../src/theme/tokens';
 
 const CODE_LENGTH = 4;
 const RESEND_SECONDS = 30;
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     marginBottom: space.s5,
   },
   strong: {
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
   },
   error: {
     marginTop: space.s3,

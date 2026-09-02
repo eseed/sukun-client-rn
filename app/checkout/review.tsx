@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
   promoButtonLabel: {
     color: colors.creme,
     fontSize: 12,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     letterSpacing: 12 * 0.08,
     textTransform: 'uppercase',
   },

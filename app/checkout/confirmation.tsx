@@ -7,7 +7,7 @@ import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useEvent, useOrder, useTickets } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { designAsset } from '../../src/theme/assets';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 
 /**
  * Design screen 12 · Confirmation.
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   },
   headline: {
     fontSize: 14,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     lineHeight: 14 * 1.6,
     textAlign: 'center',
     color: colors.textPrimary,

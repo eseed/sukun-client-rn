@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { colors, radius } from '../../theme/tokens';
+import { colors, fontFamily, radius } from '../../theme/tokens';
 import { Text } from './Text';
 
 /**
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   },
   badgeLabel: {
     fontSize: 10,
-    fontWeight: '700',
+    fontFamily: fontFamily.bodyMedium,
     letterSpacing: 10 * 0.1,
     textTransform: 'uppercase',
   },
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   overlayPillLabel: {
     color: colors.creme,
     fontSize: 10,
-    fontWeight: '700',
+    fontFamily: fontFamily.bodyMedium,
     letterSpacing: 10 * 0.1,
     textTransform: 'uppercase',
   },

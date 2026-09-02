@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import type { Ticket } from '../../api/types';
 import { formatDateRangeShort } from '../../lib/format';
 import { designAsset } from '../../theme/assets';
-import { colors, shadow } from '../../theme/tokens';
+import { colors, fontFamily, shadow } from '../../theme/tokens';
 import { Badge, type BadgeTone, ImageSlot, Text } from '../ui';
 
 /**
@@ -125,18 +125,18 @@ const styles = StyleSheet.create({
   },
   tier: {
     fontSize: 19,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
   cta: {
     fontSize: 13,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodyMedium,
     color: colors.accentSky,
     marginTop: 6,
   },
   ctaMuted: {
     color: colors.textMuted,
-    fontWeight: '400',
+    fontFamily: fontFamily.body,
   },
   pressed: {
     opacity: 0.92,

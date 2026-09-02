@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, PageHeader, ResourceState, Screen, Text } from '../../src/components/ui';
 import { useOrders } from '../../src/hooks/queries';
 import { formatDate, formatEgp } from '../../src/lib/format';
-import { colors, space } from '../../src/theme/tokens';
+import { colors, fontFamily, space } from '../../src/theme/tokens';
 
 function statusLabel(status: string): string {
   return status.replaceAll('_', ' ');
@@ -104,10 +104,13 @@ const styles = StyleSheet.create({
     gap: space.s3,
   },
   status: {
+    flexShrink: 0,
     textTransform: 'capitalize',
   },
   total: {
-    fontWeight: '600',
+    flexShrink: 0,
+    textAlign: 'right',
+    fontFamily: fontFamily.bodyMedium,
   },
   more: {
     alignItems: 'center',
