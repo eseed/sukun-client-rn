@@ -106,7 +106,7 @@ export default function EventDetailScreen() {
     <View style={styles.root}>
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
@@ -248,7 +248,11 @@ export default function EventDetailScreen() {
         presentationStyle="fullScreen"
         onRequestClose={() => setSelectedMediaUrl(null)}
       >
-        <View style={styles.viewer}>
+        <ScrollView
+          style={styles.viewer}
+          contentContainerStyle={styles.viewerContent}
+          showsVerticalScrollIndicator={false}
+        >
           {selectedMediaUrl ? (
             <Image
               source={{ uri: selectedMediaUrl }}
@@ -271,6 +275,9 @@ export default function EventDetailScreen() {
               ) : null}
             </View>
           ) : null}
+        </ScrollView>
+
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close full-screen media"
@@ -298,9 +305,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bgPage,
-  },
-  scroll: {
-    paddingBottom: 120,
   },
   hero: {
     height: HERO_HEIGHT,
@@ -351,12 +355,14 @@ const styles = StyleSheet.create({
   viewer: {
     flex: 1,
     backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  viewerContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
   },
   viewerImage: {
     width: '100%',
-    height: '100%',
+    height: 380,
   },
   viewerClose: {
     position: 'absolute',
@@ -433,7 +439,8 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   disclosures: {
-    marginTop: 2,
+    marginTop: 20,
+    paddingHorizontal: 24,
   },
   policy: {
     marginTop: 10,
