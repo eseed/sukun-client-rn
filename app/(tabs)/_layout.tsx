@@ -1,8 +1,8 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DiscoverIcon, ProfileIcon, TicketsIcon } from '../../src/components/ui';
-import { colors } from '../../src/theme/tokens';
+import { colors, fontFamily } from '../../src/theme/tokens';
 import { text } from '../../src/theme/typography';
 
 /**
@@ -20,8 +20,41 @@ import { text } from '../../src/theme/typography';
  * `height` in `tabBarStyle` replaces React Navigation's own measurement wholesale.
  */
 
-/** 8 + 20 icon + 4 gap + 14 label + 8, the item's own box, with a little air. */
-const BAR_CONTENT_HEIGHT = 56;
+/**
+ * The bar's own height, above the system inset. Two things make this hard to eyeball, and both
+ * were got wrong once already:
+ *
+ * - React Navigation lays every icon into a fixed 28pt wrapper (`ICON_SIZE_TALL`) and ignores
+ *   the 20pt our glyphs draw at, so budgeting for 20 leaves the label short of the box and
+ *   Android slices its bottom off against the system bar.
+ * - It also contributes about 7pt of its own space above the item, so equal padding renders
+ *   bottom-heavy. Measured on a Pixel 7, 12pt each side gave 25pt over the icon and 9pt under
+ *   the label, which crowded the OS buttons. Taking that 7 off the top squares them up.
+ *
+ * The numbers below are measured from a render, not derived from the design alone: they land
+ * at 17.9pt of air above the icon and 16.8pt below the label.
+ */
+const ITEM_PADDING_TOP = 5;
+const ITEM_PADDING_BOTTOM = 12;
+const LABEL_GAP = 4;
+const LABEL_LINE_HEIGHT = 14;
+const BAR_CONTENT_HEIGHT = 70;
+
+/**
+ * The label the design asks for: 10pt uppercase, and the medium face once the tab is active.
+ * It has to be a render function because `tabBarLabelStyle` is read from the focused route and
+ * then applied to every item alike, so it cannot say anything about which one is selected.
+ * Selecting the face, never a numeric `fontWeight` — Android has no Banana Grotesk to
+ * synthesise from and would drop the brand face outright (see `assets/fonts/README.md`).
+ */
+const tabLabel = (title: string) => {
+  function TabLabel({ focused, color }: { focused: boolean; color: ColorValue }) {
+    return (
+      <Text style={[styles.label, focused ? styles.labelActive : null, { color }]}>{title}</Text>
+    );
+  }
+  return TabLabel;
+};
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -33,7 +66,6 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.textPrimary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: [styles.bar, { height: BAR_CONTENT_HEIGHT + insets.bottom }],
-        tabBarLabelStyle: styles.label,
         tabBarItemStyle: styles.item,
         sceneStyle: { backgroundColor: colors.bgPage },
       }}
@@ -42,6 +74,7 @@ export default function TabsLayout() {
         name="discover"
         options={{
           title: 'Discover',
+          tabBarLabel: tabLabel('Discover'),
           tabBarIcon: ({ color }) => <DiscoverIcon color={color} />,
         }}
       />
@@ -49,6 +82,7 @@ export default function TabsLayout() {
         name="tickets"
         options={{
           title: 'Tickets',
+          tabBarLabel: tabLabel('Tickets'),
           tabBarIcon: ({ color }) => <TicketsIcon color={color} />,
         }}
       />
@@ -56,6 +90,7 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          tabBarLabel: tabLabel('Profile'),
           tabBarIcon: ({ color }) => <ProfileIcon color={color} />,
         }}
       />
@@ -72,12 +107,17 @@ const styles = StyleSheet.create({
   },
   label: {
     ...text.tabLabel,
-    // Pinned rather than left to the face's own metrics, so the item's height is the same
-    // 54 on every device and the bar above cannot be too short for it.
-    lineHeight: 14,
-    marginTop: 4,
+    textAlign: 'center',
+    // Pinned rather than left to the face's own metrics, so the item's height is the same on
+    // every device and the bar above cannot be too short for it.
+    lineHeight: LABEL_LINE_HEIGHT,
+    marginTop: LABEL_GAP,
+  },
+  labelActive: {
+    fontFamily: fontFamily.bodyMedium,
   },
   item: {
-    paddingVertical: 8,
+    paddingTop: ITEM_PADDING_TOP,
+    paddingBottom: ITEM_PADDING_BOTTOM,
   },
 });
