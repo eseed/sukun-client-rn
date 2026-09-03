@@ -115,7 +115,6 @@ export const fontFamily = {
   bodyLight: resolveFamily('BananaGroteskLight'),
   bodyMedium: resolveFamily('BananaGroteskMedium'),
   bodyThin: resolveFamily('BananaGroteskThin'),
-  serifAccent: resolveFamily('MinionPro'),
 } as const;
 
 /**

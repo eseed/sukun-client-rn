@@ -34,7 +34,6 @@ export default function RootLayout() {
     BananaGroteskLight: require('../assets/fonts/BananaGrotesk-Light.ttf'),
     BananaGroteskMedium: require('../assets/fonts/BananaGrotesk-Medium.ttf'),
     BananaGroteskThin: require('../assets/fonts/BananaGrotesk-Thin.ttf'),
-    MinionPro: require('../assets/fonts/MinionPro-Regular.ttf'),
   });
 
   useEffect(() => {

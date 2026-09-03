@@ -5,6 +5,10 @@ import { Platform } from 'react-native';
  * (`_ds/.../assets/fonts/`), committed under `assets/fonts/` and registered via `useFonts`
  * in `app/_layout.tsx`. The registered files are the `.ttf` conversions, not the `.otf`
  * masters, because Android cannot parse PostScript outlines — see `assets/fonts/README.md`.
+ *
+ * Minion Pro is committed but deliberately not listed: no screen used the serif accent, and
+ * its 1,686-glyph file is 376 KB parsed on every cold start. Re-add it here and to `useFonts`
+ * — both, or it resolves to nothing — if a screen ever calls for it.
  */
 export const BRAND_FONTS_AVAILABLE = true;
 
@@ -15,7 +19,6 @@ export const brandFontFiles = {
   BananaGroteskLight: 'BananaGrotesk-Light.ttf',
   BananaGroteskMedium: 'BananaGrotesk-Medium.ttf',
   BananaGroteskThin: 'BananaGrotesk-Thin.ttf',
-  MinionPro: 'MinionPro-Regular.ttf',
 } as const;
 
 export type BrandFamily = keyof typeof brandFontFiles;
@@ -36,7 +39,6 @@ export function resolveFamily(name: BrandFamily): string | undefined {
   switch (name) {
     case 'SeriouslyNostalgic':
     case 'SeriouslyNostalgicItalic':
-    case 'MinionPro':
       return fallback.serif;
     default:
       return fallback.sans;
