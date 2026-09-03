@@ -19,6 +19,7 @@ export { ResourceState, type ResourceStateProps, type ResourceStatus } from './R
 export { InlineError, type InlineErrorProps } from './InlineError';
 export { PageHeader, type PageHeaderProps } from './PageHeader';
 export {
+  BackIcon,
   CameraIcon,
   DiscoverIcon,
   ExternalLinkIcon,

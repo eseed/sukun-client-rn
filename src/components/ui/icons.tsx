@@ -55,6 +55,21 @@ export function ProfileIcon({ size = 20, color = colors.textPrimary }: IconProps
   );
 }
 
+/**
+ * The back control's glyph. A solid triangle rather than a hairline arrow: at the size a
+ * thumb expects, the old `\u2190` text glyph read as decoration instead of a button.
+ */
+export function BackIcon({ size = 22, color = colors.textPrimary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path
+        d="M15.5 4.2 6.9 11a1.3 1.3 0 0 0 0 2l8.6 6.8c.8.7 2.1.1 2.1-.9V5.1c0-1-1.3-1.6-2.1-.9z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
 export function SearchIcon({ size = 18, color = colors.textMuted }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
