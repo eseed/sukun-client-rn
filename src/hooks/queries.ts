@@ -8,7 +8,6 @@ import {
 import { useEffect, useMemo } from 'react';
 import { api, API_MODE } from '../api';
 import type {
-  AccountRestorationInput,
   CreateOrderInput,
   CurrentUser,
   EntryPass,
@@ -244,52 +243,6 @@ export function useEvents(query?: ListEventsQuery) {
     events,
     hasNextPage: result.hasNextPage && !exhausted,
   };
-}
-
-export function useRequestAccountRestorationOtp() {
-  return useMutation({
-    mutationFn: (phoneNumber: string) => api.auth.requestAccountRestorationOtp(phoneNumber),
-  });
-}
-
-export function useConfirmAccountRestoration() {
-  const signIn = useAuthStore((s) => s.signIn);
-  const setUser = useAuthStore((s) => s.setUser);
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (input: AccountRestorationInput) => api.auth.confirmAccountRestoration(input),
-    onSuccess: async (result) => {
-      const projection: CurrentUser = {
-        id: result.user.id,
-        phoneNumber: result.user.phoneNumber,
-        fullName: null,
-        email: null,
-        emailVerified: result.user.emailVerified,
-        dateOfBirth: null,
-        gender: null,
-        area: null,
-        selfieUploaded: false,
-        selfieUrl: null,
-        selfieExpiresAt: null,
-        // The verify/restore projections do not carry consent; the `me` fetch that follows
-        // replaces this placeholder with the stored value.
-        marketingOptIn: false,
-        profileComplete: result.user.profileComplete,
-        status: result.user.status,
-      };
-      await signIn(
-        { accessToken: result.accessToken, refreshToken: result.refreshToken },
-        projection,
-      );
-      const generation = getAuthSessionGeneration();
-      if (!isCurrentSignedInSession(generation)) return;
-      client.setQueryData(queryKeys.me, projection);
-      const user = await api.auth.me();
-      if (!isCurrentSignedInSession(generation)) return;
-      setUser(user);
-      client.setQueryData(queryKeys.me, user);
-    },
-  });
 }
 
 export function useEvent(identifier: string | undefined) {

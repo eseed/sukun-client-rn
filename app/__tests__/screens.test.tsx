@@ -131,6 +131,9 @@ describe('01 Welcome', () => {
     expect(screen.getByText('Everything wellness.')).toBeTruthy();
     expect(screen.getByText("Let's move!")).toBeTruthy();
     expect(screen.getByText('By continuing you agree to our terms & privacy policy')).toBeTruthy();
+    // One way in. Signing in restores a deleted account, so there is nothing to offer here
+    // that would make someone declare they had deleted theirs.
+    expect(screen.queryByText('Restore account')).toBeNull();
   });
 });
 

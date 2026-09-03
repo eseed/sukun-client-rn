@@ -5,7 +5,6 @@ import type {
   CreateOrderInput,
   CurrentUser,
   CursorPage,
-  AccountRestorationInput,
   EmailVerificationResult,
   EmailVerificationSent,
   EventMeta,
@@ -44,9 +43,12 @@ export interface SukunApi {
      * user — the response must never disclose account existence (CLAUDE.md rule 4).
      */
     requestOtp(phoneNumber: string): Promise<OtpRequested>;
+    /**
+     * Verifies the code and signs in. A deleted account still inside its retention window is
+     * restored here, as part of the same sign-in — there is no separate restoration flow, and
+     * nothing asks the person whether they once deleted their account.
+     */
     verifyOtp(phoneNumber: string, code: string, deviceId?: string): Promise<Authenticated>;
-    requestAccountRestorationOtp(phoneNumber: string): Promise<void>;
-    confirmAccountRestoration(input: AccountRestorationInput): Promise<Authenticated>;
     refresh(refreshToken: string): Promise<SessionTokens>;
     me(): Promise<CurrentUser>;
     logout(): Promise<void>;

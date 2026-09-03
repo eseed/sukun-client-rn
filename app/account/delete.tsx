@@ -156,8 +156,10 @@ export default function DeleteAccountScreen() {
 
           {preview && !blocked ? (
             <Text variant="metaSm" style={styles.retentionNote}>
-              Your account data is retained for {preview.dataRetainedDays} days. If you restore your
-              account during that period, your tickets are restored too.
+              Your account data is retained for {preview.dataRetainedDays} days. Signing in with
+              this number during that time brings your account back
+              {preview.ticketsRestoredAfterAccountRestore ? ', tickets included' : ''}. You will be
+              asked for a new selfie.
             </Text>
           ) : null}
 

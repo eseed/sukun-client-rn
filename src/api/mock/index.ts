@@ -114,7 +114,6 @@ interface MockState {
   user: CurrentUser | null;
   accounts: Map<string, CurrentUser>;
   pendingPhone: string | null;
-  pendingRestorationPhone: string | null;
   pendingEmailVerificationToken: string | null;
   tickets: Ticket[];
   orders: OrderDetail[];
@@ -144,7 +143,6 @@ const state: MockState = {
   user: null,
   accounts: new Map(),
   pendingPhone: null,
-  pendingRestorationPhone: null,
   pendingEmailVerificationToken: null,
   tickets: [],
   orders: [],
@@ -163,7 +161,6 @@ export function resetMockState(): void {
   state.user = null;
   state.accounts.clear();
   state.pendingPhone = null;
-  state.pendingRestorationPhone = null;
   state.pendingEmailVerificationToken = null;
   state.tickets = [];
   state.orders = [];
@@ -227,6 +224,29 @@ function refreshUserStatus(user: CurrentUser): CurrentUser {
     profileComplete,
     status: profileComplete ? 'active' : 'pending_profile',
   };
+}
+
+/**
+ * Brings a deleted account back, exactly as the backend does on sign-in: the account and the
+ * data held through the retention window return, minus the selfie, which deletion destroyed.
+ * Its absence is what sends the person back through the selfie step.
+ */
+function restoreDeletedAccount(phoneE164: string, deleted: DeletedAccount): void {
+  const user = refreshUserStatus({
+    ...deleted.user,
+    selfieUploaded: false,
+    selfieUrl: null,
+    selfieExpiresAt: null,
+  });
+  state.user = user;
+  state.accounts.set(phoneE164, user);
+  state.tickets = deleted.tickets;
+  state.orders = deleted.orders;
+  state.ticketOwnerPhones = new Map(deleted.ticketOwnerPhones);
+  state.ticketBuyerPhones = new Map(deleted.ticketBuyerPhones);
+  state.orderBuyerPhones = new Map(deleted.orderBuyerPhones);
+  state.orderBuyerNames = new Map(deleted.orderBuyerNames);
+  state.deletedAccounts.delete(phoneE164);
 }
 
 function authenticated(user: CurrentUser, isNewUser: boolean): Authenticated {
@@ -517,17 +537,19 @@ export const mockApi: SukunApi = {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
 
-      if (state.deletedAccounts.has(e164)) {
-        throw new MockApiError(
-          'ACCOUNT_DELETED',
-          'This account is deleted. Restore it to sign in.',
-          403,
-        );
-      }
-      const isNewUser = !state.accounts.has(e164);
+      const isNewUser = !state.accounts.has(e164) && !state.deletedAccounts.has(e164);
       if (state.pendingPhone !== e164) {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
+
+      // A deleted account comes back on this same sign-in: no separate restore flow, and
+      // nothing asks whether they once deleted it. Deletion threw the selfie away, so the
+      // account returns without one and the profile gate asks for it again.
+      const deleted = state.deletedAccounts.get(e164);
+      if (deleted) {
+        restoreDeletedAccount(e164, deleted);
+      }
+
       const user =
         state.user?.phoneNumber === e164
           ? state.user
@@ -548,44 +570,6 @@ export const mockApi: SukunApi = {
 
       state.pendingPhone = null;
       return delay(authenticated(state.user, isNewUser));
-    },
-
-    async requestAccountRestorationOtp(phoneNumber: string): Promise<void> {
-      const e164 = normalizePhone(phoneNumber);
-      if (!e164) throw new MockApiError('INVALID_PHONE', 'Enter a valid mobile number');
-      state.pendingRestorationPhone = e164;
-      return delay(undefined);
-    },
-
-    async confirmAccountRestoration(input): Promise<Authenticated> {
-      const e164 = normalizePhone(input.phoneNumber);
-      if (!e164 || e164 !== state.pendingRestorationPhone || input.otpCode !== OTP_CODE) {
-        throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
-      }
-      if (state.user?.phoneNumber === e164) {
-        throw new MockApiError('ACCOUNT_ALREADY_RESTORED', 'This account is already active.', 409);
-      }
-      const deleted = state.deletedAccounts.get(e164);
-      if (!deleted) {
-        throw new MockApiError(
-          'ACCOUNT_RESTORATION_NOT_ALLOWED',
-          'This account cannot be restored.',
-          403,
-        );
-      }
-      state.user = refreshUserStatus({
-        ...deleted.user,
-        status: deleted.user.profileComplete ? 'active' : 'pending_profile',
-      });
-      state.tickets = deleted.tickets;
-      state.orders = deleted.orders;
-      state.ticketOwnerPhones = new Map(deleted.ticketOwnerPhones);
-      state.ticketBuyerPhones = new Map(deleted.ticketBuyerPhones);
-      state.orderBuyerPhones = new Map(deleted.orderBuyerPhones);
-      state.orderBuyerNames = new Map(deleted.orderBuyerNames);
-      state.accounts.set(e164, state.user);
-      state.pendingRestorationPhone = null;
-      return delay(authenticated(state.user, false));
     },
 
     async refresh(): Promise<SessionTokens> {
@@ -1148,8 +1132,7 @@ export const mockApi: SukunApi = {
       });
       state.user = null;
       state.pendingPhone = null;
-      state.pendingRestorationPhone = null;
-      state.pendingEmailVerificationToken = null;
+          state.pendingEmailVerificationToken = null;
       state.tickets = [];
       state.orders = [];
       state.ticketOwnerPhones.clear();

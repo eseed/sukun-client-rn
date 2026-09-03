@@ -12,7 +12,7 @@ import {
 import { OtpInput } from '../../src/components/ui/OtpInput';
 import { useRequestOtp, useVerifyOtp } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
-import { isAccountRestorationRequired, messageForError } from '../../src/lib/errors';
+import { messageForError } from '../../src/lib/errors';
 import { formatCountdown } from '../../src/lib/format';
 import { formatPhoneForDisplay, isValidPhone } from '../../src/lib/phone';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
@@ -31,7 +31,6 @@ export default function OtpScreen() {
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [restorationRequired, setRestorationRequired] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
 
   useEffect(() => {
@@ -56,11 +55,12 @@ export default function OtpScreen() {
   async function onVerify() {
     if (!pendingPhone || !isValidPhone(pendingPhone)) return;
     setError(null);
-    setRestorationRequired(false);
     try {
       const result = await verifyOtp.mutateAsync({ phoneNumber: pendingPhone, code });
       // Where they land depends on how much of the profile already exists — a returning
-      // user skips straight into the app.
+      // user skips straight into the app. A deleted account is brought back by this same
+      // verify, so it lands here too, missing whatever deletion threw away (the selfie)
+      // and routed to fill it in again.
       const user = useAuthStore.getState().user;
       useAuthStore.getState().setIsNewUser(result.isNewUser);
       track('otp_verified', {
@@ -82,16 +82,10 @@ export default function OtpScreen() {
         router.replace('/(tabs)/discover');
       }
     } catch (err) {
-      setRestorationRequired(isAccountRestorationRequired(err));
       setError(messageForError(err));
       setCode('');
       track('otp_verify_failed');
     }
-  }
-
-  function openRestoration() {
-    if (pendingPhone) useAuthStore.getState().setPendingPhone(pendingPhone);
-    router.push('/account/restore-phone');
   }
 
   async function onResend() {
@@ -130,15 +124,6 @@ export default function OtpScreen() {
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {error}
         </Text>
-      ) : null}
-
-      {restorationRequired ? (
-        <Button
-          label="Restore account"
-          variant="secondary"
-          onPress={openRestoration}
-          style={styles.restore}
-        />
       ) : null}
 
       <Pressable onPress={onResend} disabled={secondsLeft > 0} accessibilityRole="button">
@@ -183,9 +168,6 @@ const styles = StyleSheet.create({
   },
   error: {
     marginBottom: 10,
-  },
-  restore: {
-    marginBottom: 16,
   },
   resend: {
     fontFamily: fontFamily.bodyMedium,

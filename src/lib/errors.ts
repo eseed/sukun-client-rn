@@ -95,11 +95,10 @@ const MESSAGES: Record<string, string> = {
   OTP_PROVIDER_UNAVAILABLE: "We couldn't send the code. Try again in a moment.",
   OTP_IDEMPOTENCY_CONFLICT: 'That code request is already in flight. Give it a moment.',
 
-  /* Account restoration + deletion. */
-  ACCOUNT_ALREADY_RESTORED: 'This account is already active. Sign in normally.',
-  ACCOUNT_RESTORATION_NOT_ALLOWED: 'This account cannot be restored. Contact support.',
-  ACCOUNT_RESTORATION_WINDOW_EXPIRED: 'The window to restore this account has passed.',
+  /* Account deletion. Restoration has no codes of its own: signing back in restores. */
   ACCOUNT_DELETION_NOT_ALLOWED: 'This account cannot be deleted right now.',
+  // Raised when an account that just came back is deleted again inside the cooldown.
+  ACCOUNT_LIFECYCLE_COOLDOWN_ACTIVE: 'Give it a few minutes before deleting this account again.',
   ACCOUNT_DELETION_PAYMENT_IN_PROGRESS:
     'A payment is still being processed. Try deleting again once it settles.',
   FORFEIT_CONFIRMATION_REQUIRED: 'Confirm you understand your tickets will be voided.',
@@ -126,21 +125,6 @@ export function messageForCode(code: string | undefined): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-/** True only when the API explicitly says this account must use restoration. */
-export function isAccountRestorationRequired(error: unknown): boolean {
-  if (!isRecord(error)) return false;
-  const code = typeof error.code === 'string' ? error.code : '';
-  const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
-  return (
-    code === 'ACCOUNT_DELETED' ||
-    code === 'ACCOUNT_RESTORATION_REQUIRED' ||
-    message === 'appusers.errors.accountrestorationrequired' ||
-    (code === 'AUTHENTICATION_UNAVAILABLE' &&
-      message.includes('deleted') &&
-      message.includes('restore'))
-  );
 }
 
 /**

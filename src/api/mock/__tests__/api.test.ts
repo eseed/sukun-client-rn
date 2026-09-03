@@ -403,18 +403,22 @@ describe('mock parity', () => {
     expect(status.ticketsIssued).toBe(0);
   });
 
-  it('restores a deleted account and its tickets', async () => {
+  it('restores a deleted account on the next sign-in, minus the selfie', async () => {
     await signIn();
     await completeProfile();
     const before = await mockApi.tickets.list();
     await mockApi.account.requestDeletionOtp();
     await mockApi.account.delete(MOCK_OTP_CODE);
-    await mockApi.auth.requestAccountRestorationOtp('+201012345678');
-    await mockApi.auth.confirmAccountRestoration({
-      phoneNumber: '+201012345678',
-      otpCode: MOCK_OTP_CODE,
-    });
-    expect((await mockApi.auth.me()).status).toBe('active');
+
+    // No restore flow to find: the same phone + code that signs anyone in brings it back.
+    const restored = await signIn();
+    expect(restored.isNewUser).toBe(false);
+
+    const me = await mockApi.auth.me();
+    expect(me.fullName).toBe('Yasmin El Sayed');
+    // Deletion destroyed the selfie, so the profile is incomplete until a new one is taken.
+    expect(me.selfieUploaded).toBe(false);
+    expect(me.status).toBe('pending_profile');
     expect((await mockApi.tickets.list({ statuses: ['active'] })).data).toHaveLength(
       before.data.length,
     );

@@ -108,8 +108,6 @@ export default function RootLayout() {
             <Stack.Screen name="orders/index" />
             <Stack.Screen name="orders/[id]" />
             <Stack.Screen name="account/profile" />
-            <Stack.Screen name="account/restore-phone" />
-            <Stack.Screen name="account/restore-otp" />
             <Stack.Screen name="account/delete" />
             <Stack.Screen name="legal/terms" />
           </Stack>
