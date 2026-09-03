@@ -5,6 +5,11 @@ system face without raising, so a CFF .otf renders correctly on iOS and as Robot
 The cubic curves are approximated with quadratics to within 1 unit per 1000 em, which measured
 under 1% area drift per glyph across all seven faces.
 
+Swapping the outlines is only half the job: the four-byte sfnt version at the head of the file
+also has to change from 'OTTO' to 0x00010000. Android dispatches on that tag alone, so an
+'OTTO' file with `glyf`/`loca` and no `CFF ` table is read as a CFF font with its outlines
+missing, and falls back to the system face exactly as the unconverted master did.
+
 Run after dropping new masters in from the Claude Design project:
 
     pip install "fonttools[ufo]"
@@ -49,6 +54,11 @@ def convert(src, dst):
     f['maxp'].recalc(f)
     for t in ('CFF ', 'CFF2', 'VORG'):
         if t in f: del f[t]
+    # A signature over the pre-conversion tables, meaningless once they are gone.
+    if 'DSIG' in f: del f['DSIG']
+    # The tag Android reads to decide which outline format to look for. fontTools carries the
+    # source value over, so a converted file stays labelled 'OTTO' unless it is set by hand.
+    f.sfntVersion = '\x00\x01\x00\x00'
     post = f['post']; post.formatType = 2.0
     post.extraNames = []; post.mapping = {}; post.glyphOrder = f.getGlyphOrder()
     f['head'].indexToLocFormat = 0

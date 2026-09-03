@@ -44,6 +44,11 @@
     "production": {
       "ios": {
         "ascAppId": "6804203454"
+      },
+      "android": {
+        "serviceAccountKeyPath": "../secrets/sukun-play-service-account.json",
+        "track": "internal",
+        "releaseStatus": "draft"
       }
     }
   }

@@ -5,12 +5,21 @@ import { colors, fontFamily, tracking } from './tokens';
  * Recurring text styles lifted from `Sukun App - All Screens.dc.html`. The design sets these
  * inline per screen; naming them here keeps every screen consistent and keeps the raw values
  * in one place.
+ *
+ * The display titles select the italic face by family and never set `fontStyle: 'italic'`.
+ * Seriously Nostalgic Regular Italic is already slanted, so the property bought nothing on
+ * iOS, and on Android it cost the brand face outright: `expo-font` registers a runtime font
+ * with `ReactFontManager.setTypeface(name, Typeface.NORMAL, …)`, which fills only the NORMAL
+ * slot of that family's style array. Asking for the italic slot misses, falls through to a
+ * lookup for a bundled `<family>_italic.ttf` asset that does not exist, and ends at
+ * `Typeface.create(family, ITALIC)` — a family name Android has never heard of, so every
+ * title rendered in Roboto Italic. Select the face, never the style; the same rule the
+ * fonts README states for weight.
  */
 export const text = {
   /** Onboarding screen titles — display italic 31px. */
   titleLg: {
     fontFamily: fontFamily.displayItalic,
-    fontStyle: 'italic',
     fontSize: 31,
     lineHeight: 31 * 1.1,
     color: colors.textPrimary,
@@ -18,7 +27,6 @@ export const text = {
   /** Tab + checkout screen titles — display italic 29px. */
   titleMd: {
     fontFamily: fontFamily.displayItalic,
-    fontStyle: 'italic',
     fontSize: 29,
     lineHeight: 29 * 1.1,
     color: colors.textPrimary,
@@ -26,7 +34,6 @@ export const text = {
   /** Entry-pass title — display italic 27px on the dark screen. */
   titleSm: {
     fontFamily: fontFamily.displayItalic,
-    fontStyle: 'italic',
     fontSize: 27,
     lineHeight: 27 * 1.1,
     color: colors.textPrimary,
@@ -34,7 +41,6 @@ export const text = {
   /** Event hero title — display italic 40px. */
   titleHero: {
     fontFamily: fontFamily.displayItalic,
-    fontStyle: 'italic',
     fontSize: 40,
     lineHeight: 40,
     color: colors.textInverse,
@@ -42,7 +48,6 @@ export const text = {
   /** Featured card title — display italic 25px. */
   titleCard: {
     fontFamily: fontFamily.displayItalic,
-    fontStyle: 'italic',
     fontSize: 25,
     lineHeight: 25 * 1.1,
     color: colors.textPrimary,

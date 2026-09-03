@@ -15,7 +15,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "verify": "npm run typecheck && npm run lint && npm test -- --ci",
-    "release:ios": "npm run verify && eas build --platform ios --profile production --auto-submit"
+    "release:ios": "npm run verify && eas build --platform ios --profile production --auto-submit",
+    "release:android": "npm run verify && eas build --platform android --profile production --auto-submit"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.14",

@@ -18,7 +18,7 @@
       }
     },
     "android": {
-      "package": "com.sukun.client",
+      "package": "co.sukunwellness",
       "adaptiveIcon": {
         "backgroundColor": "#F7F0E0",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -310,6 +310,11 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bodyMedium,
   },
   italic: {
+    // The one place `fontStyle` is still set. Everywhere else the italic face is selected by
+    // family instead (see `src/theme/typography.ts` for why Android needs that), but Banana
+    // Grotesk ships no italic master, so there is no face to name here. Android will render
+    // these spans in the system italic rather than the brand face; emphasis inside a
+    // description staying legible is worth more than the face matching.
     fontStyle: 'italic',
   },
   strikethrough: {
