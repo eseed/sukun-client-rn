@@ -95,10 +95,8 @@ const MESSAGES: Record<string, string> = {
   OTP_PROVIDER_UNAVAILABLE: "We couldn't send the code. Try again in a moment.",
   OTP_IDEMPOTENCY_CONFLICT: 'That code request is already in flight. Give it a moment.',
 
-  /* Account deletion. Restoration has no codes of its own: signing back in restores. */
+  /* Account deletion. Deletion is final: there is nothing to restore and no code for it. */
   ACCOUNT_DELETION_NOT_ALLOWED: 'This account cannot be deleted right now.',
-  // Raised when an account that just came back is deleted again inside the cooldown.
-  ACCOUNT_LIFECYCLE_COOLDOWN_ACTIVE: 'Give it a few minutes before deleting this account again.',
   ACCOUNT_DELETION_PAYMENT_IN_PROGRESS:
     'A payment is still being processed. Try deleting again once it settles.',
   FORFEIT_CONFIRMATION_REQUIRED: 'Confirm you understand your tickets will be voided.',

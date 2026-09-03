@@ -226,29 +226,6 @@ function refreshUserStatus(user: CurrentUser): CurrentUser {
   };
 }
 
-/**
- * Brings a deleted account back, exactly as the backend does on sign-in: the account and the
- * data held through the retention window return, minus the selfie, which deletion destroyed.
- * Its absence is what sends the person back through the selfie step.
- */
-function restoreDeletedAccount(phoneE164: string, deleted: DeletedAccount): void {
-  const user = refreshUserStatus({
-    ...deleted.user,
-    selfieUploaded: false,
-    selfieUrl: null,
-    selfieExpiresAt: null,
-  });
-  state.user = user;
-  state.accounts.set(phoneE164, user);
-  state.tickets = deleted.tickets;
-  state.orders = deleted.orders;
-  state.ticketOwnerPhones = new Map(deleted.ticketOwnerPhones);
-  state.ticketBuyerPhones = new Map(deleted.ticketBuyerPhones);
-  state.orderBuyerPhones = new Map(deleted.orderBuyerPhones);
-  state.orderBuyerNames = new Map(deleted.orderBuyerNames);
-  state.deletedAccounts.delete(phoneE164);
-}
-
 function authenticated(user: CurrentUser, isNewUser: boolean): Authenticated {
   return {
     accessToken: `mock-access-${mockConfig.now()}`,
@@ -537,18 +514,14 @@ export const mockApi: SukunApi = {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
 
-      const isNewUser = !state.accounts.has(e164) && !state.deletedAccounts.has(e164);
+      const isNewUser = !state.accounts.has(e164);
       if (state.pendingPhone !== e164) {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
 
-      // A deleted account comes back on this same sign-in: no separate restore flow, and
-      // nothing asks whether they once deleted it. Deletion threw the selfie away, so the
-      // account returns without one and the profile gate asks for it again.
-      const deleted = state.deletedAccounts.get(e164);
-      if (deleted) {
-        restoreDeletedAccount(e164, deleted);
-      }
+      // Deletion is final. The deleted record keeps its own data under a hashed phone, and
+      // this number is free again, so signing in here creates an ordinary new account. Nothing
+      // asks whether they once deleted one (CLAUDE.md rule 4).
 
       const user =
         state.user?.phoneNumber === e164
@@ -1106,7 +1079,6 @@ export const mockApi: SukunApi = {
         pendingPaymentOrderCount: 0,
         deletionBlockedByPendingPayment: false,
         dataRetainedDays: 30,
-        ticketsRestoredAfterAccountRestore: true,
       });
     },
 
@@ -1121,8 +1093,10 @@ export const mockApi: SukunApi = {
         throw new MockApiError('OTP_INVALID', 'That code is not right. Try again.');
       }
       transitionExpiredOrders();
-      state.deletedAccounts.set(user.phoneNumber, {
-        user: { ...user, status: 'deleted' },
+      // The number is released here, exactly as the backend does it: the dead record is filed
+      // under a hash so nothing can look it up by phone and bring it back.
+      state.deletedAccounts.set(deletedAccountKey(user.phoneNumber), {
+        user: { ...user, status: 'deleted', phoneNumber: '' },
         tickets: state.tickets.map((ticket) => ({ ...ticket })),
         orders: state.orders.map((order) => ({ ...order })),
         ticketOwnerPhones: new Map(state.ticketOwnerPhones),
@@ -1130,9 +1104,12 @@ export const mockApi: SukunApi = {
         orderBuyerPhones: new Map(state.orderBuyerPhones),
         orderBuyerNames: new Map(state.orderBuyerNames),
       });
+      // The account itself stops existing under this number, which is what frees it for a
+      // brand new signup.
+      state.accounts.delete(user.phoneNumber);
       state.user = null;
       state.pendingPhone = null;
-          state.pendingEmailVerificationToken = null;
+      state.pendingEmailVerificationToken = null;
       state.tickets = [];
       state.orders = [];
       state.ticketOwnerPhones.clear();
@@ -1146,6 +1123,11 @@ export const mockApi: SukunApi = {
     },
   },
 };
+
+/** Stands in for the backend's peppered phone hash: enough to file the row, not to find it. */
+function deletedAccountKey(phoneE164: string): string {
+  return `deleted:${hash(phoneE164)}`;
+}
 
 function hash(input: string): number {
   let h = 0;

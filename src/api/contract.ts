@@ -44,9 +44,9 @@ export interface SukunApi {
      */
     requestOtp(phoneNumber: string): Promise<OtpRequested>;
     /**
-     * Verifies the code and signs in. A deleted account still inside its retention window is
-     * restored here, as part of the same sign-in — there is no separate restoration flow, and
-     * nothing asks the person whether they once deleted their account.
+     * Verifies the code and signs in. Deletion is final: a number whose account was deleted
+     * signs up again here as a brand new user, and nothing asks the person whether they once
+     * deleted an account (CLAUDE.md rule 4).
      */
     verifyOtp(phoneNumber: string, code: string, deviceId?: string): Promise<Authenticated>;
     refresh(refreshToken: string): Promise<SessionTokens>;

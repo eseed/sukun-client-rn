@@ -403,24 +403,23 @@ describe('mock parity', () => {
     expect(status.ticketsIssued).toBe(0);
   });
 
-  it('restores a deleted account on the next sign-in, minus the selfie', async () => {
+  it('signs up as a brand new account after deletion, keeping nothing', async () => {
     await signIn();
     await completeProfile();
-    const before = await mockApi.tickets.list();
     await mockApi.account.requestDeletionOtp();
     await mockApi.account.delete(MOCK_OTP_CODE);
 
-    // No restore flow to find: the same phone + code that signs anyone in brings it back.
-    const restored = await signIn();
-    expect(restored.isNewUser).toBe(false);
+    // Deletion released the number. The same phone and code register again from scratch;
+    // nothing asks whether this number ever had an account (CLAUDE.md rule 4).
+    const fresh = await signIn();
+    expect(fresh.isNewUser).toBe(true);
 
     const me = await mockApi.auth.me();
-    expect(me.fullName).toBe('Yasmin El Sayed');
-    // Deletion destroyed the selfie, so the profile is incomplete until a new one is taken.
+    expect(me.fullName).toBeNull();
+    expect(me.email).toBeNull();
     expect(me.selfieUploaded).toBe(false);
     expect(me.status).toBe('pending_profile');
-    expect((await mockApi.tickets.list({ statuses: ['active'] })).data).toHaveLength(
-      before.data.length,
-    );
+    // The old tickets went with the old account and cannot rebind to this number.
+    expect((await mockApi.tickets.list({ statuses: ['active'] })).data).toHaveLength(0);
   });
 });

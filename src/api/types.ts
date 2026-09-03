@@ -512,7 +512,6 @@ export interface AccountDeletionPreview {
   pendingPaymentOrderCount: number;
   deletionBlockedByPendingPayment: boolean;
   dataRetainedDays: number;
-  ticketsRestoredAfterAccountRestore: boolean;
 }
 
 /** Wire DTO for `MobileTicketResponseDto`, including its optional properties. */

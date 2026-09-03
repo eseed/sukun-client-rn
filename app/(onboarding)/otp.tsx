@@ -64,9 +64,9 @@ export default function OtpScreen() {
     try {
       const result = await verifyOtp.mutateAsync({ phoneNumber: pendingPhone, code: entered });
       // Where they land depends on how much of the profile already exists — a returning
-      // user skips straight into the app. A deleted account is brought back by this same
-      // verify, so it lands here too, missing whatever deletion threw away (the selfie)
-      // and routed to fill it in again.
+      // user skips straight into the app. Someone signing up again on a number they once
+      // deleted is a new user with an empty profile, so they land on the details step like
+      // anyone else, not on the selfie.
       const user = useAuthStore.getState().user;
       useAuthStore.getState().setIsNewUser(result.isNewUser);
       track('otp_verified', {

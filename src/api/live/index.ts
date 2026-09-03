@@ -102,8 +102,8 @@ export const liveApi: SukunApi = {
 
     // POST mobile/auth/otp/verify. The response contains a projection; fetch the full profile
     // with the new access token so onboarding has the same shape in live and mock mode.
-    // The endpoint also restores a deleted account still inside its retention window, so a
-    // returning deleted user signs in through this same call.
+    // A number whose account was deleted registers again through this same call, as a new
+    // user: deletion released the number, so nothing is brought back.
     async verifyOtp(phoneNumber, code, deviceId): Promise<Authenticated> {
       const raw = await request<Authenticated>('mobile/auth/otp/verify', {
         method: 'POST',

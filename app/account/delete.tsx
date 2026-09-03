@@ -101,8 +101,8 @@ export default function DeleteAccountScreen() {
       {stage === 'review' ? (
         <>
           <Text variant="bodyMuted" style={styles.blurb}>
-            This removes your profile, your selfie and your sign-in. It cannot be undone, and
-            tickets are non-refundable.
+            This removes your profile, your selfie and your sign-in for good. It cannot be
+            undone, and tickets are non-refundable.
           </Text>
 
           {isLoading || isError ? (
@@ -156,10 +156,9 @@ export default function DeleteAccountScreen() {
 
           {preview && !blocked ? (
             <Text variant="metaSm" style={styles.retentionNote}>
-              Your account data is retained for {preview.dataRetainedDays} days. Signing in with
-              this number during that time brings your account back
-              {preview.ticketsRestoredAfterAccountRestore ? ', tickets included' : ''}. You will be
-              asked for a new selfie.
+              This cannot be undone. Your record is kept for {preview.dataRetainedDays} days and
+              then anonymised. You can sign up again with this number at any time, as a new
+              account, starting from an empty profile.
             </Text>
           ) : null}
 
