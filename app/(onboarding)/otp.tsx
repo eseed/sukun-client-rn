@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import {
   BackButton,
@@ -30,6 +30,9 @@ export default function OtpScreen() {
   const requestOtp = useRequestOtp();
 
   const [code, setCode] = useState('');
+  // The code that has already been sent for verification, so the auto-submit below fires once
+  // per entered code and the Verify button can never double-post the same one.
+  const submittedCode = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
 
@@ -52,11 +55,14 @@ export default function OtpScreen() {
 
   const ready = code.length === CODE_LENGTH && !verifyOtp.isPending;
 
-  async function onVerify() {
+  async function onVerify(entered: string = code) {
     if (!pendingPhone || !isValidPhone(pendingPhone)) return;
+    if (entered.length !== CODE_LENGTH) return;
+    if (verifyOtp.isPending || submittedCode.current === entered) return;
+    submittedCode.current = entered;
     setError(null);
     try {
-      const result = await verifyOtp.mutateAsync({ phoneNumber: pendingPhone, code });
+      const result = await verifyOtp.mutateAsync({ phoneNumber: pendingPhone, code: entered });
       // Where they land depends on how much of the profile already exists — a returning
       // user skips straight into the app. A deleted account is brought back by this same
       // verify, so it lands here too, missing whatever deletion threw away (the selfie)
@@ -84,8 +90,31 @@ export default function OtpScreen() {
     } catch (err) {
       setError(messageForError(err));
       setCode('');
+      submittedCode.current = null;
       track('otp_verify_failed');
     }
+  }
+
+  /**
+   * Typing or pasting the last digit submits: nothing else can happen at that point, so
+   * making them reach for the button afterwards is only a delay. `onVerify` is given the
+   * new code directly, since this render's `code` is still the previous one.
+   */
+  function onCodeChange(next: string) {
+    setCode(next);
+    if (next.length === CODE_LENGTH) void onVerify(next);
+  }
+
+  /**
+   * Back means "let me use a different number". The history is not something to rely on:
+   * this screen is reached by a `replace` from the phone screen's sibling flows and by the
+   * launch redirect in `app/index.tsx`, both of which leave nothing to pop, and on iOS
+   * `router.back()` is then a no-op. Fall back to the phone screen explicitly.
+   */
+  function goBackToPhone() {
+    useAuthStore.getState().setPendingPhone(null);
+    if (router.canGoBack()) router.back();
+    else router.replace('/(onboarding)/phone');
   }
 
   async function onResend() {
@@ -101,7 +130,7 @@ export default function OtpScreen() {
 
   return (
     <Screen contentStyle={styles.content}>
-      <BackButton onPress={() => router.back()} style={styles.back} />
+      <BackButton onPress={goBackToPhone} style={styles.back} />
 
       <StepLabel>Step 1 of 3</StepLabel>
       <View style={styles.heading}>
@@ -117,7 +146,7 @@ export default function OtpScreen() {
       </Text>
 
       <View style={styles.inputWrap}>
-        <OtpInput value={code} onChange={setCode} length={CODE_LENGTH} />
+        <OtpInput value={code} onChange={onCodeChange} length={CODE_LENGTH} />
       </View>
 
       {error ? (
@@ -141,7 +170,7 @@ export default function OtpScreen() {
 
       <View style={styles.spacer} />
 
-      <Button label="Verify" onPress={onVerify} disabled={!ready} loading={verifyOtp.isPending} />
+      <Button label="Verify" onPress={() => void onVerify()} disabled={!ready} loading={verifyOtp.isPending} />
     </Screen>
   );
 }

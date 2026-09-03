@@ -118,8 +118,8 @@ describe('OTP screen', () => {
   it('sends the user into the app on a correct code', async () => {
     await renderWithPendingPhone();
 
+    // Entering the last digit submits on its own; there is no button press to make.
     fireEvent.changeText(screen.getByLabelText('Verification code'), MOCK_OTP_CODE);
-    fireEvent.press(screen.getByText('Verify'));
 
     await waitFor(() => expect(useAuthStore.getState().status).toBe('signed-in'));
     await waitFor(() => expect(mockReplace).toHaveBeenCalled());
@@ -132,8 +132,8 @@ describe('OTP screen', () => {
   it('does not bounce back to the phone screen once sign-in clears the pending number', async () => {
     await renderWithPendingPhone();
 
+    // Entering the last digit submits on its own; there is no button press to make.
     fireEvent.changeText(screen.getByLabelText('Verification code'), MOCK_OTP_CODE);
-    fireEvent.press(screen.getByText('Verify'));
 
     await waitFor(() => expect(useAuthStore.getState().status).toBe('signed-in'));
     expect(mockReplace).not.toHaveBeenCalledWith('/(onboarding)/phone');

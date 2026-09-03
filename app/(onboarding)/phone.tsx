@@ -68,9 +68,18 @@ export default function PhoneScreen() {
     }
   }
 
+  /**
+   * Reached by a `replace` from the OTP screen and by the launch redirect, so there is often
+   * nothing to pop and `router.back()` would do nothing on iOS.
+   */
+  function goBack() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(onboarding)/welcome');
+  }
+
   return (
     <Screen contentStyle={styles.content}>
-      <BackButton onPress={() => router.back()} style={styles.back} />
+      <BackButton onPress={goBack} style={styles.back} />
 
       <StepLabel>Step 1 of 3</StepLabel>
       <View style={styles.heading}>

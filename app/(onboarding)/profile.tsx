@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Image, StyleSheet, View } from 'react-native';
+import { Alert, Image, StyleSheet, View } from 'react-native';
 import { z } from 'zod';
 import {
   BackButton,
@@ -159,6 +159,32 @@ export default function ProfileFormScreen() {
     }
   });
 
+  /**
+   * Back from here means "that's the wrong number". There is usually nothing to pop: this
+   * screen is reached by a `replace` after verification and by the launch redirect in
+   * `app/index.tsx`, so `router.back()` is a silent no-op on iOS. Going back to the phone
+   * screen means dropping the half-finished session, so it is confirmed first.
+   */
+  function confirmChangeNumber() {
+    Alert.alert(
+      'Use a different number?',
+      "You'll go back to the start and verify the new number.",
+      [
+        { text: 'Stay here', style: 'cancel' },
+        {
+          text: 'Change number',
+          style: 'destructive',
+          onPress: () => {
+            void useAuthStore
+              .getState()
+              .signOut({ remote: false })
+              .then(() => router.replace('/(onboarding)/phone'));
+          },
+        },
+      ],
+    );
+  }
+
   if (areaRequired && areasQuery.isPending) {
     return (
       <Screen contentStyle={styles.stateScreen}>
@@ -185,7 +211,7 @@ export default function ProfileFormScreen() {
         <Image source={flower} style={styles.flower} />
       </View>
 
-      <BackButton onPress={() => router.back()} style={styles.back} />
+      <BackButton onPress={confirmChangeNumber} style={styles.back} />
 
       <StepLabel>Step 2 of 3</StepLabel>
       <View style={styles.heading}>
