@@ -58,8 +58,6 @@ export default function SelfieScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         quality: 0.7,
-        allowsEditing: true,
-        aspect: [1, 1],
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -82,11 +80,14 @@ export default function SelfieScreen() {
     }
 
     try {
+      // No `allowsEditing`. It handed the shot straight to the OS crop editor, which arrives
+      // unannounced, is styled by the system rather than by us, and gave no hint whether
+      // cropping was required to continue. The photo now comes back to the ring below, where
+      // "Use this photo" and "Retake" say plainly what the choice is. Nothing here needs a
+      // square: the crop was never used for anything.
       const result = await ImagePicker.launchCameraAsync({
         cameraType: ImagePicker.CameraType.front,
         quality: 0.7,
-        allowsEditing: true,
-        aspect: [1, 1],
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -160,14 +161,6 @@ export default function SelfieScreen() {
         </ConicRing>
       </View>
 
-      {uri ? (
-        <Pressable onPress={() => void capture()} accessibilityRole="button" style={styles.retake}>
-          <Text variant="meta" color={colors.accentSky}>
-            Retake
-          </Text>
-        </Pressable>
-      ) : null}
-
       {error ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
           {error}
@@ -188,11 +181,28 @@ export default function SelfieScreen() {
 
       <View style={styles.spacer} />
 
+      {uri ? (
+        <Text variant="metaSm" color={colors.textMuted} style={styles.confirmNote}>
+          This is the photo gate staff will check you against. Retake it if your face is dark,
+          blurred, or partly out of frame.
+        </Text>
+      ) : null}
+
       <Button
-        label={uri ? 'Continue' : 'Take selfie & continue'}
+        label={uri ? 'Use this photo' : 'Take selfie & continue'}
         onPress={onContinue}
         loading={uploadSelfie.isPending}
       />
+
+      {uri ? (
+        <Button
+          label="Retake photo"
+          variant="secondary"
+          onPress={() => void capture()}
+          disabled={uploadSelfie.isPending}
+          style={styles.retakeButton}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -244,6 +254,13 @@ const styles = StyleSheet.create({
   retake: {
     alignSelf: 'center',
     paddingVertical: 4,
+  },
+  confirmNote: {
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  retakeButton: {
+    marginTop: 10,
   },
   error: {
     marginTop: 10,
