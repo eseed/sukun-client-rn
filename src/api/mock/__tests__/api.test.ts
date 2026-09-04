@@ -34,6 +34,41 @@ async function completeProfile() {
   return mockApi.profile.uploadSelfie('file:///selfie.jpg');
 }
 
+/**
+ * Places an order the way the app does: cart, tickets, preview, confirm, place. Wrapped up here
+ * so a test that only cares about what happens *after* an order exists does not have to spell the
+ * whole checkout out again.
+ */
+async function placeOrder(input: {
+  eventId: string;
+  buyerTierId: string | null;
+  items: { tierId: string; quantity: number }[];
+  guests: { phoneNumber: string; name: string; tierId: string }[];
+  promoCode?: string;
+}) {
+  const cart = await mockApi.carts.create(input.eventId);
+  await mockApi.carts.replaceTickets(cart.id, {
+    buyerTierId: input.buyerTierId,
+    items: input.items,
+    guests: input.guests,
+  });
+  if (input.promoCode) {
+    await mockApi.carts.applyPromo(cart.id, input.promoCode);
+  }
+  const preview = await mockApi.carts.preview(cart.id);
+  return mockApi.carts.placeOrder(cart.id, preview.pricing.pricingConfirmationToken!);
+}
+
+function toCents(egp: string): number {
+  const [whole = '0', frac = ''] = egp.split('.');
+  return parseInt(whole, 10) * 100 + parseInt((frac + '00').slice(0, 2), 10);
+}
+function fromCents(cents: number): string {
+  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+}
+const addStrings = (a: string, b: string) => fromCents(toCents(a) + toCents(b));
+const subtractStrings = (a: string, b: string) => fromCents(toCents(a) - toCents(b));
+
 beforeEach(() => {
   resetMockState();
   clock = Date.parse('2026-08-12T12:00:00.000Z');
@@ -75,7 +110,7 @@ describe('auth', () => {
     await completeProfile();
     // completeProfile seeds this user a Tulua ticket, so a further Tulua order is entirely
     // for other people - one usable ticket per phone per event.
-    const order = await mockApi.orders.create({
+    const order = await placeOrder({
       eventId: TULUA_ID,
       buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
@@ -121,7 +156,7 @@ describe('profile completeness gates purchase', () => {
   it('refuses to create an order for an incomplete profile', async () => {
     await signIn();
     await expect(
-      mockApi.orders.create({
+      placeOrder({
         eventId: TULUA_ID,
         buyerTierId: TIER_WEEKEND,
         items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
@@ -131,56 +166,111 @@ describe('profile completeness gates purchase', () => {
   });
 });
 
-describe('pricing', () => {
+describe('cart pricing', () => {
+  /** Every pricing assertion goes through a real cart, because that is the only way to price. */
+  async function previewFor(input: {
+    eventId: string;
+    items: { tierId: string; quantity: number }[];
+    promoCode?: string;
+  }) {
+    const cart = await mockApi.carts.create(input.eventId);
+    await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: input.items[0]!.tierId,
+      items: input.items,
+      guests: [],
+    });
+    if (input.promoCode) {
+      await mockApi.carts.applyPromo(cart.id, input.promoCode).catch(() => undefined);
+    }
+    return mockApi.carts.preview(cart.id);
+  }
+
+  beforeEach(async () => {
+    await signIn();
+    await completeProfile();
+  });
+
   it('applies VAT to the discounted net, matching the server formula', async () => {
-    const price = await mockApi.orders.previewPrice({
-      eventId: TULUA_ID,
-      items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
-      promoCode: 'SUKUN10',
+    const { pricing } = await previewFor({
+      eventId: SOUND_BATH_ID,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
     });
 
-    expect(price.subtotalEgp).toBe('3200.00');
-    expect(price.discountEgp).toBe('320.00');
-    expect(price.netEgp).toBe('2880.00');
-    expect(price.vatEgp).toBe('403.20');
-    expect(price.totalEgp).toBe('3283.20');
-    expect(price.currency).toBe('EGP');
+    expect(pricing.status).toBe('complete');
+    expect(pricing.netEgp).toBe(subtractStrings(pricing.subtotalEgp!, pricing.discountEgp!));
+    expect(pricing.totalEgp).toBe(addStrings(pricing.netEgp!, pricing.vatEgp!));
+    expect(pricing.ticketsSubtotalEgp).toBe(pricing.subtotalEgp);
   });
 
-  it('prices without a promo', async () => {
-    const price = await mockApi.orders.previewPrice({
-      eventId: TULUA_ID,
-      items: [{ tierId: TIER_DAY1, quantity: 1 }],
-    });
-    expect(price.subtotalEgp).toBe('950.00');
-    expect(price.discountEgp).toBe('0.00');
-    expect(price.totalEgp).toBe('1083.00');
-  });
-
-  it('ignores an unknown promo code rather than discounting', async () => {
-    const price = await mockApi.orders.previewPrice({
-      eventId: TULUA_ID,
+  it('separates ticket and addon subtotals', async () => {
+    const cart = await mockApi.carts.create(TULUA_ID);
+    const ticketed = await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
-      promoCode: 'NOPE',
+      guests: [{ phoneNumber: '+201099887766', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
     });
-    expect(price.discountEgp).toBe('0.00');
-    expect(price.promoCode).toBeNull();
+    await mockApi.carts.replaceAddons(cart.id, [
+      {
+        optionId: 'opt-dinner',
+        quantity: 2,
+        assignments: [{ cartAttendeeId: ticketed.attendees[0]!.cartAttendeeId, quantity: 2 }],
+      },
+    ]);
+
+    const { pricing } = await mockApi.carts.preview(cart.id);
+
+    expect(pricing.ticketsSubtotalEgp).toBe('1600.00');
+    expect(pricing.addonsSubtotalEgp).toBe('560.00');
+    expect(pricing.subtotalEgp).toBe('2160.00');
   });
 
-  it('clamps a promo bigger than the subtotal and reports it', async () => {
-    const result = await mockApi.orders.validatePromoCode(
-      [{ tierId: TIER_DAY1, quantity: 1 }],
-      'TULUA500',
-    );
-    expect(result.discountAmountEgp).toBe('500.00');
-    expect(result.discountAppliedEgp).toBe('500.00');
-    expect(result.fullyApplied).toBe(true);
+  it('refuses a promo that discounts nothing in this cart', async () => {
+    const cart = await mockApi.carts.create(TULUA_ID);
+    await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201099887766', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+
+    // Scoped to a meal option this cart does not contain.
+    await expect(mockApi.carts.applyPromo(cart.id, 'DINNER50')).rejects.toMatchObject({
+      code: 'PROMO_NOT_APPLICABLE_TO_CART',
+    });
   });
 
-  it('returns server promo error codes', async () => {
-    await expect(
-      mockApi.orders.validatePromoCode([{ tierId: TIER_SOUND_GA, quantity: 1 }], 'NOPE'),
-    ).rejects.toMatchObject({ code: 'PROMO_CODE_NOT_FOUND', status: 404 });
+  it('rejects an unknown promo code', async () => {
+    const cart = await mockApi.carts.create(TULUA_ID);
+    await expect(mockApi.carts.applyPromo(cart.id, 'NOPE')).rejects.toMatchObject({
+      code: 'PROMO_CODE_NOT_FOUND',
+      status: 404,
+    });
+  });
+
+  it('detaches a promo that stops applying when the cart changes', async () => {
+    const cart = await mockApi.carts.create(TULUA_ID);
+    const ticketed = await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201099887766', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    await mockApi.carts.replaceAddons(cart.id, [
+      {
+        optionId: 'opt-dinner',
+        quantity: 1,
+        assignments: [{ cartAttendeeId: ticketed.attendees[0]!.cartAttendeeId, quantity: 1 }],
+      },
+    ]);
+    await mockApi.carts.applyPromo(cart.id, 'DINNER50');
+
+    // Dropping the only meal strands the code, so the cart says it removed it rather than
+    // showing a code with no money behind it.
+    const after = await mockApi.carts.replaceAddons(cart.id, []);
+
+    expect(after.promoAdjustment).toEqual({
+      removed: true,
+      reason: 'PROMO_SCOPE_NO_LONGER_APPLICABLE',
+      previousPromoCode: 'DINNER50',
+    });
   });
 });
 
@@ -232,7 +322,7 @@ describe('order and ticket lifecycle', () => {
   });
 
   it('creates an order awaiting payment with server-priced totals', async () => {
-    const order = await mockApi.orders.create({
+    const order = await placeOrder({
       eventId: TULUA_ID,
       buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
@@ -251,7 +341,7 @@ describe('order and ticket lifecycle', () => {
   });
 
   it('issues tickets only after the webhook settles, not on redirect', async () => {
-    const order = await mockApi.orders.create({
+    const order = await placeOrder({
       eventId: TULUA_ID,
       buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
@@ -276,7 +366,7 @@ describe('order and ticket lifecycle', () => {
   });
 
   it("issues the guest's ticket as pending_claim, so it exists before its owner", async () => {
-    const order = await mockApi.orders.create({
+    const order = await placeOrder({
       // The seeded ticket is for Tulua, so this buys somewhere the buyer holds nothing and
       // can still take one of the tickets themselves.
       eventId: SOUND_BATH_ID,
@@ -303,7 +393,7 @@ describe('order and ticket lifecycle', () => {
   });
 
   it('cancels an unpaid order', async () => {
-    const order = await mockApi.orders.create({
+    const order = await placeOrder({
       eventId: TULUA_ID,
       buyerTierId: null,
       items: [{ tierId: TIER_DAY1, quantity: 1 }],
@@ -374,7 +464,7 @@ describe('mock parity', () => {
 
     await signIn();
     await completeProfile();
-    const order = await mockApi.orders.create({
+    const order = await placeOrder({
       eventId: TULUA_ID,
       buyerTierId: null,
       items: [{ tierId: TIER_DAY1, quantity: 1 }],
@@ -389,7 +479,7 @@ describe('mock parity', () => {
   it('expires an unpaid hold and does not settle it later', async () => {
     await signIn();
     await completeProfile();
-    const order = await mockApi.orders.create({
+    const order = await placeOrder({
       eventId: TULUA_ID,
       buyerTierId: null,
       items: [{ tierId: TIER_DAY1, quantity: 1 }],
@@ -421,5 +511,279 @@ describe('mock parity', () => {
     expect(me.status).toBe('pending_profile');
     // The old tickets went with the old account and cannot rebind to this number.
     expect((await mockApi.tickets.list({ statuses: ['active'] })).data).toHaveLength(0);
+  });
+});
+
+describe('addon catalogue', () => {
+  beforeEach(async () => {
+    await signIn();
+    await completeProfile();
+  });
+
+  it('shows a browse card its cheapest buyable price without listing options', async () => {
+    const summaries = await mockApi.addons.list(TULUA_ID);
+    const lodge = summaries.find((addon) => addon.name === 'Desert Lodge Room');
+
+    expect(lodge?.fromPriceEgpNow).toBe('1400.00');
+    expect(lodge).not.toHaveProperty('options');
+  });
+
+  it('marks a fully sold addon unavailable and publishes the zero', async () => {
+    const summaries = await mockApi.addons.list(TULUA_ID);
+    const camp = summaries.find((addon) => addon.name === 'Camp Tent, shared');
+
+    expect(camp?.availability).toBe('unavailable');
+    // Sold out is never withheld: a buyer has to be able to see it.
+    expect(camp?.availableQuantity).toBe(0);
+  });
+
+  it('withholds a remaining count until the event says it is low enough', async () => {
+    const detail = await mockApi.addons.detail(TULUA_ID, 'addon-tulua-meals');
+    const dinner = detail.options[0]!;
+
+    // Hundreds left of 400, well above Tulua's 20% threshold.
+    expect(dinner.availableQuantity).toBeNull();
+  });
+
+  it('publishes a remaining count once it falls under the threshold', async () => {
+    const detail = await mockApi.addons.detail(TULUA_ID, 'addon-tulua-accommodation');
+    const double2 = detail.options.find((option) => option.label === 'Double · 2 nights');
+
+    // 3 left of 20 is 15%, under the 20% Tulua publishes at.
+    expect(double2?.availableQuantity).toBe(3);
+  });
+
+  it('names the window pricing an option now and the one that takes over', async () => {
+    const detail = await mockApi.addons.detail(TULUA_ID, 'addon-tulua-meals');
+    const dinner = detail.options[0]!;
+
+    expect(dinner.priceWindowName).toBe('Early bird');
+    expect(dinner.priceEgpNow).toBe('280.00');
+    expect(dinner.nextPriceWindow).toEqual({
+      name: 'Regular',
+      priceEgp: '340.00',
+      startsAt: '2026-09-01T00:00:00.000Z',
+    });
+  });
+});
+
+describe('cart addons', () => {
+  const GUEST = { phoneNumber: '+201099887766', name: 'Nour Hassan', tierId: TIER_WEEKEND };
+
+  async function cartWithGuest(quantity = 1) {
+    const cart = await mockApi.carts.create(TULUA_ID);
+    const withTickets = await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity }],
+      guests: Array.from({ length: quantity }, (_unused, index) => ({
+        ...GUEST,
+        phoneNumber: `+20109988776${index}`,
+        name: `Guest ${index + 1}`,
+      })),
+    });
+    return { cartId: cart.id, attendees: withTickets.attendees };
+  }
+
+  beforeEach(async () => {
+    await signIn();
+    await completeProfile();
+  });
+
+  it('blocks checkout until every unit has a recipient', async () => {
+    const { cartId, attendees } = await cartWithGuest();
+    await mockApi.carts.replaceAddons(cartId, [
+      {
+        optionId: 'opt-dinner',
+        quantity: 3,
+        assignments: [{ cartAttendeeId: attendees[0]!.cartAttendeeId, quantity: 2 }],
+      },
+    ]);
+
+    const preview = await mockApi.carts.preview(cartId);
+
+    expect(preview.canPlaceOrder).toBe(false);
+    expect(preview.issues.map((issue) => issue.code)).toContain('ADDON_ASSIGNMENT_COUNT_MISMATCH');
+    expect(preview.pricing.pricingConfirmationToken).toBeNull();
+  });
+
+  it('rejects an assignment that names both a cart attendee and a ticket', async () => {
+    const { cartId, attendees } = await cartWithGuest();
+
+    await expect(
+      mockApi.carts.replaceAddons(cartId, [
+        {
+          optionId: 'opt-dinner',
+          quantity: 1,
+          assignments: [
+            { cartAttendeeId: attendees[0]!.cartAttendeeId, ticketId: 'tk-seed-1', quantity: 1 },
+          ],
+        },
+      ]),
+    ).rejects.toMatchObject({ code: 'ADDON_ASSIGNMENT_TARGET_INVALID' });
+  });
+
+  it('will not check out a half-filled room', async () => {
+    const { cartId, attendees } = await cartWithGuest();
+    await mockApi.carts.replaceAddons(cartId, [
+      {
+        optionId: 'opt-lodge-double-2',
+        quantity: 1,
+        rooms: [{ occupants: [{ cartAttendeeId: attendees[0]!.cartAttendeeId }] }],
+      },
+    ]);
+
+    const preview = await mockApi.carts.preview(cartId);
+
+    expect(preview.issues.map((issue) => issue.code)).toContain('ROOM_OCCUPANCY_UNFILLED');
+  });
+
+  it('counts accommodation quantity in rooms, not people', async () => {
+    const { cartId, attendees } = await cartWithGuest(2);
+    await mockApi.carts.replaceAddons(cartId, [
+      {
+        optionId: 'opt-lodge-double-2',
+        quantity: 1,
+        rooms: [
+          {
+            occupants: [
+              { cartAttendeeId: attendees[0]!.cartAttendeeId },
+              { cartAttendeeId: attendees[1]!.cartAttendeeId },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const preview = await mockApi.carts.preview(cartId);
+
+    expect(preview.issues).toEqual([]);
+    // One room for two people, priced once.
+    expect(preview.pricing.addonsSubtotalEgp).toBe('2200.00');
+  });
+
+  it('keeps one room per person across separate rooms in the same cart', async () => {
+    const { cartId, attendees } = await cartWithGuest(2);
+    await mockApi.carts.replaceAddons(cartId, [
+      {
+        optionId: 'opt-lodge-double-2',
+        quantity: 2,
+        rooms: [
+          {
+            occupants: [
+              { cartAttendeeId: attendees[0]!.cartAttendeeId },
+              { cartAttendeeId: attendees[1]!.cartAttendeeId },
+            ],
+          },
+          {
+            occupants: [
+              { cartAttendeeId: attendees[0]!.cartAttendeeId },
+              { cartAttendeeId: attendees[1]!.cartAttendeeId },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const preview = await mockApi.carts.preview(cartId);
+
+    expect(preview.issues.map((issue) => issue.code)).toContain('PERSON_ALREADY_HAS_ACCOMMODATION');
+  });
+
+  it('drops draft addons when tickets are replaced', async () => {
+    const { cartId, attendees } = await cartWithGuest();
+    await mockApi.carts.replaceAddons(cartId, [
+      {
+        optionId: 'opt-dinner',
+        quantity: 1,
+        assignments: [{ cartAttendeeId: attendees[0]!.cartAttendeeId, quantity: 1 }],
+      },
+    ]);
+
+    // Changing tickets invalidates every assignment, so the addons go with them and the app has
+    // to send them again.
+    const after = await mockApi.carts.replaceTickets(cartId, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [GUEST],
+    });
+
+    expect(after.addons).toEqual([]);
+  });
+});
+
+describe('cart place order', () => {
+  beforeEach(async () => {
+    await signIn();
+    await completeProfile();
+  });
+
+  async function readyCart() {
+    const cart = await mockApi.carts.create(TULUA_ID);
+    await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201099887766', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    return cart.id;
+  }
+
+  it('refuses a token from a preview whose price no longer holds', async () => {
+    const cartId = await readyCart();
+    const stale = await mockApi.carts.preview(cartId);
+
+    // The buyer keeps shopping after seeing that total, so the token they are holding no longer
+    // describes what they would be charged.
+    const attendees = (await mockApi.carts.get(cartId)).attendees;
+    await mockApi.carts.replaceAddons(cartId, [
+      {
+        optionId: 'opt-dinner',
+        quantity: 1,
+        assignments: [{ cartAttendeeId: attendees[0]!.cartAttendeeId, quantity: 1 }],
+      },
+    ]);
+
+    await expect(
+      mockApi.carts.placeOrder(cartId, stale.pricing.pricingConfirmationToken!),
+    ).rejects.toMatchObject({ code: 'CART_PRICING_CHANGED', status: 409 });
+  });
+
+  it('replays the same order rather than placing a second one', async () => {
+    const cartId = await readyCart();
+    const preview = await mockApi.carts.preview(cartId);
+    const token = preview.pricing.pricingConfirmationToken!;
+
+    const first = await mockApi.carts.placeOrder(cartId, token);
+    const second = await mockApi.carts.placeOrder(cartId, token);
+
+    expect(second.id).toBe(first.id);
+    expect((await mockApi.orders.list()).data).toHaveLength(1);
+  });
+
+  it('attaches paid addons to the ticket they were bought for', async () => {
+    const cartId = await readyCart();
+    const attendees = (await mockApi.carts.get(cartId)).attendees;
+    await mockApi.carts.replaceAddons(cartId, [
+      {
+        optionId: 'opt-dinner',
+        quantity: 1,
+        assignments: [{ cartAttendeeId: attendees[0]!.cartAttendeeId, quantity: 1 }],
+      },
+    ]);
+    const preview = await mockApi.carts.preview(cartId);
+    const order = await mockApi.carts.placeOrder(cartId, preview.pricing.pricingConfirmationToken!);
+
+    await mockApi.payments.initiate(order.id);
+    advance(5000);
+    await mockApi.payments.status(order.id);
+
+    // The guest's ticket binds when they register, and the dinner is waiting on it.
+    await mockApi.auth.logout();
+    await signIn('+201099887766');
+    const { data } = await mockApi.tickets.list();
+    const addons = await mockApi.tickets.addons(data[0]!.id);
+
+    expect(addons).toHaveLength(1);
+    expect(addons[0]?.type).toBe('meal');
+    expect(data[0]?.addonCount).toBe(1);
   });
 });

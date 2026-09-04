@@ -72,6 +72,347 @@
         "required": ["statusCode", "error", "message", "details", "requestId", "timestamp"],
         "type": "object"
       },
+      "PublicAccommodationAddonOptionResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "checkInDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "checkInTime": {
+            "example": "14:00",
+            "format": "time",
+            "type": "string"
+          },
+          "checkOutDate": {
+            "example": "2026-10-25",
+            "format": "date",
+            "type": "string"
+          },
+          "checkOutTime": {
+            "example": "11:00",
+            "format": "time",
+            "type": "string"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "nights": {
+            "example": 2,
+            "type": "number"
+          },
+          "occupancy": {
+            "example": 2,
+            "type": "number"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "roomType": {
+            "example": "double",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity",
+          "roomType",
+          "nights",
+          "occupancy",
+          "checkInDate",
+          "checkInTime",
+          "checkOutDate",
+          "checkOutTime"
+        ],
+        "type": "object"
+      },
+      "PublicAccommodationAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicAccommodationAddonOptionResponseDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": ["accommodation"],
+            "example": "accommodation",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "type": "object"
+      },
+      "PublicAddonNextPriceWindowResponseDto": {
+        "properties": {
+          "name": {
+            "example": "Regular",
+            "type": "string"
+          },
+          "priceEgp": {
+            "example": "340.00",
+            "type": "string"
+          },
+          "startsAt": {
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": ["name", "priceEgp", "startsAt"],
+        "type": "object"
+      },
+      "PublicAddonOptionBaseResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity"
+        ],
+        "type": "object"
+      },
+      "PublicAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "type": {
+            "enum": ["accommodation", "meal", "transport", "other"],
+            "example": "accommodation",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl"],
+        "type": "object"
+      },
+      "PublicAddonSummaryCatalogResponseDto": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PublicAddonSummaryResponseDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["data"],
+        "type": "object"
+      },
+      "PublicAddonSummaryResponseDto": {
+        "properties": {
+          "availability": {
+            "description": "Available when at least one visible option can be bought right now.",
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "Units left across every visible option, or null while that number is still withheld by the event's `showStockWhenPercentageReaches`. Zero when the whole addon is sold out.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "fromPriceEgpNow": {
+            "description": "Cheapest currently purchasable option, so a browse card can show a price without fetching every option. Null when nothing here is priced right now.",
+            "example": "1400.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "optionCount": {
+            "description": "How many options are visible. One means the card can show an exact price rather than \"from\".",
+            "example": 3,
+            "type": "number"
+          },
+          "priceWindowName": {
+            "description": "The price window every visible option shares, e.g. \"Early bird\". Null when they differ, because one badge cannot honestly describe two windows.",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": ["accommodation", "meal", "transport", "other"],
+            "example": "accommodation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "featuredImageUrl",
+          "fromPriceEgpNow",
+          "optionCount",
+          "priceWindowName",
+          "availability",
+          "availableQuantity"
+        ],
+        "type": "object"
+      },
       "PublicEventDayResponseDto": {
         "properties": {
           "dayDate": {
@@ -127,8 +468,8 @@
             "type": "array"
           },
           "descriptionHtml": {
-            "description": "Sanitized HTML rendered from Markdown.",
-            "example": "<p>Description</p>",
+            "description": "Raw Markdown event description.",
+            "example": "# Description",
             "type": "string"
           },
           "documents": {
@@ -284,13 +625,8 @@
             "nullable": true,
             "type": "string"
           },
-          "latitude": {
-            "example": "30.0000000",
-            "nullable": true,
-            "type": "string"
-          },
-          "longitude": {
-            "example": "31.0000000",
+          "mapUrl": {
+            "example": "https://maps.app.goo.gl/8xKQ2mNvRb3TgUq7A",
             "nullable": true,
             "type": "string"
           },
@@ -300,7 +636,7 @@
             "type": "string"
           }
         },
-        "required": ["name", "address", "latitude", "longitude"],
+        "required": ["name", "address", "mapUrl"],
         "type": "object"
       },
       "PublicEventDocumentResponseDto": {
@@ -548,6 +884,348 @@
           "days"
         ],
         "type": "object"
+      },
+      "PublicMealAddonOptionResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity"
+        ],
+        "type": "object"
+      },
+      "PublicMealAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicMealAddonOptionResponseDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": ["meal"],
+            "example": "meal",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "type": "object"
+      },
+      "PublicOtherAddonOptionResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity"
+        ],
+        "type": "object"
+      },
+      "PublicOtherAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicOtherAddonOptionResponseDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": ["other"],
+            "example": "other",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "type": "object"
+      },
+      "PublicTransportAddonOptionResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "departureDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "departureTime": {
+            "example": "09:30",
+            "format": "time",
+            "type": "string"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "returnDate": {
+            "example": "2026-10-25",
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "returnTime": {
+            "example": "18:00",
+            "format": "time",
+            "nullable": true,
+            "type": "string"
+          },
+          "transportDirection": {
+            "enum": ["one_way", "round_trip"],
+            "example": "one_way",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity",
+          "transportDirection",
+          "departureDate",
+          "departureTime"
+        ],
+        "type": "object"
+      },
+      "PublicTransportAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicTransportAddonOptionResponseDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": ["transport"],
+            "example": "transport",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "type": "object"
       }
     }
   },
@@ -620,6 +1298,17 @@
             }
           },
           {
+            "description": "When true, includes cancelled events in the result.",
+            "in": "query",
+            "name": "includeCancelled",
+            "required": false,
+            "schema": {
+              "default": false,
+              "example": false,
+              "type": "boolean"
+            }
+          },
+          {
             "description": "Filter by earliest startsAt (Cairo date, inclusive).",
             "in": "query",
             "name": "startsFrom",
@@ -686,11 +1375,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -749,11 +1439,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -794,6 +1485,359 @@
         "tags": ["Public Events"]
       }
     },
+    "/api/v1/public/events/{identifier}/addons": {
+      "get": {
+        "description": "Returns lightweight visibility cards for addons with at least one currently visible option, by event UUID or slug. Use the nested addon detail endpoint for options, pricing, and availability. No authentication is required. Responses are English-only; Accept-Language is ignored.",
+        "operationId": "PublicAddonsController_list_v1",
+        "parameters": [
+          {
+            "description": "Event UUID or slug.",
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "pattern": "^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9]+(?:-[a-z0-9]+)*)$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "summary": {
+                    "summary": "Public addon summaries",
+                    "value": {
+                      "data": [
+                        {
+                          "description": "A room near the festival grounds.",
+                          "featuredImageUrl": "https://public-assets.example/addons/lodge.webp",
+                          "id": "addon-accommodation-uuid",
+                          "name": "Desert Lodge Room",
+                          "type": "accommodation"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAddonSummaryCatalogResponseDto"
+                }
+              }
+            },
+            "description": "Visible public addon summaries. Use the detail endpoint for options and availability."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": [
+                    {
+                      "field": "identifier",
+                      "issue": "identifier must be a valid UUID or slug"
+                    }
+                  ],
+                  "error": "VALIDATION_ERROR",
+                  "message": "Invalid data",
+                  "requestId": "public-addon-validation-001",
+                  "statusCode": 400,
+                  "timestamp": "2026-08-24T12:00:00.000Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid event identifier."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": [],
+                  "error": "EVENT_NOT_FOUND",
+                  "message": "Event not found",
+                  "requestId": "public-addon-not-found-001",
+                  "statusCode": 404,
+                  "timestamp": "2026-08-24T12:00:00.000Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "EVENT_NOT_FOUND"
+          }
+        },
+        "summary": "List public addons for an event",
+        "tags": ["Public Addons"]
+      }
+    },
+    "/api/v1/public/events/{identifier}/addons/{addonId}": {
+      "get": {
+        "description": "Returns one visible addon with its currently visible options, advisory pricing, availability, and fixed schedule details. The addon must belong to the requested public event. No authentication is required. Responses are English-only; Accept-Language is ignored.",
+        "operationId": "PublicAddonsController_detail_v1",
+        "parameters": [
+          {
+            "description": "Event UUID or slug.",
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "maxLength": 160,
+              "pattern": "^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9]+(?:-[a-z0-9]+)*)$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Addon UUID owned by the requested event.",
+            "in": "path",
+            "name": "addonId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "accommodation": {
+                    "summary": "Accommodation addon detail",
+                    "value": {
+                      "description": "A room near the festival grounds.",
+                      "featuredImageUrl": "https://public-assets.example/addons/lodge.webp",
+                      "id": "addon-accommodation-uuid",
+                      "name": "Desert Lodge Room",
+                      "options": [
+                        {
+                          "availability": "available",
+                          "availableQuantity": 3,
+                          "checkInDate": "2026-10-23",
+                          "checkInTime": "14:00",
+                          "checkOutDate": "2026-10-25",
+                          "checkOutTime": "11:00",
+                          "id": "option-double-uuid",
+                          "label": "Double · 2 nights",
+                          "nights": 2,
+                          "occupancy": 2,
+                          "priceEgpNow": "2200.00",
+                          "priceWindowStatus": "available",
+                          "roomType": "double"
+                        }
+                      ],
+                      "type": "accommodation"
+                    }
+                  },
+                  "meal": {
+                    "summary": "Meal addon detail",
+                    "value": {
+                      "description": null,
+                      "featuredImageUrl": null,
+                      "id": "addon-meal-uuid",
+                      "name": "Festival Dinner",
+                      "options": [
+                        {
+                          "availability": "available",
+                          "availableQuantity": 40,
+                          "id": "option-dinner-uuid",
+                          "label": "Dinner voucher",
+                          "priceEgpNow": "250.00",
+                          "priceWindowStatus": "available"
+                        }
+                      ],
+                      "type": "meal"
+                    }
+                  },
+                  "oneWayTransport": {
+                    "summary": "One-way transport addon detail",
+                    "value": {
+                      "description": null,
+                      "featuredImageUrl": null,
+                      "id": "addon-transport-uuid",
+                      "name": "Festival Shuttle",
+                      "options": [
+                        {
+                          "availability": "available",
+                          "availableQuantity": 12,
+                          "departureDate": "2026-10-23",
+                          "departureTime": "09:30",
+                          "id": "option-shuttle-outbound-uuid",
+                          "label": "Cairo → Festival",
+                          "priceEgpNow": "350.00",
+                          "priceWindowStatus": "available",
+                          "transportDirection": "one_way"
+                        }
+                      ],
+                      "type": "transport"
+                    }
+                  },
+                  "pricingGap": {
+                    "summary": "Pricing-gap addon detail",
+                    "value": {
+                      "description": null,
+                      "featuredImageUrl": null,
+                      "id": "addon-pricing-gap-uuid",
+                      "name": "Breakfast",
+                      "options": [
+                        {
+                          "availability": "unavailable",
+                          "availableQuantity": 7,
+                          "id": "option-pricing-gap-uuid",
+                          "label": "Breakfast voucher",
+                          "priceEgpNow": null,
+                          "priceWindowStatus": "unavailable"
+                        }
+                      ],
+                      "type": "meal"
+                    }
+                  },
+                  "roundTripTransport": {
+                    "summary": "Round-trip transport addon detail",
+                    "value": {
+                      "description": null,
+                      "featuredImageUrl": null,
+                      "id": "addon-round-trip-uuid",
+                      "name": "Return Shuttle",
+                      "options": [
+                        {
+                          "availability": "available",
+                          "availableQuantity": 8,
+                          "departureDate": "2026-10-23",
+                          "departureTime": "09:30",
+                          "id": "option-shuttle-round-trip-uuid",
+                          "label": "Cairo ↔ Festival",
+                          "priceEgpNow": "600.00",
+                          "priceWindowStatus": "available",
+                          "returnDate": "2026-10-25",
+                          "returnTime": "18:00",
+                          "transportDirection": "round_trip"
+                        }
+                      ],
+                      "type": "transport"
+                    }
+                  },
+                  "soldOut": {
+                    "summary": "Sold-out addon detail",
+                    "value": {
+                      "description": null,
+                      "featuredImageUrl": null,
+                      "id": "addon-sold-out-uuid",
+                      "name": "Workshop",
+                      "options": [
+                        {
+                          "availability": "unavailable",
+                          "availableQuantity": 0,
+                          "id": "option-sold-out-uuid",
+                          "label": "Workshop seat",
+                          "priceEgpNow": "500.00",
+                          "priceWindowStatus": "available"
+                        }
+                      ],
+                      "type": "other"
+                    }
+                  }
+                },
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "accommodation": "#/components/schemas/PublicAccommodationAddonResponseDto",
+                      "meal": "#/components/schemas/PublicMealAddonResponseDto",
+                      "other": "#/components/schemas/PublicOtherAddonResponseDto",
+                      "transport": "#/components/schemas/PublicTransportAddonResponseDto"
+                    },
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/PublicAccommodationAddonResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PublicTransportAddonResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PublicMealAddonResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PublicOtherAddonResponseDto"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "One visible public addon with detailed options."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": [
+                    {
+                      "field": "addonId",
+                      "issue": "addonId must be a valid UUID"
+                    }
+                  ],
+                  "error": "VALIDATION_ERROR",
+                  "message": "Invalid data",
+                  "requestId": "public-addon-detail-validation-001",
+                  "statusCode": 400,
+                  "timestamp": "2026-08-24T12:00:00.000Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid event identifier or addon UUID."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": [],
+                  "error": "ADDON_NOT_FOUND",
+                  "message": "Addon not found",
+                  "requestId": "public-addon-detail-not-found-001",
+                  "statusCode": 404,
+                  "timestamp": "2026-08-24T12:00:00.000Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "EVENT_NOT_FOUND or ADDON_NOT_FOUND."
+          }
+        },
+        "summary": "Get one public addon for an event",
+        "tags": ["Public Addons"]
+      }
+    },
     "/api/v1/public/events/{identifier}/meta": {
       "get": {
         "description": "Returns minimal metadata for Open Graph and marketing-page rendering. Does not load tier availability or media arrays. No authentication is required.",
@@ -810,11 +1854,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -861,6 +1906,10 @@
     {
       "description": "",
       "name": "Public Events"
+    },
+    {
+      "description": "",
+      "name": "Public Addons"
     }
   ]
 }

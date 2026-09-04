@@ -2,9 +2,14 @@ import { normalizePhone, requiresLivingArea } from '../../lib/phone';
 import type { SukunApi } from '../contract';
 import type {
   AccountDeletionPreview,
+  AddonDetail,
+  AddonSummary,
   Area,
   Authenticated,
-  CreateOrderInput,
+  Cart,
+  CartAddonInput,
+  CartPreview,
+  CartRecipientLookup,
   CurrentUser,
   CursorPage,
   EntryPass,
@@ -21,13 +26,15 @@ import type {
   OrderDetail,
   OrderSummary,
   OtpRequested,
+  OrderAddon,
   PaymentIntent,
   PaymentStatus,
-  PricePreview,
-  PromoValidationResult,
+  ReplaceCartTicketsInput,
   SessionTokens,
   SelfieResponse,
   Ticket,
+  TicketAddon,
+  TicketAddonContext,
   UpdateProfileInput,
 } from '../types';
 import {
@@ -40,6 +47,26 @@ import {
   VAT_RATE,
 } from './fixtures';
 import { applyRate, clampDiscount, multiply, subtract, sum, toEgp, toPiastres } from './money';
+import { mockConfig } from './config';
+import {
+  buildAddonDetail,
+  findOption,
+  listAddonDetails,
+  listAddonSummaries,
+  addonForOption,
+} from './addons';
+import {
+  applyAddons,
+  applyTickets,
+  nextCartId,
+  priceCart,
+  promoNoLongerApplies,
+  resetCartSequences,
+  toCartResponse,
+  toPreviewResponse,
+  validateCart,
+  type MockCart,
+} from './carts';
 
 /**
  * In-memory mock backend. Holds all P0 business logic — pricing, promo clamping, guest
@@ -61,13 +88,7 @@ const DEFAULT_PAGE_LIMIT = 20;
  * Test/dev seams. Tests set `latencyMs` to 0 and drive `now` themselves so they can assert
  * on webhook timing without sleeping.
  */
-export const mockConfig = {
-  /** Simulated round-trip time, so loading states are exercised in the real app. */
-  latencyMs: 320,
-  /** How long after `payments.initiate` the simulated provider webhook lands. */
-  settleDelayMs: 4000,
-  now: (): number => Date.now(),
-};
+export { mockConfig } from './config';
 
 function delay<T>(value: T, factor = 1): Promise<T> {
   const ms = mockConfig.latencyMs * factor;
@@ -127,6 +148,13 @@ interface MockState {
   /** Wall-clock at which an initiated payment auto-settles, simulating the webhook. */
   settleAt: Map<string, number>;
   deletedAccounts: Map<string, DeletedAccount>;
+  carts: MockCart[];
+  /** Pricing tokens handed out by preview, with the total they were issued against. */
+  pricingTokens: Map<string, { cartId: string; totalEgp: string; expiresAt: number }>;
+  /** Addons issued by a paid order, keyed by ticket id. */
+  ticketAddons: Map<string, TicketAddon[]>;
+  /** Which tickets occupy a room, per event, so one-room-per-person survives fulfilment. */
+  accommodationTicketIds: Map<string, Set<string>>;
 }
 
 interface DeletedAccount {
@@ -154,6 +182,10 @@ const state: MockState = {
   paidAt: new Map(),
   settleAt: new Map(),
   deletedAccounts: new Map(),
+  carts: [],
+  pricingTokens: new Map(),
+  ticketAddons: new Map(),
+  accommodationTicketIds: new Map(),
 };
 
 /** Test/dev seam: reset the mock between runs. */
@@ -172,6 +204,11 @@ export function resetMockState(): void {
   state.paidAt.clear();
   state.settleAt.clear();
   state.deletedAccounts.clear();
+  state.carts = [];
+  state.pricingTokens.clear();
+  state.ticketAddons.clear();
+  state.accommodationTicketIds.clear();
+  resetCartSequences();
   orderSeq = 482;
   ticketSeq = 4821;
 }
@@ -318,30 +355,6 @@ function findTier(eventId: string, tierId: string) {
   return tier;
 }
 
-function priceItems(eventId: string, items: { tierId: string; quantity: number }[]): string {
-  return sum(items.map((i) => multiply(findTier(eventId, i.tierId).priceEgp, i.quantity)));
-}
-
-function resolvePromo(code: string | undefined, subtotalEgp: string) {
-  if (!code) return { code: null, discountEgp: '0.00', fullyApplied: true, valid: true };
-  const found = promoCodes[code.trim().toUpperCase()];
-  if (!found)
-    return {
-      code: code.trim().toUpperCase(),
-      discountEgp: '0.00',
-      fullyApplied: false,
-      valid: false,
-    };
-  const applied = clampDiscount(found.discountEgp, subtotalEgp);
-  return {
-    code: code.trim().toUpperCase(),
-    discountEgp: applied,
-    fullyApplied: toPiastres(applied) === toPiastres(found.discountEgp),
-    valid: true,
-    configured: found.discountEgp,
-  };
-}
-
 function findEvent(identifier: string): EventDetail {
   const event =
     eventDetails[identifier] ??
@@ -350,59 +363,151 @@ function findEvent(identifier: string): EventDetail {
   return event;
 }
 
-function promoApplies(code: string, tierIds: string[]): boolean {
-  const configured = promoCodes[code];
-  return !configured?.tierIds || tierIds.some((tierId) => configured.tierIds!.includes(tierId));
+/* -------------------------------------------------------------- cart helpers */
+
+function requireCompleteProfile(): CurrentUser {
+  const user = requireUser();
+  if (!user.profileComplete) {
+    throw new MockApiError('PROFILE_INCOMPLETE', 'Complete your profile to buy tickets', 403);
+  }
+  return user;
 }
 
-function promoDiscounts(
-  eventId: string,
-  items: { tierId: string; quantity: number }[],
-  discountEgp: string,
-): { tierId: string; discountAmountEgp: string }[] {
-  const discount = toPiastres(discountEgp);
-  const lineAmounts = items.map((item) =>
-    toPiastres(multiply(findTier(eventId, item.tierId).priceEgp, item.quantity)),
+function requireDraftCart(cartId: string, options: { allowConverted?: boolean } = {}): MockCart {
+  const user = requireCompleteProfile();
+  const cart = state.carts.find((item) => item.id === cartId);
+
+  if (!cart || cart.buyerUserId !== user.phoneNumber) {
+    throw new MockApiError('CART_NOT_FOUND', 'That cart no longer exists.', 404);
+  }
+  if (cart.status !== 'draft' && !options.allowConverted) {
+    throw new MockApiError('CART_NOT_EDITABLE', 'This checkout has already been placed.', 409);
+  }
+
+  return cart;
+}
+
+/**
+ * Validation with the parts of the world only the mock store knows: which tiers are sold out,
+ * which tickets already have a room, and which existing tickets may be targeted at all.
+ */
+function validateCartHere(cart: MockCart) {
+  const eligibleTicketIds = new Set(
+    state.tickets
+      .filter(
+        (ticket) =>
+          ticket.event.id === cart.eventId &&
+          (ticket.status === 'active' || ticket.status === 'pending_claim'),
+      )
+      .map((ticket) => ticket.id),
   );
-  const subtotal = lineAmounts.reduce((total, amount) => total + amount, 0);
-  let allocated = 0;
-  return items.map((item, index) => {
-    const amount =
-      index === items.length - 1
-        ? discount - allocated
-        : Math.floor((discount * (lineAmounts[index] ?? 0)) / subtotal);
-    allocated += amount;
-    return { tierId: item.tierId, discountAmountEgp: toEgp(amount) };
+
+  return validateCart(cart, {
+    ticketsSoldOut: (tierId) => {
+      const tier = eventDetails[cart.eventId]?.tiers.find((item) => item.id === tierId);
+      return tier ? !tier.isPurchasable : true;
+    },
+    existingAccommodationTicketIds: state.accommodationTicketIds.get(cart.eventId) ?? new Set(),
+    eligibleTicketIds,
   });
 }
 
-function priceOrder(
-  eventId: string,
-  items: { tierId: string; quantity: number }[],
-  promoCode?: string,
-): PricePreview {
-  const subtotalEgp = priceItems(eventId, items);
-  const promo = resolvePromo(promoCode, subtotalEgp);
-  const discountEgp =
-    promo.valid &&
-    promoApplies(
-      promo.code ?? '',
-      items.map((item) => item.tierId),
-    )
-      ? promo.discountEgp
-      : '0.00';
-  const netEgp = subtract(subtotalEgp, discountEgp);
-  const vatEnabled = eventDetails[eventId]?.vatEnabled ?? true;
-  const vatEgp = vatEnabled ? applyRate(netEgp, VAT_RATE) : '0.00';
+function pricingContext(cart: MockCart) {
+  const event = eventDetails[cart.eventId];
+
   return {
-    subtotalEgp,
-    discountEgp,
-    netEgp,
-    vatRate: vatEnabled ? VAT_RATE : '0.00',
-    vatEgp,
-    totalEgp: sum([netEgp, vatEgp]),
-    currency: 'EGP',
-    promoCode: promo.valid && toPiastres(discountEgp) > 0 ? promo.code : null,
+    tierPrice: (tierId: string) => findTier(cart.eventId, tierId).priceEgp,
+    tierName: (tierId: string) => findTier(cart.eventId, tierId).name,
+    vatEnabled: event?.vatEnabled ?? true,
+    vatRate: VAT_RATE,
+    promo: { lookup: (code: string) => promoCodes[code] },
+  };
+}
+
+/**
+ * Drops a promo that has stopped discounting anything, and records why.
+ *
+ * Editing tickets or extras can strand a scoped code — remove the only meal it applied to and it
+ * is discounting nothing. Leaving it attached would show a code on the review screen with no
+ * money behind it, so the cart detaches it and says so.
+ */
+function detachPromoIfStranded(cart: MockCart): void {
+  if (!cart.promoCode) return;
+
+  const pricing = priceCart(cart, pricingContext(cart));
+
+  if (pricing.promo === null || promoNoLongerApplies(pricing)) {
+    cart.promoAdjustment = {
+      removed: true,
+      reason: 'PROMO_SCOPE_NO_LONGER_APPLICABLE',
+      previousPromoCode: cart.promoCode,
+    };
+    cart.promoCode = null;
+  }
+}
+
+/** Freezes a cart addon line into the immutable order line, recipients included. */
+function toOrderAddon(
+  cart: MockCart,
+  line: MockCart['addons'][number],
+  pricing: ReturnType<typeof priceCart>,
+): OrderAddon {
+  const option = findOption(line.optionId);
+  const addon = addonForOption(line.optionId);
+  const priced = pricing.addonLines.find((item) => item.addonOptionId === line.optionId);
+  const isRoom = addon?.type === 'accommodation';
+
+  return {
+    orderAddonItemId: `order-addon-${line.optionId}-${cart.id}`,
+    addonOptionId: line.optionId,
+    type: addon?.type ?? 'other',
+    label: `${addon?.name ?? 'Extra'}${option ? ` · ${option.label}` : ''}`,
+    transportDirection: option?.transportDirection ?? null,
+    departureDate: option?.departureDate ?? null,
+    departureTime: option?.departureTime ?? null,
+    returnDate: option?.returnDate ?? null,
+    returnTime: option?.returnTime ?? null,
+    unitPriceEgp: priced?.unitPriceEgp ?? '0.00',
+    lineTotalEgp: priced?.lineTotalEgp ?? '0.00',
+    quantity: line.quantity,
+    originalQuantity: line.quantity,
+    activeQuantity: line.quantity,
+    pendingTicketReplacementQuantity: 0,
+    cancelledQuantity: 0,
+    voidedQuantity: 0,
+    status: 'active',
+    recipients: line.assignments.map((assignment) => {
+      const attendee = cart.attendees.find(
+        (item) => item.cartAttendeeId === assignment.cartAttendeeId,
+      );
+      const ticket = assignment.ticketId
+        ? state.tickets.find((item) => item.id === assignment.ticketId)
+        : undefined;
+
+      return {
+        ticketId: assignment.ticketId ?? '',
+        phoneNumber:
+          attendee?.phoneNumber ??
+          (ticket ? (state.ticketOwnerPhones.get(ticket.id) ?? null) : null),
+        // Named only when this order named them. A recipient who brought their own ticket comes
+        // back nameless, and the app labels them from device contacts.
+        displayName: attendee?.name ?? null,
+        roomGroupId: assignment.roomGroupId,
+      };
+    }),
+    room:
+      isRoom && option
+        ? {
+            roomType: option.roomType ?? '',
+            nights: option.nights ?? 0,
+            checkInDate: option.checkInDate ?? '',
+            checkInTime: option.checkInTime ?? '',
+            checkOutDate: option.checkOutDate ?? '',
+            checkOutTime: option.checkOutTime ?? '',
+            status: 'active',
+            capacity: option.occupancy ?? 0,
+          }
+        : null,
   };
 }
 
@@ -485,6 +590,7 @@ function issueTicketsFor(order: OrderDetail): void {
         holderName: guest ? guest.name : holder,
         orderNumber: order.orderNumber,
         purchasedBy: { name: holder, isSelf: !guest },
+        addonCount: 0,
         issuedAt: iso(),
       };
       state.tickets.unshift(ticket);
@@ -493,6 +599,77 @@ function issueTicketsFor(order: OrderDetail): void {
       if (!guest) buyerIssued = true;
     }
   }
+
+  issueAddonsFor(order);
+}
+
+/**
+ * Attaches a paid order's addons to the tickets they were bought for, which is what turns a
+ * commercial line into something a holder can see on their pass.
+ *
+ * Recipients were recorded against cart attendees, so they resolve here by phone — the same phone
+ * the ticket was issued to. A recipient who already held a ticket resolves straight by ticket id.
+ */
+function issueAddonsFor(order: OrderDetail): void {
+  for (const line of order.addons) {
+    const option = findOption(line.addonOptionId);
+
+    for (const recipient of line.recipients) {
+      const ticketId =
+        state.tickets.find((ticket) => ticket.id === recipient.ticketId)?.id ??
+        [...state.ticketOwnerPhones.entries()].find(
+          ([id, phone]) =>
+            phone === recipient.phoneNumber &&
+            state.tickets.find((ticket) => ticket.id === id)?.event.id === order.eventId,
+        )?.[0];
+
+      if (!ticketId) continue;
+
+      const issued: TicketAddon = {
+        addonOptionId: line.addonOptionId,
+        type: line.type,
+        label: line.label,
+        transportDirection: line.transportDirection,
+        departureDate: line.departureDate,
+        departureTime: line.departureTime,
+        returnDate: line.returnDate,
+        returnTime: line.returnTime,
+        quantity: line.type === 'accommodation' ? 1 : recipientUnits(line, recipient.ticketId),
+        status: 'active',
+        issuedAddonStatus: 'active',
+        originalQuantity:
+          line.type === 'accommodation' ? 1 : recipientUnits(line, recipient.ticketId),
+        activeQuantity:
+          line.type === 'accommodation' ? 1 : recipientUnits(line, recipient.ticketId),
+        pendingTicketReplacementQuantity: 0,
+        refundedQuantity: 0,
+        cancelledQuantity: 0,
+        voidedQuantity: 0,
+        redemptionsAllowed: 1,
+        redemptionsUsed: 0,
+        room: line.room,
+      };
+
+      state.ticketAddons.set(ticketId, [...(state.ticketAddons.get(ticketId) ?? []), issued]);
+
+      if (line.type === 'accommodation') {
+        const forEvent = state.accommodationTicketIds.get(order.eventId) ?? new Set<string>();
+        forEvent.add(ticketId);
+        state.accommodationTicketIds.set(order.eventId, forEvent);
+      }
+
+      const ticket = state.tickets.find((item) => item.id === ticketId);
+      if (ticket) ticket.addonCount = (state.ticketAddons.get(ticketId) ?? []).length;
+    }
+
+    void option;
+  }
+}
+
+/** How many units of a non-accommodation line went to one recipient. */
+function recipientUnits(line: OrderAddon, ticketId: string | null): number {
+  const share = line.recipients.filter((recipient) => recipient.ticketId === ticketId).length;
+  return share > 0 ? Math.max(Math.round(line.originalQuantity / line.recipients.length), 1) : 1;
 }
 
 /* ------------------------------------------------------------------- api */
@@ -703,11 +880,313 @@ export const mockApi: SukunApi = {
     },
   },
 
-  orders: {
-    async previewPrice({ eventId, items, promoCode }): Promise<PricePreview> {
-      return delay(priceOrder(eventId, items, promoCode), 0.6);
+  addons: {
+    async list(eventIdentifier: string): Promise<AddonSummary[]> {
+      return delay(listAddonSummaries(findEvent(eventIdentifier).id), 0.6);
     },
 
+    async detail(eventIdentifier: string, addonId: string): Promise<AddonDetail> {
+      const detail = buildAddonDetail(findEvent(eventIdentifier).id, addonId);
+      if (!detail)
+        throw new MockApiError('ADDON_NOT_FOUND', 'That extra is no longer offered.', 404);
+      return delay(detail, 0.5);
+    },
+  },
+
+  carts: {
+    async create(eventId: string): Promise<Cart> {
+      const user = requireCompleteProfile();
+      const event = findEvent(eventId);
+      // Create *or reuse*: a buyer who backs out and comes again lands in the same draft rather
+      // than accumulating carts, which is what the backend does.
+      const existing = state.carts.find(
+        (cart) =>
+          cart.eventId === event.id &&
+          cart.buyerUserId === user.phoneNumber &&
+          cart.status === 'draft',
+      );
+
+      if (existing) return delay(toCartResponse(existing, null), 0.5);
+
+      const cart: MockCart = {
+        id: nextCartId(),
+        eventId: event.id,
+        buyerUserId: user.phoneNumber,
+        status: 'draft',
+        buyerTierId: null,
+        items: [],
+        attendees: [],
+        addons: [],
+        promoCode: null,
+        promoAdjustment: undefined,
+        convertedOrderId: null,
+        createdAt: iso(),
+        updatedAt: iso(),
+      };
+
+      state.carts.unshift(cart);
+      return delay(toCartResponse(cart, null), 0.6);
+    },
+
+    async get(cartId: string): Promise<Cart> {
+      const cart = requireDraftCart(cartId, { allowConverted: true });
+      return delay(toCartResponse(cart, validateCartHere(cart)), 0.4);
+    },
+
+    async replaceTickets(cartId: string, input: ReplaceCartTicketsInput): Promise<Cart> {
+      const user = requireCompleteProfile();
+      const cart = requireDraftCart(cartId);
+      const event = findEvent(cart.eventId);
+      const totalQuantity = input.items.reduce((total, item) => total + item.quantity, 0);
+      const buyerSeats = input.buyerTierId ? 1 : 0;
+
+      if (totalQuantity !== input.guests.length + buyerSeats) {
+        throw new MockApiError(
+          'GUEST_ALLOCATION_INVALID',
+          buyerSeats
+            ? 'Attach one guest for each additional ticket.'
+            : 'Attach a guest for every ticket in this order.',
+          400,
+        );
+      }
+      if (totalQuantity > event.maxTicketsPerOrder) {
+        throw new MockApiError(
+          'MAX_TICKETS_PER_ORDER_EXCEEDED',
+          'That is more tickets than this event allows in one order.',
+          400,
+        );
+      }
+      if (buyerSeats && buyerHoldsTicketForEvent(cart.eventId)) {
+        throw new MockApiError(
+          'BUYER_ALREADY_HAS_TICKET',
+          'You already have a ticket for this event. Buy these for your guests instead.',
+          409,
+        );
+      }
+
+      const guestCheck = await mockApi.orders.validateGuests(cart.eventId, input.guests);
+      if (!guestCheck.valid) {
+        throw new MockApiError(
+          'GUEST_VALIDATION_FAILED',
+          'Check the guest details and try again.',
+          400,
+        );
+      }
+
+      applyTickets(cart, input, {
+        name: user.fullName ?? 'You',
+        phoneNumber: user.phoneNumber,
+        email: user.email,
+      });
+      detachPromoIfStranded(cart);
+      return delay(toCartResponse(cart, validateCartHere(cart)), 0.8);
+    },
+
+    async replaceAddons(cartId: string, addonInputs: CartAddonInput[]): Promise<Cart> {
+      const cart = requireDraftCart(cartId);
+
+      for (const input of addonInputs) {
+        const option = findOption(input.optionId);
+        if (!option) {
+          throw new MockApiError(
+            'ADDON_OPTION_NOT_AVAILABLE',
+            'That extra is no longer available.',
+            400,
+          );
+        }
+        for (const target of [
+          ...(input.assignments ?? []),
+          ...(input.rooms ?? []).flatMap((room) => room.occupants),
+        ]) {
+          // Exactly one target, never both. The backend rejects the ambiguous shape outright
+          // rather than guessing which one the app meant.
+          if ((target.cartAttendeeId ? 1 : 0) + (target.ticketId ? 1 : 0) !== 1) {
+            throw new MockApiError(
+              'ADDON_ASSIGNMENT_TARGET_INVALID',
+              'Every extra needs exactly one recipient.',
+              400,
+            );
+          }
+        }
+      }
+
+      applyAddons(cart, addonInputs);
+      detachPromoIfStranded(cart);
+      return delay(toCartResponse(cart, validateCartHere(cart)), 0.8);
+    },
+
+    async lookupRecipients(cartId: string, phoneNumbers: string[]): Promise<CartRecipientLookup[]> {
+      const cart = requireDraftCart(cartId);
+      const accommodation = state.accommodationTicketIds.get(cart.eventId) ?? new Set<string>();
+
+      return delay(
+        phoneNumbers.map((raw) => {
+          const e164 = normalizePhone(raw);
+          const ticketId = e164
+            ? ([...state.ticketOwnerPhones.entries()].find(([id, phone]) => {
+                const ticket = state.tickets.find((item) => item.id === id);
+                return (
+                  phone === e164 &&
+                  ticket?.event.id === cart.eventId &&
+                  (ticket.status === 'active' || ticket.status === 'pending_claim')
+                );
+              })?.[0] ?? null)
+            : null;
+
+          // No name, and no way to tell an unregistered number from a registered one without a
+          // ticket: both answer `eligible: false` (CLAUDE.md rule 4).
+          return {
+            phoneNumber: e164 ?? raw,
+            eligible: ticketId !== null,
+            ticketId,
+            hasAccommodation: ticketId !== null && accommodation.has(ticketId),
+          };
+        }),
+        0.6,
+      );
+    },
+
+    async applyPromo(cartId: string, code: string): Promise<Cart> {
+      const cart = requireDraftCart(cartId);
+      const normalized = code.trim().toUpperCase();
+
+      if (!promoCodes[normalized]) {
+        throw new MockApiError('PROMO_CODE_NOT_FOUND', 'That promo code is not valid.', 404);
+      }
+
+      cart.promoCode = normalized;
+      cart.promoAdjustment = undefined;
+      const pricing = priceCart(cart, pricingContext(cart));
+
+      if (pricing.promo === null || promoNoLongerApplies(pricing)) {
+        cart.promoCode = null;
+        throw new MockApiError(
+          'PROMO_NOT_APPLICABLE_TO_CART',
+          'That code does not apply to anything in this order.',
+          400,
+        );
+      }
+
+      cart.updatedAt = iso();
+      return delay(toCartResponse(cart, validateCartHere(cart)), 0.7);
+    },
+
+    async removePromo(cartId: string): Promise<Cart> {
+      const cart = requireDraftCart(cartId);
+      cart.promoCode = null;
+      cart.promoAdjustment = undefined;
+      cart.updatedAt = iso();
+      return delay(toCartResponse(cart, validateCartHere(cart)), 0.5);
+    },
+
+    async preview(cartId: string): Promise<CartPreview> {
+      const cart = requireDraftCart(cartId);
+      const issues = validateCartHere(cart);
+      const pricing = priceCart(cart, pricingContext(cart));
+      const token = `pct-${cart.id}-${mockConfig.now()}`;
+
+      if (issues.length === 0 && pricing.status === 'complete') {
+        state.pricingTokens.set(token, {
+          cartId: cart.id,
+          totalEgp: pricing.totalEgp ?? '0.00',
+          // Roughly five minutes, same as the backend, so an abandoned review screen has to
+          // re-confirm rather than paying yesterday's price.
+          expiresAt: mockConfig.now() + 5 * 60 * 1000,
+        });
+      }
+
+      return delay(toPreviewResponse(cart, issues, pricing, token), 0.9);
+    },
+
+    async placeOrder(cartId: string, pricingConfirmationToken: string): Promise<OrderDetail> {
+      const user = requireCompleteProfile();
+      const cart = requireDraftCart(cartId, { allowConverted: true });
+
+      // A converted cart replays its order rather than making a second one, so a retried tap or a
+      // dropped response cannot double-charge.
+      if (cart.status === 'converted' && cart.convertedOrderId) {
+        const existing = state.orders.find((order) => order.id === cart.convertedOrderId);
+        if (existing) return delay(existing, 0.8);
+      }
+
+      const issued = state.pricingTokens.get(pricingConfirmationToken);
+      const issues = validateCartHere(cart);
+      const pricing = priceCart(cart, pricingContext(cart));
+
+      if (issues.length > 0 || pricing.status !== 'complete') {
+        throw new MockApiError('CART_PRICING_UNAVAILABLE', 'This order cannot be placed yet.', 409);
+      }
+      if (toPiastres(pricing.totalEgp ?? '0.00') === 0) {
+        throw new MockApiError('ZERO_TOTAL_ORDER_NOT_ALLOWED', 'There is nothing to pay for.', 400);
+      }
+      // The price is only honoured against the preview the buyer actually saw. Anything else,
+      // including an expired token, sends them back to re-confirm rather than charging silently.
+      if (
+        !issued ||
+        issued.cartId !== cart.id ||
+        issued.expiresAt < mockConfig.now() ||
+        issued.totalEgp !== pricing.totalEgp
+      ) {
+        throw new MockApiError(
+          'CART_PRICING_CHANGED',
+          'The price changed. Check the new total before paying.',
+          409,
+        );
+      }
+
+      const order: OrderDetail = {
+        id: `ord-${mockConfig.now()}-${orderSeq + 1}`,
+        orderNumber: nextOrderNumber(),
+        eventId: cart.eventId,
+        status: 'awaiting_payment',
+        buyerTierId: cart.buyerTierId,
+        subtotalEgp: pricing.subtotalEgp ?? '0.00',
+        discountEgp: pricing.discountEgp ?? '0.00',
+        netEgp: pricing.netEgp ?? '0.00',
+        vatRate: pricing.vatRate ?? '0.0000',
+        vatEgp: pricing.vatEgp ?? '0.00',
+        totalEgp: pricing.totalEgp ?? '0.00',
+        currency: 'EGP',
+        holdExpiresAt: iso(HOLD_MINUTES * 60 * 1000),
+        createdAt: iso(),
+        items: cart.items.map((item) => {
+          const tier = findTier(cart.eventId, item.tierId);
+          return {
+            tierId: item.tierId,
+            quantity: item.quantity,
+            unitPriceEgp: tier.priceEgp,
+            lineTotalEgp: multiply(tier.priceEgp, item.quantity),
+          };
+        }),
+        guests: cart.attendees
+          .filter((attendee) => attendee.attendeeType === 'guest')
+          .map((attendee) => ({
+            phoneNumber: attendee.phoneNumber,
+            name: attendee.name,
+            tierId: cart.items[0]?.tierId ?? '',
+          })),
+        addons: cart.addons.map((line) => toOrderAddon(cart, line, pricing)),
+      };
+
+      state.orders.unshift(order);
+      state.orderBuyerPhones.set(order.id, user.phoneNumber);
+      state.orderBuyerNames.set(order.id, user.fullName ?? 'You');
+      cart.status = 'converted';
+      cart.convertedOrderId = order.id;
+      state.pricingTokens.delete(pricingConfirmationToken);
+
+      return delay(order, 1.2);
+    },
+
+    async abandon(cartId: string): Promise<Cart> {
+      const cart = requireDraftCart(cartId);
+      cart.status = 'abandoned';
+      cart.updatedAt = iso();
+      return delay(toCartResponse(cart, null), 0.4);
+    },
+  },
+
+  orders: {
     async validateGuests(
       eventId: string,
       guests: GuestValidationInput[],
@@ -753,124 +1232,6 @@ export const mockApi: SukunApi = {
       });
       // Registration is never exposed. An existing ticket is allocation state, not account state.
       return delay({ valid: issues.length === 0, issues }, 0.7);
-    },
-
-    async validatePromoCode(items, promoCode): Promise<PromoValidationResult> {
-      const eventId =
-        Object.values(eventDetails).find((e) => e.tiers.some((t) => t.id === items[0]?.tierId))
-          ?.id ?? '';
-      const subtotal = eventId ? priceItems(eventId, items) : '0.00';
-      const promo = resolvePromo(promoCode, subtotal);
-
-      if (!promo.valid) {
-        throw new MockApiError('PROMO_CODE_NOT_FOUND', 'That promo code is not valid.', 404);
-      }
-      if (
-        !promoApplies(
-          promo.code ?? '',
-          items.map((item) => item.tierId),
-        )
-      ) {
-        throw new MockApiError(
-          'PROMO_CODE_NOT_APPLICABLE_TO_TIER',
-          'That promo code does not apply to these tickets.',
-          400,
-        );
-      }
-
-      return delay({
-        valid: true,
-        code: promo.code ?? '',
-        discountAmountEgp: promo.configured ?? promo.discountEgp,
-        discountAppliedEgp: promo.discountEgp,
-        fullyApplied: promo.fullyApplied,
-        items: promoDiscounts(eventId, items, promo.discountEgp),
-      });
-    },
-
-    async create(input: CreateOrderInput): Promise<OrderDetail> {
-      const user = requireUser();
-      transitionExpiredOrders();
-      if (!user.profileComplete) {
-        throw new MockApiError('PROFILE_INCOMPLETE', 'Complete your profile to buy tickets', 403);
-      }
-
-      const event = findEvent(input.eventId);
-      const totalQuantity = input.items.reduce((total, item) => total + item.quantity, 0);
-      if (!input.items.length || input.items.some((item) => item.quantity < 1)) {
-        throw new MockApiError('VALIDATION_ERROR', 'Add at least one ticket.', 400);
-      }
-      const buyerTakesTicket = input.buyerTierId !== null && input.buyerTierId !== undefined;
-      if (totalQuantity !== input.guests.length + (buyerTakesTicket ? 1 : 0)) {
-        throw new MockApiError(
-          'GUEST_ALLOCATION_INVALID',
-          buyerTakesTicket
-            ? 'Attach one guest for each additional ticket.'
-            : 'Attach a guest for every ticket in this order.',
-          400,
-        );
-      }
-      // One usable ticket per phone per event. Asking for a second of your own is refused here
-      // rather than after payment, which is where the backend's unique index would catch it.
-      if (buyerTakesTicket && buyerHoldsTicketForEvent(input.eventId)) {
-        throw new MockApiError(
-          'BUYER_ALREADY_HAS_TICKET',
-          'You already have a ticket for this event. Buy these for your guests instead.',
-          409,
-        );
-      }
-      if (totalQuantity > event.maxTicketsPerOrder) {
-        throw new MockApiError(
-          'MAX_TICKETS_PER_ORDER_EXCEEDED',
-          'That is more tickets than this event allows in one order.',
-          400,
-        );
-      }
-      const guestValidation = await mockApi.orders.validateGuests(input.eventId, input.guests);
-      if (!guestValidation.valid) {
-        throw new MockApiError(
-          'GUEST_VALIDATION_FAILED',
-          'Check the guest details and try again.',
-          400,
-        );
-      }
-
-      const pricing = priceOrder(input.eventId, input.items, input.promoCode);
-      const order: OrderDetail = {
-        id: `ord-${mockConfig.now()}-${orderSeq + 1}`,
-        orderNumber: nextOrderNumber(),
-        eventId: input.eventId,
-        status: 'awaiting_payment',
-        buyerTierId: input.buyerTierId ?? null,
-        subtotalEgp: pricing.subtotalEgp,
-        discountEgp: pricing.discountEgp,
-        netEgp: pricing.netEgp,
-        vatRate: pricing.vatRate,
-        vatEgp: pricing.vatEgp,
-        totalEgp: pricing.totalEgp,
-        currency: 'EGP',
-        holdExpiresAt: iso(HOLD_MINUTES * 60 * 1000),
-        createdAt: iso(),
-        items: input.items.map((i) => {
-          const tier = findTier(input.eventId, i.tierId);
-          return {
-            tierId: i.tierId,
-            quantity: i.quantity,
-            unitPriceEgp: tier.priceEgp,
-            lineTotalEgp: multiply(tier.priceEgp, i.quantity),
-          };
-        }),
-        guests: input.guests.map((g) => ({
-          phoneNumber: normalizePhone(g.phoneNumber) ?? g.phoneNumber,
-          name: g.name,
-          tierId: g.tierId,
-        })),
-      };
-
-      state.orders.unshift(order);
-      state.orderBuyerPhones.set(order.id, user.phoneNumber);
-      state.orderBuyerNames.set(order.id, user.fullName ?? 'You');
-      return delay(order, 1.6);
     },
 
     async detail(orderId: string): Promise<OrderDetail> {
@@ -1049,6 +1410,47 @@ export const mockApi: SukunApi = {
           refreshAfterSeconds: rotation,
         },
         0.5,
+      );
+    },
+
+    async addons(ticketId: string, includeRefunded = false): Promise<TicketAddon[]> {
+      const ticket = ticketBelongsToUser(ticketId, requireUser());
+      const issued = state.ticketAddons.get(ticket.id) ?? [];
+
+      return delay(
+        includeRefunded ? issued : issued.filter((addon) => addon.status !== 'refunded'),
+        0.5,
+      );
+    },
+
+    async addonContext(ticketId: string): Promise<TicketAddonContext> {
+      const user = requireUser();
+      const ticket = ticketBelongsToUser(ticketId, user);
+
+      // Self-only, and only while the ticket is usable: extras attach to a ticket, so a voided or
+      // refunded one has nothing to attach them to.
+      if (ticket.status !== 'active') {
+        throw new MockApiError(
+          'EXISTING_TICKET_NOT_ELIGIBLE',
+          'This ticket cannot take extras.',
+          400,
+        );
+      }
+
+      const existing = state.ticketAddons.get(ticket.id) ?? [];
+
+      return delay(
+        {
+          ticketId: ticket.id,
+          eventId: ticket.event.id,
+          existing: {
+            addons: existing,
+            hasAccommodation:
+              state.accommodationTicketIds.get(ticket.event.id)?.has(ticket.id) ?? false,
+          },
+          catalog: listAddonDetails(ticket.event.id),
+        },
+        0.7,
       );
     },
   },

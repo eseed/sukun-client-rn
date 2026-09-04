@@ -13,6 +13,8 @@
             "type": "array"
           },
           "dataRetainedDays": {
+            "description": "Number of days personal data remains after deletion. This is always 0.",
+            "example": 0,
             "type": "number"
           },
           "deletionBlockedByPendingPayment": {
@@ -23,9 +25,6 @@
           },
           "requiresForfeitConfirmation": {
             "type": "boolean"
-          },
-          "ticketsRestoredAfterAccountRestore": {
-            "type": "boolean"
           }
         },
         "required": [
@@ -34,8 +33,7 @@
           "requiresForfeitConfirmation",
           "pendingPaymentOrderCount",
           "deletionBlockedByPendingPayment",
-          "dataRetainedDays",
-          "ticketsRestoredAfterAccountRestore"
+          "dataRetainedDays"
         ],
         "type": "object"
       },
@@ -109,18 +107,613 @@
         "required": ["selfieUrl", "expiresAt", "selfieUploaded", "profileComplete", "status"],
         "type": "object"
       },
-      "ConfirmAccountRestorationRequestDto": {
+      "ApplyCheckoutCartPromoRequestDto": {
         "properties": {
-          "otpCode": {
-            "example": "4839",
-            "type": "string"
-          },
-          "phoneNumber": {
-            "example": "+201012345678",
+          "code": {
+            "example": "SUMMER-2026",
             "type": "string"
           }
         },
-        "required": ["phoneNumber", "otpCode"],
+        "required": ["code"],
+        "type": "object"
+      },
+      "CartAddonAssignmentRequestDto": {
+        "properties": {
+          "cartAttendeeId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "quantity": {
+            "default": 1,
+            "minimum": 1,
+            "type": "number"
+          },
+          "ticketId": {
+            "description": "An active ticket held by the authenticated buyer for this event.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CartAddonLineRequestDto": {
+        "properties": {
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/CartAddonAssignmentRequestDto"
+            },
+            "type": "array"
+          },
+          "optionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "quantity": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "rooms": {
+            "items": {
+              "$ref": "#/components/schemas/CartAddonRoomRequestDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["optionId", "quantity"],
+        "type": "object"
+      },
+      "CartAddonRecipientRequestDto": {
+        "properties": {
+          "cartAttendeeId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "ticketId": {
+            "description": "An active ticket held by the authenticated buyer for this event.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "CartAddonRoomRequestDto": {
+        "properties": {
+          "occupants": {
+            "items": {
+              "$ref": "#/components/schemas/CartAddonRecipientRequestDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["occupants"],
+        "type": "object"
+      },
+      "CartGuestDto": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phoneNumber": {
+            "example": "01012345678",
+            "type": "string"
+          },
+          "tierId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": ["phoneNumber", "name", "tierId"],
+        "type": "object"
+      },
+      "CartRecipientLookupResponseDto": {
+        "properties": {
+          "results": {
+            "description": "One result per requested number, in the order they were sent.",
+            "items": {
+              "$ref": "#/components/schemas/CartRecipientLookupResultResponseDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["results"],
+        "type": "object"
+      },
+      "CartRecipientLookupResultResponseDto": {
+        "properties": {
+          "eligible": {
+            "description": "True when this number holds a ticket to the event and can be given an addon. False for everyone else, whether or not they have an account.",
+            "example": true,
+            "type": "boolean"
+          },
+          "hasAccommodation": {
+            "description": "True when this ticket already occupies a room for the event, so the app can grey them out before the buyer picks them rather than failing at checkout. One room per person.",
+            "example": false,
+            "type": "boolean"
+          },
+          "phoneNumber": {
+            "description": "The number in E.164, as normalized from what was sent.",
+            "example": "+201012345678",
+            "type": "string"
+          },
+          "ticketId": {
+            "description": "The ticket to send as an addon assignment target. Null whenever `eligible` is false.",
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["phoneNumber", "eligible", "hasAccommodation"],
+        "type": "object"
+      },
+      "CartTicketSelectionDto": {
+        "properties": {
+          "quantity": {
+            "minimum": 1,
+            "type": "number"
+          },
+          "tierId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": ["tierId", "quantity"],
+        "type": "object"
+      },
+      "CheckoutCartAddonAssignmentResponseDto": {
+        "properties": {
+          "cartAttendeeId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "quantity": {
+            "description": "Quantity represented by this assignment relation.",
+            "example": 3,
+            "type": "number"
+          },
+          "roomGroupId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "ticketId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["id", "quantity"],
+        "type": "object"
+      },
+      "CheckoutCartAddonResponseDto": {
+        "properties": {
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartAddonAssignmentResponseDto"
+            },
+            "type": "array"
+          },
+          "available": {
+            "nullable": true,
+            "type": "number"
+          },
+          "cartAddonItemId": {
+            "type": "string"
+          },
+          "currentPrice": {
+            "nullable": true,
+            "type": "string"
+          },
+          "optionId": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "schedule": {
+            "additionalProperties": true,
+            "nullable": true,
+            "type": "object"
+          },
+          "type": {
+            "enum": ["accommodation", "meal", "transport", "other"],
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["cartAddonItemId", "optionId", "quantity", "assignments"],
+        "type": "object"
+      },
+      "CheckoutCartAttendeeResponseDto": {
+        "properties": {
+          "attendeeType": {
+            "enum": ["buyer", "guest"],
+            "type": "string"
+          },
+          "cartAttendeeId": {
+            "type": "string"
+          },
+          "cartTicketItemId": {
+            "type": "string"
+          },
+          "email": {
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phoneNumber": {
+            "type": "string"
+          }
+        },
+        "required": ["cartAttendeeId", "cartTicketItemId", "attendeeType", "name", "phoneNumber"],
+        "type": "object"
+      },
+      "CheckoutCartPreviewResponseDto": {
+        "properties": {
+          "addonAssignments": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartAddonAssignmentResponseDto"
+            },
+            "type": "array"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartAttendeeResponseDto"
+            },
+            "type": "array"
+          },
+          "canPlaceOrder": {
+            "type": "boolean"
+          },
+          "cartId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartPricingIssueResponseDto"
+            },
+            "type": "array"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/CheckoutCartPricingResponseDto"
+          }
+        },
+        "required": [
+          "cartId",
+          "canPlaceOrder",
+          "attendees",
+          "addonAssignments",
+          "issues",
+          "pricing"
+        ],
+        "type": "object"
+      },
+      "CheckoutCartPricingIssueResponseDto": {
+        "properties": {
+          "code": {
+            "example": "ADDON_PRICING_UNAVAILABLE",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "path": {
+            "example": "addons.0",
+            "type": "string"
+          }
+        },
+        "required": ["code"],
+        "type": "object"
+      },
+      "CheckoutCartPricingLineResponseDto": {
+        "properties": {
+          "addonName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "addonOptionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lineTotalEgp": {
+            "example": "200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "optionLabel": {
+            "nullable": true,
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "tierId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "tierName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "unitPriceEgp": {
+            "example": "100.00",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["quantity"],
+        "type": "object"
+      },
+      "CheckoutCartPricingResponseDto": {
+        "properties": {
+          "addonLines": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartPricingLineResponseDto"
+            },
+            "type": "array"
+          },
+          "addonsSubtotalEgp": {
+            "type": "string"
+          },
+          "discountEgp": {
+            "type": "string"
+          },
+          "netEgp": {
+            "type": "string"
+          },
+          "pricingConfirmationToken": {
+            "nullable": true,
+            "type": "string"
+          },
+          "promo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CheckoutCartPromoBreakdownResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "enum": ["complete", "unavailable"],
+            "type": "string"
+          },
+          "subtotalEgp": {
+            "type": "string"
+          },
+          "ticketLines": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartPricingLineResponseDto"
+            },
+            "type": "array"
+          },
+          "ticketsSubtotalEgp": {
+            "type": "string"
+          },
+          "totalEgp": {
+            "type": "string"
+          },
+          "vatEgp": {
+            "type": "string"
+          },
+          "vatRate": {
+            "example": "0.1400",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "ticketsSubtotalEgp",
+          "addonsSubtotalEgp",
+          "subtotalEgp",
+          "ticketLines",
+          "addonLines"
+        ],
+        "type": "object"
+      },
+      "CheckoutCartPromoAdjustmentResponseDto": {
+        "properties": {
+          "previousPromoCode": {
+            "example": "ROOM500",
+            "type": "string"
+          },
+          "reason": {
+            "enum": ["PROMO_SCOPE_NO_LONGER_APPLICABLE"],
+            "type": "string"
+          },
+          "removed": {
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": ["removed", "reason", "previousPromoCode"],
+        "type": "object"
+      },
+      "CheckoutCartPromoBreakdownResponseDto": {
+        "properties": {
+          "addonOptionId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "configuredDiscountEgp": {
+            "type": "string"
+          },
+          "discountEgp": {
+            "type": "string"
+          },
+          "eligibleSubtotalEgp": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": ["ticket_only", "cart", "addon_option"],
+            "type": "string"
+          },
+          "tierId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "scope",
+          "configuredDiscountEgp",
+          "eligibleSubtotalEgp",
+          "discountEgp"
+        ],
+        "type": "object"
+      },
+      "CheckoutCartResponseDto": {
+        "properties": {
+          "addons": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartAddonResponseDto"
+            },
+            "type": "array"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartAttendeeResponseDto"
+            },
+            "type": "array"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "promoAdjustment": {
+            "$ref": "#/components/schemas/CheckoutCartPromoAdjustmentResponseDto"
+          },
+          "status": {
+            "enum": ["draft", "converted", "abandoned", "expired"],
+            "type": "string"
+          },
+          "tickets": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartTicketResponseDto"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "validation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CheckoutCartValidationResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "eventId",
+          "status",
+          "tickets",
+          "attendees",
+          "addons",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "CheckoutCartTicketResponseDto": {
+        "properties": {
+          "cartTicketItemId": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "tierId": {
+            "type": "string"
+          }
+        },
+        "required": ["cartTicketItemId", "tierId", "quantity"],
+        "type": "object"
+      },
+      "CheckoutCartValidationIssueResponseDto": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "kind": {
+            "enum": ["structural", "commerce"],
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "messageArgs": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "messageKey": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["code", "kind", "path", "message", "messageKey"],
+        "type": "object"
+      },
+      "CheckoutCartValidationResponseDto": {
+        "properties": {
+          "canPlaceOrder": {
+            "type": "boolean"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/CheckoutCartValidationIssueResponseDto"
+            },
+            "type": "array"
+          },
+          "validatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": ["canPlaceOrder", "validatedAt", "issues"],
+        "type": "object"
+      },
+      "CreateCheckoutCartRequestDto": {
+        "properties": {
+          "eventId": {
+            "example": "f4d38f80-866c-4cdf-b507-7a2743e39f91",
+            "type": "string"
+          }
+        },
+        "required": ["eventId"],
         "type": "object"
       },
       "CreateOrderGuestRequestDto": {
@@ -164,8 +757,9 @@
       "CreateOrderRequestDto": {
         "properties": {
           "buyerTierId": {
-            "description": "The tier the buyer is purchasing for themselves",
+            "description": "The tier the buyer is purchasing for themselves. Omit or send null when every ticket in the order is for someone else, which is what buying for friends looks like once you already hold a ticket for the event. When omitted, `guests` must cover the full quantity.",
             "example": "ed310a29-28fc-4af6-bf23-4381dc8a86fc",
+            "nullable": true,
             "type": "string"
           },
           "eventId": {
@@ -173,7 +767,7 @@
             "type": "string"
           },
           "guests": {
-            "description": "Guest allocations. Length must equal total quantity minus 1.",
+            "description": "Guest allocations. Length must equal the total quantity, minus one if `buyerTierId` is set.",
             "items": {
               "$ref": "#/components/schemas/CreateOrderGuestRequestDto"
             },
@@ -192,7 +786,7 @@
             "type": "string"
           }
         },
-        "required": ["eventId", "buyerTierId", "items", "guests"],
+        "required": ["eventId", "items", "guests"],
         "type": "object"
       },
       "CursorPageMetaDto": {
@@ -321,6 +915,21 @@
         "required": ["guestIndex", "error"],
         "type": "object"
       },
+      "LookupCartRecipientsRequestDto": {
+        "properties": {
+          "phoneNumbers": {
+            "description": "Phone numbers from the buyer's own contacts to test as addon recipients for this cart's event. Numbers are normalized server-side and echoed back in E.164 so the app can match them against what it sent.",
+            "example": ["01012345678", "+201098765432"],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          }
+        },
+        "required": ["phoneNumbers"],
+        "type": "object"
+      },
       "MobileAuthenticatedResponseDto": {
         "properties": {
           "accessToken": {
@@ -397,6 +1006,11 @@
             "example": "uuid",
             "type": "string"
           },
+          "marketingOptIn": {
+            "description": "Whether the user consented to Sukun marketing messages on WhatsApp.",
+            "example": false,
+            "type": "boolean"
+          },
           "phoneNumber": {
             "example": "+201012345678",
             "type": "string"
@@ -438,15 +1052,210 @@
           "selfieUploaded",
           "selfieUrl",
           "selfieExpiresAt",
+          "marketingOptIn",
           "profileComplete",
           "status"
         ],
         "type": "object"
       },
+      "MobileOrderAddonRecipientResponseDto": {
+        "properties": {
+          "displayName": {
+            "description": "Set only when this order named the person. An addon bought against a ticket the buyer did not sell comes back nameless, and the app labels it from the device contacts instead.",
+            "example": "Nour Hassan",
+            "nullable": true,
+            "type": "string"
+          },
+          "phoneNumber": {
+            "description": "The phone this ticket belongs to, so the app can label an external recipient.",
+            "example": "+201012345678",
+            "nullable": true,
+            "type": "string"
+          },
+          "roomGroupId": {
+            "description": "Groups occupants sharing a room. Null for everything but accommodation.",
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "ticketId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": ["ticketId"],
+        "type": "object"
+      },
+      "MobileOrderAddonResponseDto": {
+        "properties": {
+          "activeQuantity": {
+            "description": "Quantity currently operationally active.",
+            "type": "number"
+          },
+          "addonOptionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "cancelledQuantity": {
+            "description": "Quantity cancelled by an administrative adjustment.",
+            "type": "number"
+          },
+          "departureDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "departureTime": {
+            "example": "09:30",
+            "nullable": true,
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "lineTotalEgp": {
+            "example": "500.00",
+            "type": "string"
+          },
+          "orderAddonItemId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "originalQuantity": {
+            "description": "Original commercial quantity on the order.",
+            "type": "number"
+          },
+          "pendingTicketReplacementQuantity": {
+            "description": "Quantity waiting for a replacement ticket.",
+            "type": "number"
+          },
+          "quantity": {
+            "description": "Current active plus pending replacement quantity.",
+            "type": "number"
+          },
+          "recipients": {
+            "description": "Who this line was bought for, so a receipt can name them.",
+            "items": {
+              "$ref": "#/components/schemas/MobileOrderAddonRecipientResponseDto"
+            },
+            "type": "array"
+          },
+          "returnDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "returnTime": {
+            "example": "18:00",
+            "nullable": true,
+            "type": "string"
+          },
+          "room": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MobileOrderAddonRoomResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "type": "string"
+          },
+          "transportDirection": {
+            "enum": ["one_way", "round_trip"],
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": ["accommodation", "meal", "transport", "other"],
+            "type": "string"
+          },
+          "unitPriceEgp": {
+            "example": "250.00",
+            "type": "string"
+          },
+          "voidedQuantity": {
+            "description": "Quantity voided by the source lifecycle.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "orderAddonItemId",
+          "addonOptionId",
+          "type",
+          "label",
+          "unitPriceEgp",
+          "lineTotalEgp",
+          "quantity",
+          "originalQuantity",
+          "activeQuantity",
+          "pendingTicketReplacementQuantity",
+          "cancelledQuantity",
+          "voidedQuantity",
+          "status",
+          "recipients"
+        ],
+        "type": "object"
+      },
+      "MobileOrderAddonRoomResponseDto": {
+        "properties": {
+          "capacity": {
+            "type": "number"
+          },
+          "checkInDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "checkInTime": {
+            "example": "14:00",
+            "type": "string"
+          },
+          "checkOutDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "checkOutTime": {
+            "example": "12:00",
+            "type": "string"
+          },
+          "nights": {
+            "type": "number"
+          },
+          "roomType": {
+            "type": "string"
+          },
+          "status": {
+            "enum": ["active", "reassignment_required", "cancelled", "refunded"],
+            "type": "string"
+          }
+        },
+        "required": [
+          "roomType",
+          "nights",
+          "checkInDate",
+          "checkInTime",
+          "checkOutDate",
+          "checkOutTime",
+          "status",
+          "capacity"
+        ],
+        "type": "object"
+      },
       "MobileOrderDetailResponseDto": {
         "properties": {
+          "addons": {
+            "description": "Original purchased addon lines with their current operational state.",
+            "items": {
+              "$ref": "#/components/schemas/MobileOrderAddonResponseDto"
+            },
+            "type": "array"
+          },
           "buyerTierId": {
+            "description": "The tier the buyer took for themselves, or null when every ticket in the order is for someone else.",
             "example": "ed310a29-28fc-4af6-bf23-4381dc8a86fc",
+            "nullable": true,
             "type": "string"
           },
           "createdAt": {
@@ -495,6 +1304,21 @@
             "example": "SKN-2026-000001",
             "type": "string"
           },
+          "payment": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentInitiateResponseDto"
+              }
+            ],
+            "description": "Payment intent for this order, present only on the create response. Creating an order already opens a Paymob intention, so the client can present the SDK sheet straight away instead of calling POST /orders/{orderId}/payment/initiate — which would be rejected with PAYMENT_CONFIRMATION_PENDING, because that intention is already active.",
+            "nullable": true,
+            "type": "object"
+          },
+          "refundStatus": {
+            "enum": ["none", "full"],
+            "example": "none",
+            "type": "string"
+          },
           "status": {
             "enum": ["awaiting_payment", "paid", "failed", "expired", "cancelled", "refunded"],
             "example": "awaiting_payment",
@@ -513,7 +1337,7 @@
             "type": "string"
           },
           "vatRate": {
-            "example": "0.14",
+            "example": "0.1400",
             "type": "string"
           }
         },
@@ -522,6 +1346,7 @@
           "orderNumber",
           "eventId",
           "status",
+          "refundStatus",
           "buyerTierId",
           "subtotalEgp",
           "discountEgp",
@@ -533,7 +1358,8 @@
           "holdExpiresAt",
           "createdAt",
           "items",
-          "guests"
+          "guests",
+          "addons"
         ],
         "type": "object"
       },
@@ -605,6 +1431,11 @@
             "example": "SKN-2026-000001",
             "type": "string"
           },
+          "refundStatus": {
+            "enum": ["none", "full"],
+            "example": "none",
+            "type": "string"
+          },
           "status": {
             "enum": ["awaiting_payment", "paid", "failed", "expired", "cancelled", "refunded"],
             "example": "awaiting_payment",
@@ -620,6 +1451,7 @@
           "orderNumber",
           "eventId",
           "status",
+          "refundStatus",
           "totalEgp",
           "currency",
           "holdExpiresAt",
@@ -654,8 +1486,520 @@
         ],
         "type": "object"
       },
+      "MobileTicketAccommodationResponseDto": {
+        "properties": {
+          "activeQuantity": {
+            "description": "Quantity currently active on this Ticket.",
+            "type": "number"
+          },
+          "addonOptionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "cancelledQuantity": {
+            "description": "Quantity cancelled by an administrative adjustment.",
+            "type": "number"
+          },
+          "departureDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "departureTime": {
+            "example": "09:30",
+            "nullable": true,
+            "type": "string"
+          },
+          "issuedAddonStatus": {
+            "description": "Persistence status of the source issued addon.",
+            "enum": ["active", "cancelled", "refunded", "voided"],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "originalQuantity": {
+            "description": "Original quantity issued by the commercial source.",
+            "type": "number"
+          },
+          "pendingTicketReplacementQuantity": {
+            "description": "Quantity waiting for a replacement Ticket.",
+            "type": "number"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "redemptionsAllowed": {
+            "type": "number"
+          },
+          "redemptionsUsed": {
+            "type": "number"
+          },
+          "returnDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "returnTime": {
+            "example": "18:00",
+            "nullable": true,
+            "type": "string"
+          },
+          "room": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MobileTicketAddonRoomResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "type": "string"
+          },
+          "transportDirection": {
+            "enum": ["one_way", "round_trip"],
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": ["accommodation"],
+            "type": "string"
+          },
+          "voidedQuantity": {
+            "description": "Quantity voided by an administrative adjustment.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "addonOptionId",
+          "type",
+          "label",
+          "quantity",
+          "status",
+          "issuedAddonStatus",
+          "originalQuantity",
+          "activeQuantity",
+          "pendingTicketReplacementQuantity",
+          "cancelledQuantity",
+          "voidedQuantity",
+          "redemptionsAllowed",
+          "redemptionsUsed"
+        ],
+        "type": "object"
+      },
+      "MobileTicketAddonContextExistingResponseDto": {
+        "properties": {
+          "addons": {
+            "items": {
+              "$ref": "#/components/schemas/MobileTicketAddonResponseDto"
+            },
+            "type": "array"
+          },
+          "hasAccommodation": {
+            "type": "boolean"
+          }
+        },
+        "required": ["addons", "hasAccommodation"],
+        "type": "object"
+      },
+      "MobileTicketAddonContextResponseDto": {
+        "properties": {
+          "catalog": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PublicAccommodationAddonResponseDto"
+                },
+                {
+                  "$ref": "#/components/schemas/PublicTransportAddonResponseDto"
+                },
+                {
+                  "$ref": "#/components/schemas/PublicMealAddonResponseDto"
+                },
+                {
+                  "$ref": "#/components/schemas/PublicOtherAddonResponseDto"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "eventId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "existing": {
+            "$ref": "#/components/schemas/MobileTicketAddonContextExistingResponseDto"
+          },
+          "ticketId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": ["ticketId", "eventId", "existing", "catalog"],
+        "type": "object"
+      },
+      "MobileTicketAddonResponseDto": {
+        "properties": {
+          "activeQuantity": {
+            "description": "Quantity currently active on this Ticket.",
+            "type": "number"
+          },
+          "addonOptionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "cancelledQuantity": {
+            "description": "Quantity cancelled by an administrative adjustment.",
+            "type": "number"
+          },
+          "departureDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "departureTime": {
+            "example": "09:30",
+            "nullable": true,
+            "type": "string"
+          },
+          "issuedAddonStatus": {
+            "description": "Persistence status of the source issued addon.",
+            "enum": ["active", "cancelled", "refunded", "voided"],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "originalQuantity": {
+            "description": "Original quantity issued by the commercial source.",
+            "type": "number"
+          },
+          "pendingTicketReplacementQuantity": {
+            "description": "Quantity waiting for a replacement Ticket.",
+            "type": "number"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "redemptionsAllowed": {
+            "type": "number"
+          },
+          "redemptionsUsed": {
+            "type": "number"
+          },
+          "returnDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "returnTime": {
+            "example": "18:00",
+            "nullable": true,
+            "type": "string"
+          },
+          "room": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MobileTicketAddonRoomResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "type": "string"
+          },
+          "transportDirection": {
+            "enum": ["one_way", "round_trip"],
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": ["accommodation", "meal", "transport", "other"],
+            "type": "string"
+          },
+          "voidedQuantity": {
+            "description": "Quantity voided by an administrative adjustment.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "addonOptionId",
+          "type",
+          "label",
+          "quantity",
+          "status",
+          "issuedAddonStatus",
+          "originalQuantity",
+          "activeQuantity",
+          "pendingTicketReplacementQuantity",
+          "cancelledQuantity",
+          "voidedQuantity",
+          "redemptionsAllowed",
+          "redemptionsUsed"
+        ],
+        "type": "object"
+      },
+      "MobileTicketAddonRoomResponseDto": {
+        "properties": {
+          "capacity": {
+            "type": "number"
+          },
+          "checkInDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "checkInTime": {
+            "example": "14:00",
+            "type": "string"
+          },
+          "checkOutDate": {
+            "format": "date",
+            "type": "string"
+          },
+          "checkOutTime": {
+            "example": "12:00",
+            "type": "string"
+          },
+          "nights": {
+            "type": "number"
+          },
+          "roomType": {
+            "type": "string"
+          },
+          "status": {
+            "enum": ["active", "reassignment_required", "cancelled", "refunded"],
+            "type": "string"
+          }
+        },
+        "required": [
+          "roomType",
+          "nights",
+          "checkInDate",
+          "checkInTime",
+          "checkOutDate",
+          "checkOutTime",
+          "status",
+          "capacity"
+        ],
+        "type": "object"
+      },
+      "MobileTicketMealResponseDto": {
+        "properties": {
+          "activeQuantity": {
+            "description": "Quantity currently active on this Ticket.",
+            "type": "number"
+          },
+          "addonOptionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "cancelledQuantity": {
+            "description": "Quantity cancelled by an administrative adjustment.",
+            "type": "number"
+          },
+          "departureDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "departureTime": {
+            "example": "09:30",
+            "nullable": true,
+            "type": "string"
+          },
+          "issuedAddonStatus": {
+            "description": "Persistence status of the source issued addon.",
+            "enum": ["active", "cancelled", "refunded", "voided"],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "originalQuantity": {
+            "description": "Original quantity issued by the commercial source.",
+            "type": "number"
+          },
+          "pendingTicketReplacementQuantity": {
+            "description": "Quantity waiting for a replacement Ticket.",
+            "type": "number"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "redemptionsAllowed": {
+            "type": "number"
+          },
+          "redemptionsUsed": {
+            "type": "number"
+          },
+          "returnDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "returnTime": {
+            "example": "18:00",
+            "nullable": true,
+            "type": "string"
+          },
+          "room": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MobileTicketAddonRoomResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "type": "string"
+          },
+          "transportDirection": {
+            "enum": ["one_way", "round_trip"],
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": ["meal"],
+            "type": "string"
+          },
+          "voidedQuantity": {
+            "description": "Quantity voided by an administrative adjustment.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "addonOptionId",
+          "type",
+          "label",
+          "quantity",
+          "status",
+          "issuedAddonStatus",
+          "originalQuantity",
+          "activeQuantity",
+          "pendingTicketReplacementQuantity",
+          "cancelledQuantity",
+          "voidedQuantity",
+          "redemptionsAllowed",
+          "redemptionsUsed"
+        ],
+        "type": "object"
+      },
+      "MobileTicketOtherResponseDto": {
+        "properties": {
+          "activeQuantity": {
+            "description": "Quantity currently active on this Ticket.",
+            "type": "number"
+          },
+          "addonOptionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "cancelledQuantity": {
+            "description": "Quantity cancelled by an administrative adjustment.",
+            "type": "number"
+          },
+          "departureDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "departureTime": {
+            "example": "09:30",
+            "nullable": true,
+            "type": "string"
+          },
+          "issuedAddonStatus": {
+            "description": "Persistence status of the source issued addon.",
+            "enum": ["active", "cancelled", "refunded", "voided"],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "originalQuantity": {
+            "description": "Original quantity issued by the commercial source.",
+            "type": "number"
+          },
+          "pendingTicketReplacementQuantity": {
+            "description": "Quantity waiting for a replacement Ticket.",
+            "type": "number"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "redemptionsAllowed": {
+            "type": "number"
+          },
+          "redemptionsUsed": {
+            "type": "number"
+          },
+          "returnDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "returnTime": {
+            "example": "18:00",
+            "nullable": true,
+            "type": "string"
+          },
+          "room": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MobileTicketAddonRoomResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "type": "string"
+          },
+          "transportDirection": {
+            "enum": ["one_way", "round_trip"],
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": ["other"],
+            "type": "string"
+          },
+          "voidedQuantity": {
+            "description": "Quantity voided by an administrative adjustment.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "addonOptionId",
+          "type",
+          "label",
+          "quantity",
+          "status",
+          "issuedAddonStatus",
+          "originalQuantity",
+          "activeQuantity",
+          "pendingTicketReplacementQuantity",
+          "cancelledQuantity",
+          "voidedQuantity",
+          "redemptionsAllowed",
+          "redemptionsUsed"
+        ],
+        "type": "object"
+      },
       "MobileTicketResponseDto": {
         "properties": {
+          "addonCount": {
+            "description": "Live addons attached to this ticket. Zero when none are.",
+            "example": 3,
+            "type": "number"
+          },
           "days": {
             "items": {
               "$ref": "#/components/schemas/TicketDayDto"
@@ -718,7 +2062,111 @@
           "tier",
           "days",
           "holderName",
+          "addonCount",
           "issuedAt"
+        ],
+        "type": "object"
+      },
+      "MobileTicketTransportResponseDto": {
+        "properties": {
+          "activeQuantity": {
+            "description": "Quantity currently active on this Ticket.",
+            "type": "number"
+          },
+          "addonOptionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "cancelledQuantity": {
+            "description": "Quantity cancelled by an administrative adjustment.",
+            "type": "number"
+          },
+          "departureDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "departureTime": {
+            "example": "09:30",
+            "nullable": true,
+            "type": "string"
+          },
+          "issuedAddonStatus": {
+            "description": "Persistence status of the source issued addon.",
+            "enum": ["active", "cancelled", "refunded", "voided"],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "originalQuantity": {
+            "description": "Original quantity issued by the commercial source.",
+            "type": "number"
+          },
+          "pendingTicketReplacementQuantity": {
+            "description": "Quantity waiting for a replacement Ticket.",
+            "type": "number"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "redemptionsAllowed": {
+            "type": "number"
+          },
+          "redemptionsUsed": {
+            "type": "number"
+          },
+          "returnDate": {
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "returnTime": {
+            "example": "18:00",
+            "nullable": true,
+            "type": "string"
+          },
+          "room": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MobileTicketAddonRoomResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "type": "string"
+          },
+          "transportDirection": {
+            "enum": ["one_way", "round_trip"],
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": ["transport"],
+            "type": "string"
+          },
+          "voidedQuantity": {
+            "description": "Quantity voided by an administrative adjustment.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "addonOptionId",
+          "type",
+          "label",
+          "quantity",
+          "status",
+          "issuedAddonStatus",
+          "originalQuantity",
+          "activeQuantity",
+          "pendingTicketReplacementQuantity",
+          "cancelledQuantity",
+          "voidedQuantity",
+          "redemptionsAllowed",
+          "redemptionsUsed"
         ],
         "type": "object"
       },
@@ -856,6 +2304,618 @@
         "required": ["orderStatus", "paymentStatus", "ticketsIssued", "paidAt"],
         "type": "object"
       },
+      "PlaceCheckoutCartOrderRequestDto": {
+        "properties": {
+          "pricingConfirmationToken": {
+            "description": "Latest server-issued pricing confirmation token from Cart preview.",
+            "type": "string"
+          }
+        },
+        "required": ["pricingConfirmationToken"],
+        "type": "object"
+      },
+      "PublicAccommodationAddonOptionResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "checkInDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "checkInTime": {
+            "example": "14:00",
+            "format": "time",
+            "type": "string"
+          },
+          "checkOutDate": {
+            "example": "2026-10-25",
+            "format": "date",
+            "type": "string"
+          },
+          "checkOutTime": {
+            "example": "11:00",
+            "format": "time",
+            "type": "string"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "nights": {
+            "example": 2,
+            "type": "number"
+          },
+          "occupancy": {
+            "example": 2,
+            "type": "number"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "roomType": {
+            "example": "double",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity",
+          "roomType",
+          "nights",
+          "occupancy",
+          "checkInDate",
+          "checkInTime",
+          "checkOutDate",
+          "checkOutTime"
+        ],
+        "type": "object"
+      },
+      "PublicAccommodationAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicAccommodationAddonOptionResponseDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": ["accommodation"],
+            "example": "accommodation",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "type": "object"
+      },
+      "PublicAddonNextPriceWindowResponseDto": {
+        "properties": {
+          "name": {
+            "example": "Regular",
+            "type": "string"
+          },
+          "priceEgp": {
+            "example": "340.00",
+            "type": "string"
+          },
+          "startsAt": {
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": ["name", "priceEgp", "startsAt"],
+        "type": "object"
+      },
+      "PublicAddonOptionBaseResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity"
+        ],
+        "type": "object"
+      },
+      "PublicAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "type": {
+            "enum": ["accommodation", "meal", "transport", "other"],
+            "example": "accommodation",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl"],
+        "type": "object"
+      },
+      "PublicMealAddonOptionResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity"
+        ],
+        "type": "object"
+      },
+      "PublicMealAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicMealAddonOptionResponseDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": ["meal"],
+            "example": "meal",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "type": "object"
+      },
+      "PublicOtherAddonOptionResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity"
+        ],
+        "type": "object"
+      },
+      "PublicOtherAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicOtherAddonOptionResponseDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": ["other"],
+            "example": "other",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "type": "object"
+      },
+      "PublicTransportAddonOptionResponseDto": {
+        "properties": {
+          "availability": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "availableQuantity": {
+            "description": "How many are left, or null while that number is still withheld. The event's `showStockWhenPercentageReaches` decides when scarcity becomes public; a sold-out option always reports 0, because buyers must be able to see that.",
+            "example": 3,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "departureDate": {
+            "example": "2026-10-23",
+            "format": "date",
+            "type": "string"
+          },
+          "departureTime": {
+            "example": "09:30",
+            "format": "time",
+            "type": "string"
+          },
+          "id": {
+            "example": "option-uuid",
+            "type": "string"
+          },
+          "label": {
+            "example": "Double · 2 nights",
+            "type": "string"
+          },
+          "nextPriceWindow": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAddonNextPriceWindowResponseDto"
+              }
+            ],
+            "description": "The window that takes over next, when one is already configured. Lets the app say what the price becomes and from when instead of only what it is today.",
+            "nullable": true,
+            "type": "object"
+          },
+          "priceEgpNow": {
+            "example": "2200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowEndsAt": {
+            "description": "When the current price stops applying. Null when no window is active.",
+            "example": "2026-09-01T00:00:00.000Z",
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowName": {
+            "description": "Name of the window pricing this option right now, e.g. \"Early bird\".",
+            "example": "Early bird",
+            "nullable": true,
+            "type": "string"
+          },
+          "priceWindowStatus": {
+            "enum": ["available", "unavailable"],
+            "example": "available",
+            "type": "string"
+          },
+          "returnDate": {
+            "example": "2026-10-25",
+            "format": "date",
+            "nullable": true,
+            "type": "string"
+          },
+          "returnTime": {
+            "example": "18:00",
+            "format": "time",
+            "nullable": true,
+            "type": "string"
+          },
+          "transportDirection": {
+            "enum": ["one_way", "round_trip"],
+            "example": "one_way",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "priceEgpNow",
+          "priceWindowStatus",
+          "priceWindowName",
+          "priceWindowEndsAt",
+          "nextPriceWindow",
+          "availability",
+          "availableQuantity",
+          "transportDirection",
+          "departureDate",
+          "departureTime"
+        ],
+        "type": "object"
+      },
+      "PublicTransportAddonResponseDto": {
+        "properties": {
+          "description": {
+            "example": "A room near the festival grounds.",
+            "nullable": true,
+            "type": "string"
+          },
+          "featuredImageUrl": {
+            "example": "https://public-assets.example/addons/featured.webp",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "example": "addon-uuid",
+            "type": "string"
+          },
+          "name": {
+            "example": "Desert Lodge Room",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicTransportAddonOptionResponseDto"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": ["transport"],
+            "example": "transport",
+            "type": "string"
+          }
+        },
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "type": "object"
+      },
       "PurchasedByDto": {
         "properties": {
           "isSelf": {
@@ -879,20 +2939,45 @@
         "required": ["refreshToken"],
         "type": "object"
       },
-      "RequestAccountRestorationOtpRequestDto": {
+      "ReplaceCartAddonsRequestDto": {
         "properties": {
-          "phoneNumber": {
-            "example": "+201012345678",
-            "type": "string"
+          "addons": {
+            "items": {
+              "$ref": "#/components/schemas/CartAddonLineRequestDto"
+            },
+            "type": "array"
           }
         },
-        "required": ["phoneNumber"],
+        "required": ["addons"],
+        "type": "object"
+      },
+      "ReplaceCartTicketsRequestDto": {
+        "properties": {
+          "buyerTierId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "guests": {
+            "items": {
+              "$ref": "#/components/schemas/CartGuestDto"
+            },
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CartTicketSelectionDto"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["items", "guests"],
         "type": "object"
       },
       "RequestOtpRequestDto": {
         "properties": {
           "phoneNumber": {
-            "description": "Egyptian mobile number in any common format",
+            "description": "Mobile number in E.164 or a supported local format",
             "example": "01012345678",
             "type": "string"
           }
@@ -952,13 +3037,9 @@
           "title": {
             "type": "string"
           },
-          "venueLat": {
+          "venueMapUrl": {
             "nullable": true,
-            "type": "number"
-          },
-          "venueLng": {
-            "nullable": true,
-            "type": "number"
+            "type": "string"
           },
           "venueName": {
             "nullable": true,
@@ -994,7 +3075,7 @@
             "type": "number"
           },
           "dateOfBirth": {
-            "description": "Date of birth in YYYY-MM-DD format. Must be at least 16 years old.",
+            "description": "Date of birth in YYYY-MM-DD format. Must be at least 18 years old.",
             "example": "1994-03-12",
             "type": "string"
           },
@@ -1014,6 +3095,11 @@
             "enum": ["male", "female", "prefer_not_to_say"],
             "example": "female",
             "type": "string"
+          },
+          "marketingOptIn": {
+            "description": "Consent to receive Sukun marketing messages on WhatsApp. Meta requires this to be an explicit opt-in, so it is never inferred — absent means unchanged, not consented.",
+            "example": true,
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -1048,7 +3134,7 @@
       "ValidateGuestRequestDto": {
         "properties": {
           "phoneNumber": {
-            "description": "Guest phone number in any supported Egyptian format",
+            "description": "Guest mobile number in E.164 or a supported local format",
             "example": "01012345678",
             "type": "string"
           }
@@ -1058,6 +3144,11 @@
       },
       "ValidateGuestsRequestDto": {
         "properties": {
+          "buyerTakesTicket": {
+            "default": true,
+            "description": "Whether one of the tickets in the order being previewed is the buyer's own. Send false when every ticket is for someone else, which is what buying for friends looks like once you already hold a ticket. It only changes how many guests fit under the event `maxTicketsPerOrder`: `maxTicketsPerOrder - 1` when true, the full allowance when false. Must match the `buyerTierId` sent to checkout, or the preflight and checkout disagree.",
+            "type": "boolean"
+          },
           "eventId": {
             "description": "Event UUID",
             "example": "550e8400-e29b-41d4-a716-446655440000",
@@ -1076,6 +3167,11 @@
       },
       "ValidateGuestsResponseDto": {
         "properties": {
+          "buyerAlreadyHasTicket": {
+            "description": "Whether the caller already holds an active or pending-claim ticket for this event. When true they cannot take another for themselves, and checkout rejects a `buyerTierId` with BUYER_ALREADY_HAS_TICKET - the order has to be for guests only. `valid` is false unless `buyerTakesTicket` is explicitly false.",
+            "example": false,
+            "type": "boolean"
+          },
           "issues": {
             "description": "List of validation issues per guest",
             "items": {
@@ -1084,12 +3180,12 @@
             "type": "array"
           },
           "valid": {
-            "description": "Whether all guests are valid",
+            "description": "Whether the guest phones and buyer ticket choice are valid for checkout. A caller who already holds a ticket must explicitly validate a guest-only order.",
             "example": false,
             "type": "boolean"
           }
         },
-        "required": ["valid", "issues"],
+        "required": ["valid", "issues", "buyerAlreadyHasTicket"],
         "type": "object"
       },
       "ValidatePromoCodeItemDto": {
@@ -1202,7 +3298,7 @@
             "type": "string"
           },
           "phoneNumber": {
-            "description": "Egyptian mobile number",
+            "description": "Mobile number in E.164 or a supported local format",
             "example": "01012345678",
             "type": "string"
           }
@@ -1227,159 +3323,17 @@
   },
   "openapi": "3.0.0",
   "paths": {
-    "/api/v1/mobile/auth/account-restoration/confirm": {
-      "post": {
-        "operationId": "MobileAccountRestorationController_confirm_v1",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Accept-Language",
-            "required": false,
-            "schema": {
-              "enum": ["ar", "en"],
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfirmAccountRestorationRequestDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MobileAuthenticatedResponseDto"
-                }
-              }
-            },
-            "description": ""
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseDto"
-                }
-              }
-            },
-            "description": "Invalid OTP or request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseDto"
-                }
-              }
-            },
-            "description": "UNAUTHORIZED"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseDto"
-                }
-              }
-            },
-            "description": "ACCOUNT_RESTORATION_NOT_ALLOWED"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseDto"
-                }
-              }
-            },
-            "description": "ACCOUNT_ALREADY_RESTORED"
-          },
-          "410": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseDto"
-                }
-              }
-            },
-            "description": "ACCOUNT_RESTORATION_WINDOW_EXPIRED"
-          }
-        },
-        "summary": "Confirm account restoration",
-        "tags": ["Account Lifecycle"]
-      }
-    },
-    "/api/v1/mobile/auth/account-restoration/otp/request": {
-      "post": {
-        "operationId": "MobileAccountRestorationController_requestOtp_v1",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Accept-Language",
-            "required": false,
-            "schema": {
-              "enum": ["ar", "en"],
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RequestAccountRestorationOtpRequestDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Always returns 204"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseDto"
-                }
-              }
-            },
-            "description": "Validation error"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponseDto"
-                }
-              }
-            },
-            "description": "Rate limited"
-          }
-        },
-        "summary": "Request account restoration OTP (enumeration-resistant)",
-        "tags": ["Account Lifecycle"]
-      }
-    },
     "/api/v1/mobile/auth/logout": {
       "post": {
         "operationId": "MobileAuthController_logout_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -1423,11 +3377,12 @@
         "operationId": "MobileAuthController_logoutAll_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -1471,11 +3426,12 @@
         "operationId": "MobileAuthController_getCurrentUser_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -1526,11 +3482,12 @@
         "operationId": "MobileAuthController_requestOtp_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -1606,11 +3563,12 @@
         "operationId": "MobileAuthController_verifyOtp_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -1686,11 +3644,12 @@
         "operationId": "MobileAuthController_refreshSession_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -1761,6 +3720,560 @@
         "tags": ["Mobile"]
       }
     },
+    "/api/v1/mobile/carts": {
+      "post": {
+        "description": "Cart validation is advisory and non-reserving. Place Order revalidates authoritatively.",
+        "operationId": "MobileCheckoutCartController_create_v1",
+        "parameters": [
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCheckoutCartRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Create or reuse a draft checkout cart",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/carts/{cartId}": {
+      "delete": {
+        "operationId": "MobileCheckoutCartController_abandon_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Abandon a draft cart",
+        "tags": ["Mobile - Checkout Cart"]
+      },
+      "get": {
+        "description": "Cart validation is advisory and non-reserving. Place Order revalidates authoritatively.",
+        "operationId": "MobileCheckoutCartController_get_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Get an owned checkout cart",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/carts/{cartId}/addons": {
+      "put": {
+        "description": "Cart validation is advisory and non-reserving. Place Order revalidates authoritatively.",
+        "operationId": "MobileCheckoutCartController_replaceAddons_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceCartAddonsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Replace addon selections and assignments",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/carts/{cartId}/place-order": {
+      "post": {
+        "description": "Reprices and validates the persisted cart, claims the selected Promo atomically, creates ticket/addon holds and immutable Order rows, and does not call Paymob or issue fulfilment.",
+        "operationId": "MobileCheckoutCartController_place_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceCheckoutCartOrderRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileOrderDetailResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Authoritatively convert the draft cart into an awaiting-payment Order",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/carts/{cartId}/preview": {
+      "post": {
+        "description": "Uses persisted cart state and returns advisory pricing only. It creates no holds, claims no promo and creates no order or payment.",
+        "operationId": "MobileCheckoutCartController_preview_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartPreviewResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Preview the current cart price",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/carts/{cartId}/promo-code": {
+      "delete": {
+        "operationId": "MobileCheckoutCartController_removePromo_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Remove the promo code from the draft cart",
+        "tags": ["Mobile - Checkout Cart"]
+      },
+      "put": {
+        "description": "Applying a promo code does not claim or consume it.",
+        "operationId": "MobileCheckoutCartController_applyPromo_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyCheckoutCartPromoRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Apply a promo code to the draft cart",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/carts/{cartId}/recipient-lookup": {
+      "post": {
+        "description": "Answers, for phone numbers the buyer already has, whether each one holds a ticket to this cart's event and can therefore be given an addon. Needed because booking a shared room means putting someone in it who bought their own ticket.\n\nReveals nothing beyond that. A number with no account and a number with an account but no ticket both come back `eligible: false`, and no name is ever returned, so the response cannot be used to discover whether a stranger is registered or who they are. The cart scope means only someone mid-checkout on this event can ask at all.",
+        "operationId": "MobileCheckoutCartController_lookupRecipients_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupCartRecipientsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartRecipientLookupResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "description": "CART_NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Check which phone numbers can receive an addon on this cart",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/carts/{cartId}/tickets": {
+      "put": {
+        "description": "Cart validation is advisory and non-reserving. Place Order revalidates authoritatively.",
+        "operationId": "MobileCheckoutCartController_replaceTickets_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceCartTicketsRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Replace ticket selections and recipients",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/carts/{cartId}/validate-addons": {
+      "post": {
+        "description": "This endpoint reserves nothing. Price, inventory and eligibility are revalidated during Place Order.",
+        "operationId": "MobileCheckoutCartController_validate_v1",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cartId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutCartResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Revalidate persisted cart addon state",
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
     "/api/v1/mobile/orders": {
       "get": {
         "description": "Owner-scoped cursor-paginated order summary list. No guest PII is exposed.",
@@ -1792,11 +4305,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -1854,15 +4368,17 @@
         "tags": ["Mobile - Orders"]
       },
       "post": {
-        "description": "Creates a new awaiting-payment order with pricing, promo, capacity holds, and guest allocation. Returns 201 on first creation, 200 on identical retry.",
+        "deprecated": true,
+        "description": "Creates a new awaiting-payment order with pricing, promo, capacity holds, and guest allocation. Returns 201 on first creation, 200 on identical retry.\n\n**Deprecated.** This route is ticket-only: it cannot carry addons, it prices and holds capacity in the same call so there is no way to show a total before committing, and it opens a Paymob intention immediately. New clients use the Cart flow instead — `POST /mobile/carts`, `PUT .../tickets`, `POST .../preview`, `POST .../place-order`, then `POST /mobile/orders/{orderId}/payment/initiate`.\n\nIt stays in service only for app builds already in the wild that call it. Remove it once the Cart-based build is the minimum supported version.",
         "operationId": "MobileOrdersController_create_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -1954,21 +4470,22 @@
             "mobile-bearer": []
           }
         ],
-        "summary": "Create an order",
+        "summary": "Create an order (deprecated, use the Cart flow)",
         "tags": ["Mobile - Orders"]
       }
     },
     "/api/v1/mobile/orders/validate-guests": {
       "post": {
-        "description": "Checks guest phone numbers for invalid format, duplicates, buyer match, and existing tickets. No data is mutated.",
+        "description": "Checks guest phone numbers for invalid format, duplicates, buyer match, and existing tickets. No data is mutated. Also reports whether the caller already holds a ticket for the event, in which case the order has to be for guests only - send `buyerTakesTicket: false` here and omit `buyerTierId` at checkout.",
         "operationId": "MobileOrdersController_validateGuests_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2060,11 +4577,12 @@
         "operationId": "MobileOrdersController_validatePromoCode_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2167,11 +4685,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2234,11 +4753,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2321,11 +4841,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2428,11 +4949,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2493,11 +5015,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2588,11 +5111,12 @@
         "operationId": "MobileReferenceController_listActiveAreas_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2671,11 +5195,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2759,11 +5284,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2819,9 +5345,198 @@
         "tags": ["Mobile - Tickets"]
       }
     },
+    "/api/v1/mobile/tickets/{ticketId}/addon-context": {
+      "get": {
+        "description": "Returns the authenticated holder Ticket context, existing Ticket-owned Addons, and the public Event Addon catalogue. Catalogue availability and pricing are advisory; Cart validation and Place Order revalidate them and reserve nothing here.",
+        "operationId": "MobileTicketsController_getAddonContext_v1",
+        "parameters": [
+          {
+            "description": "Ticket UUID",
+            "in": "path",
+            "name": "ticketId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MobileTicketAddonContextResponseDto"
+                }
+              }
+            },
+            "description": "Ticket addon purchase context"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "UNAUTHORIZED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "TICKET_FORBIDDEN"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "TICKET_NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Get Ticket addon purchase context",
+        "tags": ["Mobile - Tickets"]
+      }
+    },
+    "/api/v1/mobile/tickets/{ticketId}/addons": {
+      "get": {
+        "description": "Returns Ticket-owned Addons using the authenticated Ticket ownership boundary.",
+        "operationId": "MobileTicketsController_getAddons_v1",
+        "parameters": [
+          {
+            "description": "Ticket UUID",
+            "in": "path",
+            "name": "ticketId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Include fully refunded/cancelled historical quantities. The default view is operational.",
+            "in": "query",
+            "name": "includeRefunded",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "discriminator": {
+                      "mapping": {
+                        "accommodation": "#/components/schemas/MobileTicketAccommodationResponseDto",
+                        "meal": "#/components/schemas/MobileTicketMealResponseDto",
+                        "other": "#/components/schemas/MobileTicketOtherResponseDto",
+                        "transport": "#/components/schemas/MobileTicketTransportResponseDto"
+                      },
+                      "propertyName": "type"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/MobileTicketTransportResponseDto"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MobileTicketAccommodationResponseDto"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MobileTicketMealResponseDto"
+                      },
+                      {
+                        "$ref": "#/components/schemas/MobileTicketOtherResponseDto"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Ticket-owned Addons"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "UNAUTHORIZED"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "TICKET_FORBIDDEN"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "TICKET_NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Get Addons attached to a Ticket",
+        "tags": ["Mobile - Tickets"]
+      }
+    },
     "/api/v1/mobile/tickets/{ticketId}/claim": {
       "post": {
-        "description": "Accepts a pending invitation Ticket matching the authenticated verified phone. Idempotent: already-claimed Tickets return 200.",
+        "description": "Binds a pending Ticket matching the authenticated verified phone, whether it was issued by invitation or bought for the holder by someone else. Idempotent: already-claimed Tickets return 200.",
         "operationId": "MobileTicketsController_claim_v1",
         "parameters": [
           {
@@ -2835,11 +5550,12 @@
             }
           },
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2891,7 +5607,7 @@
             "mobile-bearer": []
           }
         ],
-        "summary": "Claim a pending invitation Ticket",
+        "summary": "Claim a pending Ticket",
         "tags": ["Mobile - Tickets"]
       }
     },
@@ -2900,11 +5616,12 @@
         "operationId": "MobileAppUserAccountLifecycleController_deleteAccount_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -2923,6 +5640,16 @@
           "204": {
             "description": "Account deleted"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "OTP_INVALID or OTP_EXPIRED"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -2932,6 +5659,16 @@
               }
             },
             "description": "FORFEIT_CONFIRMATION_REQUIRED or ACCOUNT_DELETION_PAYMENT_IN_PROGRESS"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "OTP_ATTEMPTS_EXCEEDED"
           }
         },
         "security": [
@@ -2948,11 +5685,12 @@
         "operationId": "MobileAppUserAccountLifecycleController_previewDeletion_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -3003,11 +5741,12 @@
         "operationId": "MobileAppUserAccountLifecycleController_requestDeletionOtp_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -3045,6 +5784,26 @@
               }
             },
             "description": "ACCOUNT_DELETION_NOT_ALLOWED"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "OTP_RATE_LIMITED"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "OTP_DELIVERY_FAILED or OTP_PROVIDER_UNAVAILABLE"
           }
         },
         "security": [
@@ -3062,11 +5821,12 @@
         "operationId": "MobileAppUserEmailController_sendVerification_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -3148,11 +5908,12 @@
         "operationId": "MobileAppUserEmailController_verify_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -3233,11 +5994,12 @@
         "operationId": "MobileAppUserProfileController_updateProfile_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -3318,11 +6080,12 @@
         "operationId": "MobileAppUserProfileController_getSelfie_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -3381,11 +6144,12 @@
         "operationId": "MobileAppUserProfileController_uploadSelfie_v1",
         "parameters": [
           {
+            "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["ar", "en"],
+              "enum": ["en"],
               "type": "string"
             }
           }

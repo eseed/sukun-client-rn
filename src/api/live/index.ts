@@ -3,8 +3,13 @@ import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import type {
   AccountDeletionPreview,
+  AddonDetail,
+  AddonSummary,
   Authenticated,
-  CreateOrderInput,
+  Cart,
+  CartAddonInput,
+  CartPreview,
+  CartRecipientLookup,
   CurrentUser,
   CursorPage,
   EventListItem,
@@ -19,7 +24,7 @@ import type {
   OtpRequested,
   PaymentIntent,
   PaymentStatus,
-  PromoValidationResult,
+  ReplaceCartTicketsInput,
   SessionTokens,
   SelfieResponse,
   LiveArea,
@@ -29,6 +34,8 @@ import type {
   LiveUpdateProfileInput,
   LiveGuestValidationIssue,
   Ticket,
+  TicketAddon,
+  TicketAddonContext,
   UpdateProfileInput,
 } from '../types';
 import { ApiError, request } from './http';
@@ -87,6 +94,9 @@ function normalizeTicket(ticket: LiveTicket): Ticket {
     days: ticket.days.map((day) => ({ ...day, gatesOpenAt: day.gatesOpenAt ?? null })),
     orderNumber: ticket.orderNumber ?? null,
     purchasedBy: ticket.purchasedBy ?? null,
+    // Absent on builds served by a backend that predates ticket addon counts, and on any build
+    // running with addons switched off, where "no addons" is the honest answer.
+    addonCount: ticket.addonCount ?? 0,
   };
 }
 
@@ -217,17 +227,82 @@ export const liveApi: SukunApi = {
       request<EventMeta>(`public/events/${encodeURIComponent(identifier)}/meta`, { auth: false }),
   },
 
-  orders: {
-    /**
-     * PENDING BACKEND — there is no price-preview endpoint. The server prices only at
-     * `POST mobile/orders`, which also holds capacity, so it cannot stand in for a preview.
-     * The checkout screens that used to call this now create the real order (`pass.tsx`
-     * multiplies the public per-tier price for its running subtotal instead; `review.tsx`
-     * creates the order itself for the authoritative total) — see those files.
-     */
-    previewPrice: () => notImplemented('Order price preview'),
+  addons: {
+    // PublicAddonsController — GET public/events/:identifier/addons
+    list: (identifier) =>
+      request<{ data: AddonSummary[] }>(`public/events/${encodeURIComponent(identifier)}/addons`, {
+        auth: false,
+      }).then((response) => response.data),
 
-    // MobileOrdersController — POST orders/validate-guests
+    // GET public/events/:identifier/addons/:addonId
+    detail: (identifier, addonId) =>
+      request<AddonDetail>(
+        `public/events/${encodeURIComponent(identifier)}/addons/${encodeURIComponent(addonId)}`,
+        { auth: false },
+      ),
+  },
+
+  carts: {
+    // MobileCheckoutCartController — POST mobile/carts. Creates or reuses the draft cart.
+    create: (eventId) => request<Cart>('mobile/carts', { method: 'POST', body: { eventId } }),
+
+    // GET mobile/carts/:cartId
+    get: (cartId) => request<Cart>(`mobile/carts/${cartId}`),
+
+    // PUT mobile/carts/:cartId/tickets — full replacement, and it clears the cart's draft addons.
+    replaceTickets: (cartId, input: ReplaceCartTicketsInput) =>
+      request<Cart>(`mobile/carts/${cartId}/tickets`, {
+        method: 'PUT',
+        body: {
+          ...input,
+          guests: input.guests.map((guest) => ({
+            ...guest,
+            phoneNumber: normalizePhoneForRequest(guest.phoneNumber),
+          })),
+        },
+      }),
+
+    // PUT mobile/carts/:cartId/addons — full replacement of every addon line.
+    replaceAddons: (cartId, addons: CartAddonInput[]) =>
+      request<Cart>(`mobile/carts/${cartId}/addons`, { method: 'PUT', body: { addons } }),
+
+    // POST mobile/carts/:cartId/recipient-lookup
+    lookupRecipients: (cartId, phoneNumbers) =>
+      request<{ results: CartRecipientLookup[] }>(`mobile/carts/${cartId}/recipient-lookup`, {
+        method: 'POST',
+        body: { phoneNumbers: phoneNumbers.map(normalizePhoneForRequest) },
+      }).then((response) => response.results),
+
+    // PUT mobile/carts/:cartId/promo-code. The field is `code`, not `promoCode`.
+    applyPromo: (cartId, code) =>
+      request<Cart>(`mobile/carts/${cartId}/promo-code`, { method: 'PUT', body: { code } }),
+
+    // DELETE mobile/carts/:cartId/promo-code
+    removePromo: (cartId) =>
+      request<Cart>(`mobile/carts/${cartId}/promo-code`, { method: 'DELETE' }),
+
+    // POST mobile/carts/:cartId/preview — advisory, reserves nothing.
+    preview: (cartId) => request<CartPreview>(`mobile/carts/${cartId}/preview`, { method: 'POST' }),
+
+    /**
+     * POST mobile/carts/:cartId/place-order.
+     *
+     * Answers 409 `CART_PRICING_CHANGED` when the price moved under the token, and 409
+     * `CART_ACTIVE_ORDER_EXISTS` when this cart already has a pending order. Both are handled by
+     * the review screen, never retried silently.
+     */
+    placeOrder: (cartId, pricingConfirmationToken) =>
+      request<OrderDetail>(`mobile/carts/${cartId}/place-order`, {
+        method: 'POST',
+        body: { pricingConfirmationToken },
+      }),
+
+    // DELETE mobile/carts/:cartId
+    abandon: (cartId) => request<Cart>(`mobile/carts/${cartId}`, { method: 'DELETE' }),
+  },
+
+  orders: {
+    // MobileOrdersController — POST orders/validate-guests. Advisory; reserves nothing.
     validateGuests: (eventId: string, guests: GuestValidationInput[]) =>
       request<{ valid: boolean; issues: LiveGuestValidationIssue[] }>(
         'mobile/orders/validate-guests',
@@ -252,26 +327,6 @@ export const liveApi: SukunApi = {
           }[error],
         })),
       })),
-
-    // POST mobile/orders/validate-promo-code
-    validatePromoCode: (items, promoCode) =>
-      request<PromoValidationResult>('mobile/orders/validate-promo-code', {
-        method: 'POST',
-        body: { items, promoCode },
-      }),
-
-    // POST mobile/orders → 201 first time, 200 on identical retry
-    create: (input: CreateOrderInput) =>
-      request<OrderDetail>('mobile/orders', {
-        method: 'POST',
-        body: {
-          ...input,
-          guests: input.guests.map((guest) => ({
-            ...guest,
-            phoneNumber: normalizePhoneForRequest(guest.phoneNumber),
-          })),
-        },
-      }),
 
     // GET orders/:orderId
     detail: (orderId) => request<OrderDetail>(`mobile/orders/${orderId}`),
@@ -329,6 +384,16 @@ export const liveApi: SukunApi = {
      * `../types` — the endpoint must match that contract, path included.
      */
     entryPass: (ticketId) => request<EntryPass>(`mobile/tickets/${ticketId}/entry-pass`),
+
+    // GET mobile/tickets/:ticketId/addons
+    addons: (ticketId, includeRefunded) =>
+      request<{ data: TicketAddon[] }>(`mobile/tickets/${ticketId}/addons`, {
+        query: { includeRefunded: includeRefunded ? 'true' : undefined },
+      }).then((response) => response.data),
+
+    // GET mobile/tickets/:ticketId/addon-context
+    addonContext: (ticketId) =>
+      request<TicketAddonContext>(`mobile/tickets/${ticketId}/addon-context`),
   },
 
   account: {
