@@ -1,6 +1,7 @@
 import { useRef } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { colors, fontFamily } from '../../theme/tokens';
+import { KEYBOARD_DONE_ID, KeyboardDoneAccessory } from './KeyboardDone';
 import { Text } from './Text';
 
 /**
@@ -46,8 +47,10 @@ export function OtpInput({
         autoFocus={autoFocus}
         maxLength={length}
         accessibilityLabel="Verification code"
+        inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_DONE_ID : undefined}
         style={styles.hidden}
       />
+      {Platform.OS === 'ios' ? <KeyboardDoneAccessory /> : null}
     </Pressable>
   );
 }

@@ -129,7 +129,7 @@ export default function OtpScreen() {
   }
 
   return (
-    <Screen contentStyle={styles.content}>
+    <Screen scroll contentStyle={styles.content}>
       <BackButton onPress={goBackToPhone} style={styles.back} />
 
       <StepLabel>Step 1 of 3</StepLabel>

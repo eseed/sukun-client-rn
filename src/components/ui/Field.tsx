@@ -8,6 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { colors, fontFamily } from '../../theme/tokens';
+import { KEYBOARD_DONE_ID, KeyboardDoneAccessory, needsDoneAccessory } from './KeyboardDone';
 import { Text } from './Text';
 
 /**
@@ -48,6 +49,9 @@ export function TextField({
   style,
   ...rest
 }: TextFieldProps) {
+  // A numeric keyboard has no return key to dismiss it with, so those fields get a Done bar.
+  const done = needsDoneAccessory(rest.keyboardType);
+
   return (
     <View style={[styles.field, containerStyle]}>
       {label ? <FieldLabel>{label}</FieldLabel> : null}
@@ -57,7 +61,9 @@ export function TextField({
           placeholderTextColor={colors.textMuted}
           style={[styles.input, style]}
           {...rest}
+          inputAccessoryViewID={done ? KEYBOARD_DONE_ID : rest.inputAccessoryViewID}
         />
+        {done ? <KeyboardDoneAccessory /> : null}
       </FieldBox>
       {error ? (
         <Text variant="metaSm" color={colors.rose700}>

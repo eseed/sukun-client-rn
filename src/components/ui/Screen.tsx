@@ -1,9 +1,11 @@
 import { type ReactNode } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
+  TouchableWithoutFeedback,
   View,
   type ViewStyle,
 } from 'react-native';
@@ -29,6 +31,20 @@ export interface ScreenProps {
 /** Only numeric padding participates in the inset maths; percentages fall back to the default. */
 function toPadding(value: ViewStyle['paddingTop'], fallback: number): number {
   return typeof value === 'number' ? value : fallback;
+}
+
+/**
+ * Tapping the page dismisses the keyboard. Numeric keyboards (`phone-pad` on the phone screen,
+ * `number-pad` for the code) have no return key, so without this there is no way off them but
+ * the field's own accessory bar. `accessible={false}` keeps the wrapper out of the a11y tree,
+ * and taps that a child handles never reach it.
+ */
+function Dismissable({ children, style }: { children: ReactNode; style: ViewStyle | ViewStyle[] }) {
+  return (
+    <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
+      <View style={style}>{children}</View>
+    </TouchableWithoutFeedback>
+  );
 }
 
 /**
@@ -75,8 +91,11 @@ export function Screen({
   const body = scroll ? (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={inner}
+      // `flexGrow` rather than a plain height, so a screen whose spacer pins a CTA to the
+      // bottom still fills a tall screen, and still scrolls once the keyboard shrinks it.
+      contentContainerStyle={[inner, styles.grow]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
       onScroll={
         onEndReached
           ? (event) => {
@@ -93,10 +112,10 @@ export function Screen({
       scrollEventThrottle={100}
       showsVerticalScrollIndicator={false}
     >
-      {children}
+      <Dismissable style={styles.grow}>{children}</Dismissable>
     </ScrollView>
   ) : (
-    <View style={[styles.flex, inner]}>{children}</View>
+    <Dismissable style={[styles.flex, inner]}>{children}</Dismissable>
   );
 
   return (
@@ -111,4 +130,5 @@ export function Screen({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  grow: { flexGrow: 1 },
 });

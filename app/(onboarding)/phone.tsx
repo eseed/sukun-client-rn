@@ -77,8 +77,11 @@ export default function PhoneScreen() {
     else router.replace('/(onboarding)/welcome');
   }
 
+  // Scrolls because the keyboard can leave less room than this column needs: on an iPad
+  // running the app in iPhone compatibility mode it covers most of the window, and a fixed
+  // column clips the CTA off the bottom.
   return (
-    <Screen contentStyle={styles.content}>
+    <Screen scroll contentStyle={styles.content}>
       <BackButton onPress={goBack} style={styles.back} />
 
       <StepLabel>Step 1 of 3</StepLabel>
