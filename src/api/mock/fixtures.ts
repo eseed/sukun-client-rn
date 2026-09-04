@@ -188,7 +188,7 @@ export const eventDetails: Record<string, EventDetail> = {
     ],
     gallery: [],
     documents: [],
-    youtubeLinks: [],
+    youtubeLinks: ['https://www.youtube.com/watch?v=aqz-KE-bpKQ'],
     tiers: [
       {
         id: TIER_WEEKEND,
@@ -234,8 +234,11 @@ export const eventDetails: Record<string, EventDetail> = {
     slug: 'sound-bath-under-the-stars',
     title: 'Sound Bath Under the Stars',
     tagline: 'Sound',
+    // A link pasted straight into the copy, which is how admins most often attach a video.
+    // The event screen lifts it out of the prose and renders it as a player.
     descriptionHtml:
-      'An hour of gongs, bowls and stillness on the rooftop, timed to the last light.',
+      'An hour of gongs, bowls and stillness on the rooftop, timed to the last light. ' +
+      'Here is last season: https://youtu.be/LXb3EKWsInQ',
     coverImageUrl: null,
     state: 'on_sale',
     startDate: '2026-08-09',

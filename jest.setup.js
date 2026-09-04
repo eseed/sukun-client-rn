@@ -69,6 +69,17 @@ jest.mock('expo-image-picker', () => ({
   MediaTypeOptions: { Images: 'Images' },
 }));
 
+/**
+ * `WebView` is a native view, so under Jest it can only be a stand-in. It is a `jest.fn`
+ * rather than a bare stub so a test can assert on the props the YouTube player passes it:
+ * the embed URL and the inline-playback flags are the whole fix, and nothing else in the
+ * suite can see them.
+ */
+jest.mock('react-native-webview', () => ({
+  __esModule: true,
+  WebView: jest.fn(() => null),
+}));
+
 jest.mock('mixpanel-react-native', () => {
   const people = { set: jest.fn(), setOnce: jest.fn() };
   return {

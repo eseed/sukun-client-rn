@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -12,12 +12,14 @@ import {
   PinIcon,
   ResourceState,
   Text,
+  YoutubeEmbed,
 } from '../../src/components/ui';
 import { useEvent } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
+import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
@@ -37,6 +39,26 @@ export default function EventDetailScreen() {
     typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
+
+  // An admin can attach a video either in the dedicated links field or by pasting one into the
+  // description, and the same video often arrives both ways. Collect them into one ordered,
+  // de-duplicated list, and render the description with those references removed so a link
+  // that is now a player is not also sitting in the copy as a bare URL.
+  const videoIds = useMemo(() => {
+    const fromLinks = (event?.youtubeLinks ?? [])
+      .map((link) => youtubeVideoId(link))
+      .filter((id): id is string => id !== null);
+    const ids = [...fromLinks];
+    for (const id of extractYoutubeIds(event?.descriptionHtml)) {
+      if (!ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  }, [event?.youtubeLinks, event?.descriptionHtml]);
+
+  const description = useMemo(
+    () => stripYoutubeEmbeds(event?.descriptionHtml),
+    [event?.descriptionHtml],
+  );
 
   if (isPending || !event) {
     return (
@@ -133,7 +155,20 @@ export default function EventDetailScreen() {
         </View>
 
         <View style={styles.body}>
-          <MarkdownText markdown={event.descriptionHtml} variant="bodyLead" style={styles.lead} />
+          <MarkdownText markdown={description} variant="bodyLead" style={styles.lead} />
+
+          {videoIds.length > 0 ? (
+            <View style={styles.mediaSection}>
+              <Text variant="eyebrow" style={styles.sectionLabel}>
+                {videoIds.length === 1 ? 'Watch' : 'Videos'}
+              </Text>
+              <View style={styles.videos}>
+                {videoIds.map((videoId) => (
+                  <YoutubeEmbed key={videoId} videoId={videoId} title={event.title} />
+                ))}
+              </View>
+            </View>
+          ) : null}
 
           {event.gallery.length > 0 ? (
             <View style={styles.mediaSection}>
@@ -347,6 +382,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   gallery: {
+    gap: 12,
+  },
+  videos: {
     gap: 12,
   },
   galleryImage: {
