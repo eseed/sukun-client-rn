@@ -9,6 +9,7 @@ import {
   Text,
 } from '../../src/components/ui';
 import { useAvatarUri, useTickets } from '../../src/hooks/queries';
+import { APP_VERSION_LINE, IS_STAGING_BUILD } from '../../src/lib/build-info';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
@@ -102,6 +103,23 @@ export default function ProfileScreen() {
             <ListRow label="Delete account" tone="danger" />
           </Pressable>
         </View>
+
+        {/*
+          The version, and a badge on the staging build. Staging and production go to the same
+          App Store Connect record, so a tester holding one of them had no way to tell which, and
+          a bug filed against the wrong build costs a day. Read out together as one line, because
+          a version without an environment is only half an answer.
+        */}
+        <View style={styles.build}>
+          <Text variant="metaSm" color={colors.textMuted}>
+            {APP_VERSION_LINE ? `Version ${APP_VERSION_LINE}` : 'Version unavailable'}
+          </Text>
+          {IS_STAGING_BUILD ? (
+            <View style={styles.envBadge}>
+              <Text style={styles.envBadgeLabel}>Staging</Text>
+            </View>
+          ) : null}
+        </View>
       </Screen>
     </View>
   );
@@ -177,5 +195,25 @@ const styles = StyleSheet.create({
   },
   rows: {
     gap: 8,
+  },
+  build: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 24,
+  },
+  envBadge: {
+    backgroundColor: colors.gold500,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  envBadgeLabel: {
+    fontSize: 10,
+    letterSpacing: 10 * 0.08,
+    textTransform: 'uppercase',
+    fontFamily: fontFamily.bodyMedium,
+    color: colors.creme,
   },
 });

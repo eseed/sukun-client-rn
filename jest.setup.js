@@ -63,6 +63,13 @@ jest.mock('expo-contacts/legacy', () => ({
   presentContactPickerAsync: jest.fn(async () => null),
 }));
 
+// The native bundle's own version and build number. Null under Jest without this, which would
+// make the profile screen's version line say "unavailable" in every test that renders it.
+jest.mock('expo-application', () => ({
+  nativeApplicationVersion: '2.0.0',
+  nativeBuildVersion: '15',
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(async () => ({ canceled: true })),
   requestCameraPermissionsAsync: jest.fn(async () => ({ granted: true })),

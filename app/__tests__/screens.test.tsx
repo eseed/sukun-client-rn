@@ -1131,6 +1131,23 @@ describe('15 Profile', () => {
     expect(screen.getByText('Delete account')).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Tickets')).toBeTruthy());
   });
+
+  /**
+   * Staging and production submit to the same App Store Connect record, so a TestFlight tester
+   * sees two builds told apart only by their build number and, until this line existed, had no
+   * way at all to tell which one they had opened. A bug filed against the wrong build costs a day.
+   */
+  it('names the build it is, and badges the staging one', async () => {
+    await signInAndComplete();
+    renderWithProviders(<ProfileTabScreen />);
+
+    // The native bundle's own numbers, not the JS config: EAS owns them remotely, so the config
+    // on disk does not know the build number at all.
+    expect(screen.getByText('Version 2.0.0 (15)')).toBeTruthy();
+    // No `EXPO_PUBLIC_ANALYTICS_ENV` under Jest, so this is not a staging build and carries no
+    // badge. Which environments do is pinned in src/lib/__tests__/build-info.test.ts.
+    expect(screen.queryByText('Staging')).toBeNull();
+  });
 });
 
 describe('Account deletion', () => {

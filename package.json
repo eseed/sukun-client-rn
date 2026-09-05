@@ -28,6 +28,7 @@
     "@react-native-picker/picker": "2.11.4",
     "@tanstack/react-query": "^5.101.4",
     "expo": "~57.0.17",
+    "expo-application": "~57.0.2",
     "expo-build-properties": "~57.0.16",
     "expo-constants": "~57.0.10",
     "expo-contacts": "~57.0.4",
