@@ -143,3 +143,12 @@ jest.mock(
   }),
   { virtual: true },
 );
+
+/**
+ * `waitFor`'s default budget is 1000ms, and a screen test here mounts a QueryClient, resolves
+ * several mock-api queries and re-renders the tree inside that budget. On a busy machine that
+ * is not enough: suites went red at a `waitFor` that then succeeded at ~1.3-4.5s, with nothing
+ * wrong behind it. A generous ceiling makes a loaded machine a slow run rather than a false
+ * failure; a genuinely stuck screen still fails, just later.
+ */
+require('@testing-library/react-native').configure({ asyncUtilTimeout: 10000 });

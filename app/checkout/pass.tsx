@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { API_MODE } from '../../src/api';
 import {
   BackButton,
   BulletHeading,
@@ -16,7 +15,8 @@ import {
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
 import { messageForError } from '../../src/lib/errors';
-import { useEvent, usePricePreview } from '../../src/hooks/queries';
+import { useEvent } from '../../src/hooks/queries';
+import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
 import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { colors, fontFamily } from '../../src/theme/tokens';
@@ -25,9 +25,11 @@ import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 /**
  * Design screen 08 · Checkout, choose your pass.
  *
- * No order exists yet to price authoritatively (guests aren't picked until the next screen),
- * so this subtotal is the tier's public unit price times the chosen quantity — see
- * `multiplyEgp`. The review screen's real order is what's actually charged (CLAUDE.md rule 7).
+ * Shows what each ticket costs and how many are being bought, but no running total. Nothing can
+ * be priced yet: a cart needs its recipients before it can be previewed, and those are picked on
+ * the next screen. Multiplying the tier price here to fill the gap would be exactly the
+ * client-side arithmetic CLAUDE.md rule 7 forbids, so the first total the buyer sees is the
+ * server's, on the review step.
  */
 export default function ChoosePassScreen() {
   const router = useRouter();
@@ -43,9 +45,7 @@ export default function ChoosePassScreen() {
 
   const eventQuery = useEvent(validEventId);
   const { data: event } = eventQuery;
-  const items = tierId ? [{ tierId, quantity }] : [];
-  const priceQuery = usePricePreview({ eventId: validEventId, items });
-  const { data: price } = priceQuery;
+  const steps = useCheckoutSteps(validEventId);
 
   useEffect(() => {
     if (!event || !tierId) return;
@@ -117,7 +117,7 @@ export default function ChoosePassScreen() {
 
       <BackButton onPress={() => router.back()} style={styles.back} />
 
-      <StepLabel>Checkout · step 1 of 3</StepLabel>
+      <StepLabel>{`Checkout · step 1 of ${steps.total}`}</StepLabel>
       <View style={styles.heading}>
         <BulletHeading title="Choose your pass" size="md" />
       </View>
@@ -159,29 +159,17 @@ export default function ChoosePassScreen() {
 
       <View style={styles.quantityRow}>
         <QuantityStepper value={quantity} min={1} max={quantityLimit} onChange={setQuantity} />
-        <View style={styles.subtotal}>
-          <Text style={styles.subtotalLabel}>Subtotal</Text>
-          <Text style={styles.subtotalValue}>
-            {price?.subtotalEgp ? formatEgp(price.subtotalEgp) : '—'}
-          </Text>
-        </View>
+        {selectedTier ? (
+          <View style={styles.subtotal}>
+            <Text style={styles.subtotalLabel}>Each</Text>
+            <Text style={styles.subtotalValue}>{formatEgp(selectedTier.priceEgp)}</Text>
+          </View>
+        ) : null}
       </View>
 
       {eventUnavailable ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.notice}>
           This event is not currently available for purchase.
-        </Text>
-      ) : null}
-
-      {API_MODE !== 'live' && priceQuery.isError ? (
-        <Text variant="metaSm" color={colors.rose700} style={styles.notice}>
-          {messageForError(priceQuery.error)}
-        </Text>
-      ) : null}
-
-      {API_MODE !== 'live' && priceQuery.isPending ? (
-        <Text variant="metaSm" style={styles.notice}>
-          Checking the current price...
         </Text>
       ) : null}
 

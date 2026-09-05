@@ -6,21 +6,20 @@ import {
   type UseQueryOptions,
 } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
-import { api, API_MODE } from '../api';
+import { api } from '../api';
 import type {
-  CreateOrderInput,
+  CartAddonInput,
   CurrentUser,
   EntryPass,
   EventListItem,
   GuestValidationInput,
   ListEventsQuery,
-  OrderStatus,
   PaymentStatus,
+  ReplaceCartTicketsInput,
   TicketStatus,
   UpdateProfileInput,
 } from '../api/types';
 import { getAuthSessionGeneration, isCurrentSignedInSession, useAuthStore } from '../stores/auth';
-import { HeldOrderError } from '../lib/errors';
 
 /**
  * The only data surface screens are allowed to touch. Each hook wraps one api method, so
@@ -42,13 +41,14 @@ export const queryKeys = {
   tickets: (statuses?: TicketStatus[]) => ['tickets', statuses ?? null] as const,
   ticket: (ticketId: string) => ['ticket', ticketId] as const,
   entryPass: (ticketId: string) => ['entry-pass', ticketId] as const,
-  pricePreview: (
-    eventId: string,
-    items: { tierId: string; quantity: number }[],
-    promoCode?: string | null,
-  ) => ['price-preview', eventId, items, promoCode ?? null] as const,
-  promoDiscount: (items: { tierId: string; quantity: number }[], promoCode: string) =>
-    ['promo-discount', items, promoCode] as const,
+  addons: (eventIdentifier: string) => ['addons', eventIdentifier] as const,
+  addon: (eventIdentifier: string, addonId: string) =>
+    ['addon', eventIdentifier, addonId] as const,
+  cartRoot: ['cart'] as const,
+  cart: (cartId: string) => ['cart', cartId] as const,
+  cartPreview: (cartId: string) => ['cart-preview', cartId] as const,
+  ticketAddons: (ticketId: string) => ['ticket-addons', ticketId] as const,
+  ticketAddonContext: (ticketId: string) => ['ticket-addon-context', ticketId] as const,
   deletionPreview: ['deletion-preview'] as const,
 };
 
@@ -263,55 +263,6 @@ export function useEventMeta(identifier: string | undefined) {
 
 /* ---------------------------------------------------------------- orders */
 
-/** Server-computed totals for the review screen. Never derive these in a component. */
-export function usePricePreview(input: {
-  eventId: string | undefined;
-  items: { tierId: string; quantity: number }[];
-  promoCode?: string | null;
-}) {
-  const { eventId, items, promoCode } = input;
-  const signedIn = useAuthStore((s) => s.status === 'signed-in');
-  return useQuery({
-    queryKey: queryKeys.pricePreview(eventId ?? '', items, promoCode),
-    queryFn: () =>
-      api.orders.previewPrice({
-        eventId: eventId as string,
-        items,
-        promoCode: promoCode ?? undefined,
-      }),
-    // Staging has no preview endpoint. Live checkout creates the order on the review CTA,
-    // which is the first server-authoritative pricing response.
-    enabled: API_MODE !== 'live' && signedIn && Boolean(eventId) && items.length > 0,
-  });
-}
-
-/**
- * The server's own discount for a promo code against this basket.
- *
- * Staging prices an order only at `POST /orders`, so until the review CTA creates one this
- * validation response is the only place a discount figure exists — and it is the server's
- * figure, not one derived here (CLAUDE.md rule 7). Without it the review screen showed an
- * applied code with no discount and an undiscounted total.
- *
- * A query rather than the apply-time mutation result, because the basket outlives the tap: the
- * code stays in the draft when the buyer steps back and changes the quantity, and the discount
- * is clamped to the subtotal, so it has to be re-asked rather than remembered.
- */
-export function usePromoDiscount(input: {
-  items: { tierId: string; quantity: number }[];
-  promoCode?: string | null;
-}) {
-  const { items, promoCode } = input;
-  const signedIn = useAuthStore((s) => s.status === 'signed-in');
-  return useQuery({
-    queryKey: queryKeys.promoDiscount(items, promoCode ?? ''),
-    queryFn: () => api.orders.validatePromoCode(items, promoCode as string),
-    enabled: signedIn && Boolean(promoCode) && items.length > 0,
-    // A code the server rejects is an answer, not a blip worth retrying.
-    retry: false,
-  });
-}
-
 export function useValidateGuests() {
   return useMutation({
     mutationFn: (input: { eventId: string; guests: GuestValidationInput[] }) =>
@@ -319,66 +270,146 @@ export function useValidateGuests() {
   });
 }
 
-export function useValidatePromoCode() {
+/* ------------------------------------------------------------------ addons */
+
+/** The event's extras catalogue. Public, so it loads before sign-in on the event screen. */
+export function useAddons(eventIdentifier: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.addons(eventIdentifier ?? ''),
+    queryFn: () => api.addons.list(eventIdentifier as string),
+    enabled: Boolean(eventIdentifier),
+    // An event with no extras is a normal answer, not a failure worth retrying.
+    retry: false,
+  });
+}
+
+export function useAddon(eventIdentifier: string | undefined, addonId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.addon(eventIdentifier ?? '', addonId ?? ''),
+    queryFn: () => api.addons.detail(eventIdentifier as string, addonId as string),
+    enabled: Boolean(eventIdentifier) && Boolean(addonId),
+  });
+}
+
+/* -------------------------------------------------------------------- cart */
+
+export function useCart(cartId: string | undefined) {
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  return useQuery({
+    queryKey: queryKeys.cart(cartId ?? ''),
+    queryFn: () => api.carts.get(cartId as string),
+    enabled: signedIn && Boolean(cartId),
+  });
+}
+
+export function useCreateCart() {
+  const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { items: { tierId: string; quantity: number }[]; promoCode: string }) =>
-      api.orders.validatePromoCode(input.items, input.promoCode),
+    mutationFn: (eventId: string) => api.carts.create(eventId),
+    onSuccess: (cart) => {
+      client.setQueryData(queryKeys.cart(cart.id), cart);
+    },
   });
 }
 
 /**
- * The one order state that still holds capacity. `awaiting_payment` is also the only status the
- * backend's duplicate guard looks at, so it is the only one worth searching for here.
- *
- * This used to read `['awaiting_payment', 'processing', 'paid']`. `processing` is not a member
- * of the backend's `order_status` enum at all, and `paid` meant an already-paid order could be
- * picked up and handed back to be paid a second time.
+ * Replacing tickets also wipes the cart's draft extras, so this drops the cached preview: the
+ * price on screen belongs to a basket that no longer exists.
  */
-const HELD_ORDER_STATUS: OrderStatus = 'awaiting_payment';
-
-/**
- * A held order is minutes old by construction — the hold expires in about a quarter of an hour
- * — and the list is newest-first, so one generous page always covers it.
- */
-const HELD_ORDER_SEARCH_LIMIT = 50;
-
-/**
- * Creates the order, and on refusal identifies the order already holding the capacity.
- *
- * The backend refuses a second order for an event only while an earlier one is still
- * `awaiting_payment`, and when that order is semantically identical to the request it returns
- * the order with a 200 rather than an error. So `409 DUPLICATE_ACTIVE_ORDER` carries a precise
- * meaning: *you are holding an order that is not what you just asked for.*
- *
- * This used to answer that by silently substituting the held order and handing it straight to
- * the payment sheet — charging for a basket the buyer never chose. It now surfaces a
- * `HeldOrderError` carrying that order's id so the screen can name the situation and offer to
- * continue it. The id has to be looked up: the server puts `existingOrderId` in the exception's
- * `messageArgs`, which the error envelope does not emit.
- */
-export function useCreateOrder() {
+export function useReplaceCartTickets() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateOrderInput) => {
-      try {
-        return await api.orders.create(input);
-      } catch (error) {
-        const code =
-          typeof error === 'object' && error !== null && 'code' in error
-            ? (error as { code?: unknown }).code
-            : undefined;
-        if (code !== 'DUPLICATE_ACTIVE_ORDER') throw error;
+    mutationFn: (input: { cartId: string; tickets: ReplaceCartTicketsInput }) =>
+      api.carts.replaceTickets(input.cartId, input.tickets),
+    onSuccess: (cart) => {
+      client.setQueryData(queryKeys.cart(cart.id), cart);
+      void client.invalidateQueries({ queryKey: queryKeys.cartPreview(cart.id) });
+    },
+  });
+}
 
-        const page = await api.orders.list(undefined, HELD_ORDER_SEARCH_LIMIT);
-        const held = page.data.find(
-          (order) => order.eventId === input.eventId && order.status === HELD_ORDER_STATUS,
-        );
-        throw new HeldOrderError(held?.id ?? null);
-      }
+export function useReplaceCartAddons() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { cartId: string; addons: CartAddonInput[] }) =>
+      api.carts.replaceAddons(input.cartId, input.addons),
+    onSuccess: (cart) => {
+      client.setQueryData(queryKeys.cart(cart.id), cart);
+      void client.invalidateQueries({ queryKey: queryKeys.cartPreview(cart.id) });
     },
-    onSuccess: () => {
+  });
+}
+
+/**
+ * Which contacts hold a ticket to this event, so someone who bought their own can still be put
+ * in a room. Answers nothing about whether a number is registered (CLAUDE.md rule 4).
+ */
+export function useLookupRecipients() {
+  return useMutation({
+    mutationFn: (input: { cartId: string; phoneNumbers: string[] }) =>
+      api.carts.lookupRecipients(input.cartId, input.phoneNumbers),
+  });
+}
+
+export function useApplyCartPromo() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { cartId: string; code: string }) =>
+      api.carts.applyPromo(input.cartId, input.code),
+    onSuccess: (cart) => {
+      client.setQueryData(queryKeys.cart(cart.id), cart);
+      void client.invalidateQueries({ queryKey: queryKeys.cartPreview(cart.id) });
+    },
+    // A code the server rejects is an answer, not a blip worth retrying.
+    retry: false,
+  });
+}
+
+export function useRemoveCartPromo() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (cartId: string) => api.carts.removePromo(cartId),
+    onSuccess: (cart) => {
+      client.setQueryData(queryKeys.cart(cart.id), cart);
+      void client.invalidateQueries({ queryKey: queryKeys.cartPreview(cart.id) });
+    },
+  });
+}
+
+/**
+ * The server's price for this cart, and the token Place Order needs.
+ *
+ * A mutation rather than a query on purpose: the token is short-lived and tied to the exact
+ * total the buyer was shown, so the preview has to be *taken* at a moment the screen chooses
+ * rather than refreshed underneath them while they read it.
+ */
+export function useCartPreview() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (cartId: string) => api.carts.preview(cartId),
+    onSuccess: (preview) => {
+      client.setQueryData(queryKeys.cartPreview(preview.cartId), preview);
+    },
+  });
+}
+
+/**
+ * Places the order against the exact preview the buyer confirmed.
+ *
+ * `CART_PRICING_CHANGED` is never retried here. The screen has to re-preview and ask again,
+ * because the alternative is charging a total nobody agreed to.
+ */
+export function usePlaceCartOrder() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { cartId: string; pricingConfirmationToken: string }) =>
+      api.carts.placeOrder(input.cartId, input.pricingConfirmationToken),
+    onSuccess: (order) => {
+      client.setQueryData(queryKeys.order(order.id), order);
       void client.invalidateQueries({ queryKey: queryKeys.orders });
+      void client.invalidateQueries({ queryKey: queryKeys.cartRoot });
     },
+    retry: false,
   });
 }
 
@@ -543,6 +574,32 @@ export function useEntryPass(
 }
 
 /* --------------------------------------------------------------- account */
+
+/**
+ * Extras attached to a ticket after fulfilment. Read-only in P0.1: `redemptionsAllowed` and
+ * `redemptionsUsed` are shown at most, never changed, until the scanner exists.
+ */
+export function useTicketAddons(ticketId: string | undefined) {
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  return useQuery({
+    queryKey: queryKeys.ticketAddons(ticketId ?? ''),
+    queryFn: () => api.tickets.addons(ticketId as string),
+    enabled: signedIn && Boolean(ticketId),
+    // A build with extras switched off answers not-found, which means "none", not "broken".
+    retry: false,
+  });
+}
+
+/** Starting point for buying extras against a ticket already held. */
+export function useTicketAddonContext(ticketId: string | undefined) {
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  return useQuery({
+    queryKey: queryKeys.ticketAddonContext(ticketId ?? ''),
+    queryFn: () => api.tickets.addonContext(ticketId as string),
+    enabled: signedIn && Boolean(ticketId),
+    retry: false,
+  });
+}
 
 export function useDeletionPreview(enabled = true) {
   const signedIn = useAuthStore((s) => s.status === 'signed-in');

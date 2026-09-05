@@ -43,18 +43,8 @@ import { normalizePhone } from '../../lib/phone';
 
 /**
  * Live backend implementation. Endpoint paths and DTO shapes are verified against the staging
- * OpenAPI schema (`GET /api/docs-json` on the deployed backend) — see each method. One method
- * has no endpoint yet and throws a clearly-labelled error rather than guessing a URL — see
- * `NOT_IMPLEMENTED` below.
+ * OpenAPI schema (`GET /api/docs-json` on the deployed backend) — see each method.
  */
-
-function notImplemented(what: string): never {
-  throw new ApiError(
-    'NOT_IMPLEMENTED',
-    `${what} has no endpoint on the backend yet. Run in mock mode (EXPO_PUBLIC_API_MODE=mock).`,
-    501,
-  );
-}
 
 function normalizeCurrentUser(user: LiveCurrentUser): CurrentUser {
   return {

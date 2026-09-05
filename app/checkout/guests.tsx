@@ -23,7 +23,17 @@ import {
   type PhoneContact,
   type PickedContact,
 } from '../../src/hooks/useContacts';
-import { useEvent, useValidateGuests } from '../../src/hooks/queries';
+import {
+  useCart,
+  useCreateCart,
+  useEvent,
+  useReplaceCartAddons,
+  useReplaceCartTickets,
+  useValidateGuests,
+} from '../../src/hooks/queries';
+import { reassignToRefreshedCart } from '../../src/components/checkout/RecipientPicker';
+import { isSendableAddonLine } from '../../src/lib/addons';
+import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
 import { track } from '../../src/lib/analytics';
 import { messageForCode, messageForError } from '../../src/lib/errors';
 import {
@@ -92,6 +102,15 @@ export default function GuestsScreen() {
     canPickContact,
   } = useContacts();
   const validateGuests = useValidateGuests();
+  const cartId = useCheckoutStore((s) => s.cartId);
+  const setCartId = useCheckoutStore((s) => s.setCartId);
+  const addons = useCheckoutStore((s) => s.addons);
+  const setAddons = useCheckoutStore((s) => s.setAddons);
+  const cartQuery = useCart(cartId ?? undefined);
+  const createCart = useCreateCart();
+  const replaceTickets = useReplaceCartTickets();
+  const replaceAddons = useReplaceCartAddons();
+  const steps = useCheckoutSteps(validEventId);
 
   const [manual, setManual] = useState('');
   const [search, setSearch] = useState('');
@@ -281,7 +300,8 @@ export default function GuestsScreen() {
   }
 
   /**
-   * The OS picker: the whole address book, no permission, one person back.
+   * The OS picker: the whole address book, one person back. iOS needs no permission for it;
+   * Android needs READ_CONTACTS to read the choice back and asks for it before opening.
    *
    * A dismissal is an answer, not a fault, so it says nothing. Everything else does, because
    * a sheet that closes leaving no guest and no reason reads as a broken screen.
@@ -293,6 +313,14 @@ export default function GuestsScreen() {
     if (result.status === 'cancelled') return;
     if (result.status === 'failed') {
       setError("We couldn't open your contacts. Add their number below instead.");
+      return;
+    }
+    if (result.status === 'no-permission') {
+      setError(
+        result.canAskAgain
+          ? 'Sukun needs access to your contacts to open your address book. Add their number below instead.'
+          : 'Contacts access is turned off for Sukun. Turn it on in Settings, or add their number below.',
+      );
       return;
     }
     if (result.status === 'no-number') {
@@ -361,13 +389,78 @@ export default function GuestsScreen() {
       }
     }
 
+    // The cart is created here, not on the pass screen: this is the first point at which the
+    // selection is complete enough to send, and `PUT /tickets` needs every recipient at once.
+    try {
+      const cart = cartId ? { id: cartId } : await createCart.mutateAsync(validEventId);
+      setCartId(cart.id);
+
+      // Snapshotted before the edit. `PUT /carts/:id/tickets` wipes the cart's extras and makes
+      // no promise that a person keeps the same `cartAttendeeId`, so this copy and the attendee
+      // list it points at are the only way back to what the buyer picked.
+      const draft = addons.map((line) => ({ ...line }));
+      const before = cartQuery.data?.attendees ?? [];
+
+      const refreshed = await replaceTickets.mutateAsync({
+        cartId: cart.id,
+        tickets: {
+          buyerTierId: holdsTicket ? null : tierId,
+          items: [{ tierId: tierId as string, quantity }],
+          guests: guests.map((guest) => ({
+            phoneNumber: guest.phoneNumber,
+            name: guest.name,
+            tierId: tierId as string,
+          })),
+        },
+      });
+
+      /*
+        Coming back through this step used to throw the extras away outright. Stepping back to
+        swap one guest and stepping forward again is not a decision to abandon a room and three
+        dinners, and nothing said it had happened.
+
+        The draft is re-pointed at the refreshed cart instead, matching people by phone number.
+        Somebody dropped from the order loses their units rather than carrying an id the server
+        has discarded, which leaves that line short and sends the buyer back to the assignment
+        step to finish it: visible, and about the one person who actually changed.
+      */
+      if (draft.length > 0) {
+        const reassigned = reassignToRefreshedCart(draft, before, refreshed.attendees);
+        setAddons(reassigned);
+
+        // Only lines the server will take. A half-assigned one is normal here and is refused
+        // outright by that endpoint; it goes up when the assignment step finishes it.
+        const sendable = reassigned.filter(isSendableAddonLine);
+        if (sendable.length > 0) {
+          await replaceAddons.mutateAsync({
+            cartId: cart.id,
+            addons: sendable.map((line) => ({
+              optionId: line.optionId,
+              quantity: line.quantity,
+              ...(line.type === 'accommodation'
+                ? { rooms: line.rooms ?? [] }
+                : { assignments: line.assignments ?? [] }),
+            })),
+          });
+        }
+      }
+    } catch (err) {
+      setError(messageForError(err));
+      return;
+    }
+
     track('guests_added', {
       event_id: validEventId,
       guest_count: guests.length,
       contacts_guest_count: guests.filter((g) => g.fromContacts).length,
       manual_guest_count: guests.filter((g) => !g.fromContacts).length,
     });
-    router.push(`/checkout/review?eventId=${validEventId}`);
+
+    router.push(
+      steps.hasAddons
+        ? `/checkout/addons?eventId=${validEventId}`
+        : `/checkout/review?eventId=${validEventId}`,
+    );
   }
 
   if (access.loading)
@@ -399,7 +492,7 @@ export default function GuestsScreen() {
     <Screen scroll contentStyle={styles.content}>
       <BackButton onPress={() => router.back()} style={styles.back} />
 
-      <StepLabel>Checkout · step 2 of 3</StepLabel>
+      <StepLabel>{`Checkout · step 2 of ${steps.total}`}</StepLabel>
       <View style={styles.heading}>
         <BulletHeading title="Bringing anyone?" size="md" />
       </View>

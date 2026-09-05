@@ -589,21 +589,28 @@ describe('cart addons', () => {
     await completeProfile();
   });
 
-  it('blocks checkout until every unit has a recipient', async () => {
+  /**
+   * The refusal is at the write, not at the till. `PUT /carts/:id/addons` is a commit: it takes
+   * the whole line or none of it, so a cart can never reach preview holding two of three units
+   * spoken for. Asserting this here rather than on the preview is the difference between a mock
+   * that matches the backend and one that quietly accepts drafts staging answers 400 to.
+   */
+  it('will not take an extra whose units are not all spoken for', async () => {
     const { cartId, attendees } = await cartWithGuest();
-    await mockApi.carts.replaceAddons(cartId, [
-      {
-        optionId: 'opt-dinner',
-        quantity: 3,
-        assignments: [{ cartAttendeeId: attendees[0]!.cartAttendeeId, quantity: 2 }],
-      },
-    ]);
 
-    const preview = await mockApi.carts.preview(cartId);
+    await expect(
+      mockApi.carts.replaceAddons(cartId, [
+        {
+          optionId: 'opt-dinner',
+          quantity: 3,
+          assignments: [{ cartAttendeeId: attendees[0]!.cartAttendeeId, quantity: 2 }],
+        },
+      ]),
+    ).rejects.toMatchObject({ code: 'ADDON_ASSIGNMENT_COUNT_MISMATCH' });
 
-    expect(preview.canPlaceOrder).toBe(false);
-    expect(preview.issues.map((issue) => issue.code)).toContain('ADDON_ASSIGNMENT_COUNT_MISMATCH');
-    expect(preview.pricing.pricingConfirmationToken).toBeNull();
+    // Nothing was half-written either: the cart is as it was.
+    const cart = await mockApi.carts.get(cartId);
+    expect(cart.addons).toHaveLength(0);
   });
 
   it('rejects an assignment that names both a cart attendee and a ticket', async () => {
@@ -622,19 +629,22 @@ describe('cart addons', () => {
     ).rejects.toMatchObject({ code: 'ADDON_ASSIGNMENT_TARGET_INVALID' });
   });
 
-  it('will not check out a half-filled room', async () => {
+  /** Same rule for rooms: a double with one person in it is refused when it is sent, not later. */
+  it('will not take a half-filled room', async () => {
     const { cartId, attendees } = await cartWithGuest();
-    await mockApi.carts.replaceAddons(cartId, [
-      {
-        optionId: 'opt-lodge-double-2',
-        quantity: 1,
-        rooms: [{ occupants: [{ cartAttendeeId: attendees[0]!.cartAttendeeId }] }],
-      },
-    ]);
 
-    const preview = await mockApi.carts.preview(cartId);
+    await expect(
+      mockApi.carts.replaceAddons(cartId, [
+        {
+          optionId: 'opt-lodge-double-2',
+          quantity: 1,
+          rooms: [{ occupants: [{ cartAttendeeId: attendees[0]!.cartAttendeeId }] }],
+        },
+      ]),
+    ).rejects.toMatchObject({ code: 'ROOM_OCCUPANCY_UNFILLED' });
 
-    expect(preview.issues.map((issue) => issue.code)).toContain('ROOM_OCCUPANCY_UNFILLED');
+    const cart = await mockApi.carts.get(cartId);
+    expect(cart.addons).toHaveLength(0);
   });
 
   it('counts accommodation quantity in rooms, not people', async () => {
@@ -785,5 +795,135 @@ describe('cart place order', () => {
     expect(addons).toHaveLength(1);
     expect(addons[0]?.type).toBe('meal');
     expect(data[0]?.addonCount).toBe(1);
+  });
+});
+
+/**
+ * A ticket can exist before its owner (CLAUDE.md rule 2), and an extra can be bought for that
+ * owner by someone who has never met them.
+ *
+ * The scenario, which is the one that breaks quietly if any layer starts requiring an account:
+ * A buys a ticket for B and attaches B by phone. B never signs up, so B's ticket sits in
+ * `pending_claim` with no user behind it. C, a third person with no relationship to either,
+ * must still be able to find B by phone from their own cart and buy B an extra.
+ *
+ * The failure mode is invisible rather than loud: a lookup that quietly required a registered
+ * user would answer `eligible: false`, which is byte-identical to the answer for a number that
+ * genuinely has no ticket. Nothing would error. These tests exist so that regression is loud.
+ */
+describe('extras for a ticket holder who never signed up', () => {
+  const B_PHONE = '+201055667788';
+  const C_PHONE = '+201077889900';
+
+  /** A buys a Tulua ticket for B, pays, and leaves B holding an unclaimed ticket. */
+  async function ticketForUnregisteredB() {
+    await signIn();
+    await completeProfile();
+    // The seeded buyer already holds a Tulua ticket, so every ticket in this order is a guest's.
+    const order = await placeOrder({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: B_PHONE, name: 'Basma Adel', tierId: TIER_WEEKEND }],
+    });
+    await mockApi.payments.initiate(order.id);
+    advance(5000);
+    const settled = await mockApi.payments.status(order.id);
+    expect(settled.orderStatus).toBe('paid');
+    expect(settled.ticketsIssued).toBe(1);
+  }
+
+  /** C is a stranger to both: a different number, their own profile, their own cart. */
+  async function signInAsC() {
+    await signIn(C_PHONE);
+    await mockApi.profile.update({
+      fullName: 'Karim Fouad',
+      email: 'karim@email.com',
+      dateOfBirth: '1990-07-02',
+      gender: 'male',
+      areaId: 'ar-maadi',
+    });
+    return mockApi.profile.uploadSelfie('file:///karim.jpg');
+  }
+
+  it('lets C find B by phone even though B has no account', async () => {
+    await ticketForUnregisteredB();
+    await signInAsC();
+
+    const cart = await mockApi.carts.create(TULUA_ID);
+    const [result] = await mockApi.carts.lookupRecipients(cart.id, [B_PHONE]);
+
+    // B is reachable because B holds a ticket, not because B is a user. There is no user.
+    expect(result?.eligible).toBe(true);
+    expect(result?.ticketId).toBeTruthy();
+    // The server never sources a stranger's name; the app labels people from its own contacts.
+    expect(result).not.toHaveProperty('name');
+    expect(result).not.toHaveProperty('displayName');
+  });
+
+  it('lets C actually buy B an extra, and issues it against B’s unclaimed ticket', async () => {
+    await ticketForUnregisteredB();
+    await signInAsC();
+
+    const cart = await mockApi.carts.create(TULUA_ID);
+    const [found] = await mockApi.carts.lookupRecipients(cart.id, [B_PHONE]);
+    const bTicketId = found!.ticketId!;
+
+    // C buys their own ticket and, in the same order, a dinner voucher for B.
+    await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: TIER_WEEKEND,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [],
+    });
+    await mockApi.carts.replaceAddons(cart.id, [
+      { optionId: 'opt-dinner', quantity: 1, assignments: [{ ticketId: bTicketId, quantity: 1 }] },
+    ]);
+
+    const preview = await mockApi.carts.preview(cart.id);
+    expect(preview.pricing.status).toBe('complete');
+
+    const order = await mockApi.carts.placeOrder(
+      cart.id,
+      preview.pricing.pricingConfirmationToken!,
+    );
+    await mockApi.payments.initiate(order.id);
+    advance(5000);
+    expect((await mockApi.payments.status(order.id)).orderStatus).toBe('paid');
+
+    // C cannot read B's ticket back, and should not be able to: buying someone an extra does
+    // not make their ticket yours.
+    await expect(mockApi.tickets.addons(bTicketId)).rejects.toMatchObject({
+      code: 'TICKET_FORBIDDEN',
+    });
+
+    // The proof that matters is B's. B finally signs up, which binds the waiting ticket
+    // (rule 2, no claim code), and the extra a stranger bought them is on it.
+    await signIn(B_PHONE);
+    const onB = await mockApi.tickets.addons(bTicketId);
+    expect(onB).toHaveLength(1);
+    expect(onB[0]?.type).toBe('meal');
+  });
+
+  /**
+   * Rule 4. The whole reason the lookup is safe to expose is that "no Sukun account" and
+   * "account, but no ticket to this event" are one answer. If they ever diverge, this fails.
+   */
+  it('answers identically for a number with no account and one with an account but no ticket', async () => {
+    await ticketForUnregisteredB();
+    await signInAsC();
+    const cart = await mockApi.carts.create(TULUA_ID);
+
+    const strangerPhone = '+201090000001';
+    const [noAccount] = await mockApi.carts.lookupRecipients(cart.id, [strangerPhone]);
+
+    // C themselves: a real, registered account that holds no Tulua ticket yet.
+    const [accountNoTicket] = await mockApi.carts.lookupRecipients(cart.id, [C_PHONE]);
+
+    expect(noAccount).toEqual({ ...noAccount, ...accountNoTicket, phoneNumber: noAccount!.phoneNumber });
+    expect(noAccount?.eligible).toBe(false);
+    expect(accountNoTicket?.eligible).toBe(false);
+    // Same keys, same values, nothing that could tell the two apart.
+    expect(Object.keys(noAccount!).sort()).toEqual(Object.keys(accountNoTicket!).sort());
+    expect({ ...noAccount, phoneNumber: '' }).toEqual({ ...accountNoTicket, phoneNumber: '' });
   });
 });

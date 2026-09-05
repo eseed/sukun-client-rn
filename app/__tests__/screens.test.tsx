@@ -125,6 +125,43 @@ beforeEach(() => {
   useCheckoutStore.getState().reset();
 });
 
+interface CartCheckoutInput {
+  eventId: string;
+  buyerTierId: string | null;
+  items: { tierId: string; quantity: number }[];
+  guests: { phoneNumber: string; name: string; tierId: string }[];
+}
+
+/**
+ * Gets a checkout as far as the guests screen leaves it: a draft cart holding every recipient,
+ * with the checkout store pointing at it.
+ *
+ * The review screen reads its figures off that cart and shows "this checkout has expired"
+ * without one, so a test that renders review has to arrive carrying a cart id exactly as the
+ * real flow does.
+ */
+async function startCartCheckout(input: CartCheckoutInput) {
+  const cart = await mockApi.carts.create(input.eventId);
+  await mockApi.carts.replaceTickets(cart.id, {
+    buyerTierId: input.buyerTierId,
+    items: input.items,
+    guests: input.guests,
+  });
+  useCheckoutStore.getState().setCartId(cart.id);
+  return cart;
+}
+
+/**
+ * Places an order through the cart, the way the app does: cart, tickets, preview, place. Tests
+ * that only care about what happens *after* an order exists use this rather than restating the
+ * whole checkout.
+ */
+async function placeOrderViaCart(input: CartCheckoutInput) {
+  const cart = await startCartCheckout(input);
+  const preview = await mockApi.carts.preview(cart.id);
+  return mockApi.carts.placeOrder(cart.id, preview.pricing.pricingConfirmationToken!);
+}
+
 describe('01 Welcome', () => {
   it('shows the wordmark lockup, tagline and CTA', () => {
     renderWithProviders(<WelcomeScreen />);
@@ -239,7 +276,14 @@ describe('07 Event detail', () => {
 });
 
 describe('08 Choose your pass', () => {
-  it('lists tiers with prices and a server-computed subtotal', async () => {
+  /**
+   * The design's artboard shows a running subtotal here; the screen cannot show one and must
+   * not. A cart is priced by the server and cannot be priced at all until it has recipients,
+   * which are picked on the next screen, so the only honest figure on this screen is what one
+   * ticket costs. Multiplying it by the quantity is the client-side arithmetic rule 7 forbids,
+   * so this test asserts the per-ticket price is there and the invented total is not.
+   */
+  it('lists tiers with their per-ticket price, and no locally multiplied subtotal', async () => {
     mockParams.eventId = TULUA_ID;
     await signInAndComplete();
     useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
@@ -248,13 +292,19 @@ describe('08 Choose your pass', () => {
     renderWithProviders(<ChoosePassScreen />);
 
     await waitFor(() => expect(screen.getByText('Choose your pass')).toBeTruthy());
-    expect(screen.getByText('Checkout · step 1 of 3')).toBeTruthy();
+    // Tulua sells extras, so its checkout is four steps (P0.1 decision #10). The label starts at
+    // the shorter flow and grows once the catalogue lands, so it is waited for.
+    await waitFor(() => expect(screen.getByText('Checkout · step 1 of 4')).toBeTruthy());
     expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
-    expect(screen.getByText('1,600.00 EGP')).toBeTruthy();
+    expect(screen.getByText('Day 1 Pass')).toBeTruthy();
     expect(screen.getByText('Day 1 & 2')).toBeTruthy();
     expect(screen.getByText('Quantity')).toBeTruthy();
-    // 1,600 × 2, priced by the api rather than the screen.
-    await waitFor(() => expect(screen.getByText('3,200.00 EGP')).toBeTruthy());
+    // Once on the tier row, once against the stepper as what each ticket costs.
+    expect(screen.getAllByText('1,600.00 EGP').length).toBe(2);
+    expect(screen.getByText('Each')).toBeTruthy();
+    // 1,600 × 2 is the server's sum to make, and it has nothing to price yet.
+    expect(screen.queryByText('3,200.00 EGP')).toBeNull();
+    expect(screen.queryByText('Subtotal')).toBeNull();
   });
 });
 
@@ -439,6 +489,8 @@ describe('09 Guests', () => {
 
     // The seeded user already holds a Tulua ticket, so their single ticket is a guest slot.
     await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
+    // Tulua sells extras, so this is step 2 of 4 and the extras step comes next.
+    await waitFor(() => expect(screen.getByText('Checkout · step 2 of 4')).toBeTruthy());
     expect(
       screen.getByText(
         'You already have a ticket, so this one is for a guest.',
@@ -466,7 +518,34 @@ describe('09 Guests', () => {
     fireEvent.press(screen.getByText('Continue'));
 
     await waitFor(() =>
-      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${TULUA_ID}`),
+      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/addons?eventId=${TULUA_ID}`),
+    );
+  });
+
+  /**
+   * An event with nothing to sell alongside a ticket has no extras step, so guests lead
+   * straight to review rather than to an empty screen the buyer has to click past
+   * (P0.1 decision #10, collapse to 3 steps).
+   */
+  it('skips the extras step for an event that sells none', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    // The premise, stated rather than assumed: this event's catalogue is empty.
+    expect(await mockApi.addons.list(SOUND_BATH_ID)).toEqual([]);
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+    useCheckoutStore.getState().setQuantity(2);
+
+    renderWithProviders(<GuestsScreen />);
+
+    await waitFor(() => expect(screen.getByText('Checkout · step 2 of 3')).toBeTruthy());
+    fireEvent.press(screen.getByText('Add from Contacts'));
+    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
+    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
+
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() =>
+      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${SOUND_BATH_ID}`),
     );
   });
 
@@ -556,10 +635,12 @@ describe('09 Guests', () => {
     fireEvent.press(screen.getByText('Add from Contacts'));
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
     fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
+    // Tulua sells extras, so the swapped-in guest leads on to the extras step, not to review.
+    await waitFor(() => expect(screen.getByText('Checkout · step 2 of 4')).toBeTruthy());
     fireEvent.press(screen.getByText('Continue'));
 
     await waitFor(() =>
-      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${TULUA_ID}`),
+      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/addons?eventId=${TULUA_ID}`),
     );
   });
 
@@ -608,6 +689,145 @@ describe('09 Guests', () => {
     fireEvent.press(screen.getByLabelText('Clear contact search'));
     expect(screen.getByText('Nour Hassan')).toBeTruthy();
   });
+
+  /**
+   * Extras live in the app until the assignment steps finish them, and stepping back through
+   * here used to throw them away outright: `PUT /carts/:id/tickets` wipes the cart's extras, so
+   * the draft was cleared to match. Coming back to swap one guest is not a decision to abandon
+   * a room and three dinners, and nothing said it had happened.
+   *
+   * The draft is re-pointed at the rebuilt cart instead, matching people by phone number, since
+   * that call makes no promise a person keeps the same `cartAttendeeId`.
+   */
+  it('keeps the extras when the buyer steps back through this screen', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+
+    // This buyer already holds a Tulua ticket in the fixtures, so every ticket here is a guest's.
+    const cart = await mockApi.carts.create(TULUA_ID);
+    await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    const before = (await mockApi.carts.get(cart.id)).attendees;
+    const guest = before.find((attendee) => attendee.phoneNumber === '+201022334455')!;
+
+    const store = useCheckoutStore.getState();
+    store.start(TULUA_ID, TIER_WEEKEND);
+    store.setBuyerTakesTicket(false);
+    store.setQuantity(1);
+    store.addGuest({ phoneNumber: '+201022334455', name: 'Nour Hassan', fromContacts: true });
+    store.setCartId(cart.id);
+    store.upsertAddon({
+      addonId: 'addon-meals',
+      addonName: 'Dinner voucher',
+      type: 'meal',
+      optionId: 'opt-dinner',
+      optionLabel: 'Dinner voucher',
+      unitPriceEgp: '280.00',
+      quantity: 1,
+      assignments: [{ cartAttendeeId: guest.cartAttendeeId, quantity: 1 }],
+    });
+
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByText('1 of 1 picked')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('Continue'));
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+
+    const kept = useCheckoutStore.getState().addons;
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.assignments).toHaveLength(1);
+
+    // Re-pointed at whatever id the rebuilt cart gave that person, not the one it was holding.
+    const after = (await mockApi.carts.get(cart.id)).attendees;
+    const sameGuest = after.find((attendee) => attendee.phoneNumber === '+201022334455')!;
+    expect(kept[0]!.assignments![0]!.cartAttendeeId).toBe(sameGuest.cartAttendeeId);
+
+    // Whole, so it went back to the cart in the same breath rather than waiting for a later step.
+    const saved = await mockApi.carts.get(cart.id);
+    expect(saved.addons.map((line) => line.optionId)).toEqual(['opt-dinner']);
+  });
+
+  /**
+   * The one case where an extra really does have to go: the person holding it is no longer in
+   * the order. Swapping one guest for another is the way that happens on this screen, since a
+   * ticket left with nobody on it blocks Continue outright.
+   *
+   * The departing guest's units are dropped rather than sent with an id the server has
+   * discarded, which leaves that line short and sends the buyer back to the assignment step to
+   * give it to the new person. Everything belonging to somebody who stayed is untouched.
+   */
+  it('drops only the units belonging to a guest who was swapped out', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+
+    const cart = await mockApi.carts.create(TULUA_ID);
+    await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201188776655', name: 'Omar Farouk', tierId: TIER_WEEKEND },
+      ],
+    });
+    const before = (await mockApi.carts.get(cart.id)).attendees;
+    const nour = before.find((a) => a.phoneNumber === '+201022334455')!;
+    const omar = before.find((a) => a.phoneNumber === '+201188776655')!;
+
+    const store = useCheckoutStore.getState();
+    store.start(TULUA_ID, TIER_WEEKEND);
+    store.setBuyerTakesTicket(false);
+    store.setQuantity(2);
+    store.addGuest({ phoneNumber: '+201022334455', name: 'Nour Hassan', fromContacts: true });
+    store.addGuest({ phoneNumber: '+201188776655', name: 'Omar Farouk', fromContacts: true });
+    store.setCartId(cart.id);
+    store.upsertAddon({
+      addonId: 'addon-meals',
+      addonName: 'Dinner voucher',
+      type: 'meal',
+      optionId: 'opt-dinner',
+      optionLabel: 'Dinner voucher',
+      unitPriceEgp: '280.00',
+      quantity: 2,
+      assignments: [
+        { cartAttendeeId: nour.cartAttendeeId, quantity: 1 },
+        { cartAttendeeId: omar.cartAttendeeId, quantity: 1 },
+      ],
+    });
+
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByText('2 of 2 picked')).toBeTruthy());
+
+    // Omar comes off the order and somebody else takes his ticket. The quantity is untouched:
+    // reducing it belongs to the pass screen, and `setQuantity` drops the draft by design.
+    fireEvent.press(screen.getByLabelText('Remove Omar Farouk'));
+    await waitFor(() => expect(screen.getByText('1 of 2 picked')).toBeTruthy());
+    fireEvent.changeText(screen.getByLabelText('Guest phone number'), '1155667788');
+    fireEvent.press(screen.getByText('Add'));
+    await waitFor(() => expect(screen.getByText('2 of 2 picked')).toBeTruthy());
+
+    fireEvent.press(screen.getByText('Continue'));
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+
+    const kept = useCheckoutStore.getState().addons;
+    expect(kept).toHaveLength(1);
+    // Nour's unit survived; Omar's did not, so the line is now short of its own quantity and the
+    // assignment step will say so rather than the server refusing it at the till.
+    expect(kept[0]!.quantity).toBe(2);
+    expect(kept[0]!.assignments).toHaveLength(1);
+
+    const after = (await mockApi.carts.get(cart.id)).attendees;
+    const stillNour = after.find((a) => a.phoneNumber === '+201022334455')!;
+    expect(kept[0]!.assignments![0]!.cartAttendeeId).toBe(stillNour.cartAttendeeId);
+    // Nobody is carrying an id the cart no longer knows.
+    const liveIds = new Set(after.map((a) => a.cartAttendeeId));
+    expect(liveIds.has(kept[0]!.assignments![0]!.cartAttendeeId!)).toBe(true);
+
+    // Short, so it is not something the server will take yet, and it was not sent.
+    expect((await mockApi.carts.get(cart.id)).addons).toHaveLength(0);
+  });
 });
 
 describe('10 Review & pay', () => {
@@ -616,19 +836,46 @@ describe('10 Review & pay', () => {
     await signInAndComplete();
     useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
     useCheckoutStore.getState().setQuantity(2);
+    // signInAndComplete seeds this user a Tulua ticket, so both tickets are guests'.
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+      ],
+    });
 
     renderWithProviders(<ReviewScreen />);
 
-    await waitFor(() => expect(screen.getByText('Checkout · step 3 of 3')).toBeTruthy());
+    // Tulua sells extras, so review is the fourth of four steps.
+    await waitFor(() => expect(screen.getByText('Checkout · step 4 of 4')).toBeTruthy());
     expect(screen.getByText('Review & pay')).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Full Weekend Pass × 2')).toBeTruthy());
-    expect(screen.getByText('3,200.00 EGP')).toBeTruthy();
+    // Once as the ticket line, once as the subtotal. Both are the server's figure.
+    expect(screen.getAllByText('3,200.00 EGP').length).toBe(2);
+    expect(screen.getByText('Subtotal')).toBeTruthy();
     expect(screen.getByText('VAT (14%)')).toBeTruthy();
+    expect(screen.getByText('448.00 EGP')).toBeTruthy();
     expect(screen.getByText('Total')).toBeTruthy();
+    expect(screen.getByText('3,648.00 EGP')).toBeTruthy();
     expect(
-      screen.getByText('I understand tickets are non-refundable and non-transferable.'),
+      screen.getByText('I understand tickets and add-ons are non-refundable and non-transferable.'),
     ).toBeTruthy();
-    expect(screen.getByText('Continue to payment')).toBeTruthy();
+    // The box is unticked on arrival, so the CTA is blocked and says which of the two blockers
+    // it is: a grey button with no reason is the same dead end as a black one.
+    const blocked = screen.getByRole('button', { name: 'Accept the terms to pay' });
+    expect(blocked).toBeDisabled();
+    expect(screen.queryByText('Continue to payment')).toBeNull();
+
+    fireEvent.press(
+      screen.getByText('I understand tickets and add-ons are non-refundable and non-transferable.'),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
+    );
   });
 
   /**
@@ -640,6 +887,14 @@ describe('10 Review & pay', () => {
     mockParams.eventId = TULUA_ID;
     await signInAndComplete();
     useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    // signInAndComplete seeds this user a Tulua ticket, so the one ticket is a guest's.
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
 
     renderWithProviders(<ReviewScreen />);
 
@@ -648,22 +903,26 @@ describe('10 Review & pay', () => {
     fireEvent.changeText(screen.getByLabelText('Promo code'), 'tulua500');
     fireEvent.press(screen.getByText('Apply'));
 
-    await waitFor(() => expect(screen.getByText('Promo · TULUA500')).toBeTruthy());
-    expect(screen.getByText('Remove promo code')).toBeTruthy();
+    // The row names the promo's scope: TULUA500 is configured against ticket tiers, so an
+    // extras-only basket is told why nothing came off rather than left guessing.
+    await waitFor(() => expect(screen.getByText('Promo · TULUA500, tickets only')).toBeTruthy());
+    expect(screen.getByText('Promo TULUA500 applied')).toBeTruthy();
     // 1,600.00 subtotal − 500.00 = 1,100.00 net, VAT 154.00, total 1,254.00.
     expect(screen.getByText('−500.00 EGP')).toBeTruthy();
     expect(screen.getByText('154.00 EGP')).toBeTruthy();
     expect(screen.getByText('1,254.00 EGP')).toBeTruthy();
 
-    fireEvent.press(screen.getByText('Remove promo code'));
+    fireEvent.press(screen.getByText('Remove'));
 
-    await waitFor(() => expect(screen.queryByText('Promo · TULUA500')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Promo · TULUA500, tickets only')).toBeNull());
     await waitFor(() => expect(screen.getByText('1,824.00 EGP')).toBeTruthy());
   });
 
   /**
    * Card entry belongs to Paymob's sheet, so "Continue to payment" holds the order and calls
-   * `presentPayVC` itself — there is no intermediate card screen between review and the sheet.
+   * `presentPayVC` itself: there is no intermediate card screen between review and the sheet.
+   * A screen that opens the sheet owns its verdict too, so SUCCESS has to land on the
+   * confirmation rather than leaving a paid buyer looking at the review screen.
    */
   it('opens the Paymob sheet directly and confirms on SUCCESS', async () => {
     mockParams.eventId = TULUA_ID;
@@ -678,6 +937,12 @@ describe('10 Review & pay', () => {
       phoneNumber: '+201022334455',
       name: 'Nour Hassan',
       fromContacts: false,
+    });
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
     });
     useCheckoutStore.getState().setTermsAccepted(true);
 
@@ -712,7 +977,7 @@ describe('11 Payment', () => {
   it('shows the Paymob amount and no card fields of its own', async () => {
     await signInAndComplete();
     // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
-    const order = await mockApi.orders.create({
+    const order = await placeOrderViaCart({
       eventId: TULUA_ID,
       buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
@@ -740,7 +1005,7 @@ describe('12 Confirmation', () => {
   it('names the order and explains the guest WhatsApp message', async () => {
     await signInAndComplete();
     // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
-    const order = await mockApi.orders.create({
+    const order = await placeOrderViaCart({
       eventId: TULUA_ID,
       buyerTierId: null,
       items: [{ tierId: TIER_WEEKEND, quantity: 2 }],

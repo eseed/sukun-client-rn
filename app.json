@@ -29,6 +29,9 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_CONTACTS"
+      ],
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS"
       ]
     },
     "web": {

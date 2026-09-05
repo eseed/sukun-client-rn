@@ -68,11 +68,32 @@ beforeEach(() => {
   useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
 });
 
+/**
+ * Places an order through the cart, the way the app does: cart, tickets, preview, place. Tests
+ * that only care about what happens *after* an order exists use this rather than restating the
+ * whole checkout.
+ */
+async function placeOrderViaCart(input: {
+  eventId: string;
+  buyerTierId: string | null;
+  items: { tierId: string; quantity: number }[];
+  guests: { phoneNumber: string; name: string; tierId: string }[];
+}) {
+  const cart = await mockApi.carts.create(input.eventId);
+  await mockApi.carts.replaceTickets(cart.id, {
+    buyerTierId: input.buyerTierId,
+    items: input.items,
+    guests: input.guests,
+  });
+  const preview = await mockApi.carts.preview(cart.id);
+  return mockApi.carts.placeOrder(cart.id, preview.pricing.pricingConfirmationToken!);
+}
+
 async function openPaymentSheet() {
   await signInAndComplete();
   // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
   // Two tickets cost the same either way, so the totals asserted below are unchanged.
-  const order = await mockApi.orders.create({
+  const order = await placeOrderViaCart({
     eventId: TULUA_ID,
     buyerTierId: null,
     items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
@@ -98,7 +119,7 @@ it('opens Paymob native checkout while waiting for the payment to complete', asy
   await signInAndComplete();
   // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
   // Two tickets cost the same either way, so the totals asserted below are unchanged.
-  const order = await mockApi.orders.create({
+  const order = await placeOrderViaCart({
     eventId: TULUA_ID,
     buyerTierId: null,
     items: [{ tierId: TIER_WEEKEND, quantity: 2 }],

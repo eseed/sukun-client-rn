@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 import { PermissionStatus } from 'expo-modules-core';
 import * as Contacts from 'expo-contacts';
 import { presentContactPickerAsync } from 'expo-contacts/legacy';
@@ -273,7 +273,7 @@ describe('contacts hook', () => {
    * living under has no bearing on it. Asking permission first would give away the one thing
    * that makes it worth having.
    */
-  it('picks a contact without asking for any permission', async () => {
+  it('picks a contact on iOS without asking for any permission', async () => {
     pickerMock.mockResolvedValue(
       pickedContact({ firstName: 'Nour', lastName: 'Hassan' }, ['01022334455']),
     );
@@ -353,5 +353,95 @@ describe('contacts hook', () => {
       status: 'no-number',
       name: 'Nour Hassan',
     });
+  });
+});
+
+/**
+ * Android reaches the same picker down a different road. `ACTION_PICK` hands back an id and
+ * expo-contacts reads the number off it through the content resolver, which is READ_CONTACTS:
+ * the system's temporary grant covers only the URI the picker returned, and the query goes to
+ * another one. So the permission is asked for *before* the picker opens, because a picker that
+ * opens without it spends the buyer's tap and then cannot answer.
+ *
+ * This is what used to make the whole cross-user extras path unreachable on Android: the picker
+ * was switched off there, and the screens that need a recipient have no other way to name one.
+ */
+describe('the OS contact picker on Android', () => {
+  let platform: ReturnType<typeof jest.replaceProperty>;
+
+  beforeEach(() => {
+    platform = jest.replaceProperty(Platform, 'OS', 'android');
+    // Nothing in this file clears mocks between cases, and every assertion here is about
+    // which of the two permission calls was made.
+    requestPermissionsMock.mockClear();
+    getPermissionsMock.mockClear();
+    pickerMock.mockClear();
+  });
+
+  afterEach(() => {
+    platform.restore();
+  });
+
+  it('asks for contacts permission, then opens the picker', async () => {
+    answer(permission(PermissionStatus.UNDETERMINED));
+    requestPermissionsMock.mockResolvedValue(permission(PermissionStatus.GRANTED));
+    pickerMock.mockResolvedValue(
+      pickedContact({ firstName: 'Nour', lastName: 'Hassan' }, ['01022334455']),
+    );
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    const result = await act(async () => rendered.result.current.pickContact());
+
+    expect(requestPermissionsMock).toHaveBeenCalled();
+    expect(result).toEqual({
+      status: 'picked',
+      contact: { name: 'Nour Hassan', numbers: ['+201022334455'] },
+    });
+  });
+
+  /** Already granted is not a reason to raise a second sheet. */
+  it('opens straight away when the permission is already held', async () => {
+    answer(permission(PermissionStatus.GRANTED));
+    pickerMock.mockResolvedValue(
+      pickedContact({ firstName: 'Nour', lastName: 'Hassan' }, ['01022334455']),
+    );
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    await act(async () => rendered.result.current.pickContact());
+
+    expect(getPermissionsMock).toHaveBeenCalled();
+    expect(requestPermissionsMock).not.toHaveBeenCalled();
+    expect(pickerMock).toHaveBeenCalled();
+  });
+
+  /**
+   * A refusal has to come back as a refusal rather than as `failed`: one of them has a way
+   * forward the screen can offer, and the other reads as a bug.
+   */
+  it('reports a refusal instead of opening a picker that cannot answer', async () => {
+    answer(permission(PermissionStatus.DENIED));
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    expect(await act(async () => rendered.result.current.pickContact())).toEqual({
+      status: 'no-permission',
+      canAskAgain: true,
+    });
+    expect(pickerMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Once Android has stopped asking, the sheet is a no-op and only Settings can undo it. The
+   * screen needs to know which of the two refusals it is looking at to say anything useful.
+   */
+  it('says when the OS will not ask again', async () => {
+    answer(permission(PermissionStatus.DENIED, { canAskAgain: false }));
+    const rendered = renderHook(() => useContacts(), { wrapper });
+
+    expect(await act(async () => rendered.result.current.pickContact())).toEqual({
+      status: 'no-permission',
+      canAskAgain: false,
+    });
+    // Raising a sheet the OS will silently swallow would look like the app doing nothing.
+    expect(requestPermissionsMock).not.toHaveBeenCalled();
   });
 });

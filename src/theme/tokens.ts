@@ -49,6 +49,14 @@ export const colors = {
   borderDefault: '#D8D0BE',
   borderStrong: palette.black,
 
+  /*
+   * The dark entry pass (design screen 21 · Entry pass / QR) draws its rules and its secondary
+   * type as creme at low opacity on black. The design system names no token for either, so they
+   * are recorded here rather than open-coded in the screen.
+   */
+  borderInverse: 'rgba(247,240,224,0.18)',
+  textInverseMuted: 'rgba(247,240,224,0.62)',
+
   accentRose: palette.rose300,
   accentGold: palette.gold300,
   accentSky: palette.sky500,

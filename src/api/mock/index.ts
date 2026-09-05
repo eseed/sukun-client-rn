@@ -46,7 +46,7 @@ import {
   seedTickets,
   VAT_RATE,
 } from './fixtures';
-import { applyRate, clampDiscount, multiply, subtract, sum, toEgp, toPiastres } from './money';
+import { multiply, toEgp, toPiastres } from './money';
 import { mockConfig } from './config';
 import {
   buildAddonDetail,
@@ -1004,6 +1004,47 @@ export const mockApi: SukunApi = {
             throw new MockApiError(
               'ADDON_ASSIGNMENT_TARGET_INVALID',
               'Every extra needs exactly one recipient.',
+              400,
+            );
+          }
+        }
+
+        /*
+          This endpoint is a commit, not a scratch pad: a line whose units are not all spoken
+          for, or a room that is not full, is refused at the write rather than reported back as
+          an advisory issue. Modelling it only in `validateCartHere` is what let the app push
+          half-assigned drafts all the way to staging before anything said no.
+        */
+        if (option.occupancy != null) {
+          const rooms = input.rooms ?? [];
+          if (rooms.length !== input.quantity) {
+            throw new MockApiError(
+              'ROOM_OCCUPANCY_UNFILLED',
+              'Every room has to be full before you can check out.',
+              400,
+            );
+          }
+          for (const room of rooms) {
+            if (room.occupants.length !== option.occupancy) {
+              throw new MockApiError(
+                'ROOM_OCCUPANCY_UNFILLED',
+                'Every room has to be full before you can check out.',
+                400,
+              );
+            }
+          }
+        } else {
+          const assigned = (input.assignments ?? []).reduce(
+            (total, assignment) => total + (assignment.quantity ?? 1),
+            0,
+          );
+          // One unit with nothing said about it is the buyer's own, which is the default the
+          // backend applies before it counts.
+          const counted = input.assignments === undefined && input.quantity === 1 ? 1 : assigned;
+          if (counted !== input.quantity) {
+            throw new MockApiError(
+              'ADDON_ASSIGNMENT_COUNT_MISMATCH',
+              'Every extra needs somebody to go to.',
               400,
             );
           }

@@ -47,3 +47,8 @@ coverage/
 # CLAUDE.md stays tracked — it is project documentation, not tooling state.
 .claude/
 .mcp.json
+
+# Handover and review write-ups. Notes written for a person about work in flight, not project
+# documentation: they go stale the moment the work lands, and they are not the repo's to carry.
+*_HANDOFF.md
+*_REVIEW.md
