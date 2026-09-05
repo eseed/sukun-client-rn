@@ -16,10 +16,14 @@
         "EXPO_PUBLIC_CLARITY_PROJECT_ID": "y6tknxh6u4"
       }
     },
-    "preview": {
-      "distribution": "internal",
+    "staging": {
+      "autoIncrement": true,
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "distribution": "internal"
+      },
+      "ios": {
+        "distribution": "store"
       },
       "env": {
         "EXPO_PUBLIC_API_MODE": "live",
@@ -41,6 +45,11 @@
     }
   },
   "submit": {
+    "staging": {
+      "ios": {
+        "ascAppId": "6804203454"
+      }
+    },
     "production": {
       "ios": {
         "ascAppId": "6804203454"
