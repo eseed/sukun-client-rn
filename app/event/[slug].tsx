@@ -21,7 +21,7 @@ import { messageForError } from '../../src/lib/errors';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
 import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
-import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
+import { nextOnboardingStep, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
@@ -122,13 +122,7 @@ export default function EventDetailScreen() {
       router.push(`/checkout/pass?eventId=${eventId}`);
       return;
     }
-    const missing = missingProfileFields(user);
-    if (missing.length > 0) {
-      const profileMissing = missing.some((field) => field !== 'selfie');
-      router.push(profileMissing ? '/(onboarding)/profile' : '/(onboarding)/selfie');
-      return;
-    }
-    router.push('/(onboarding)/profile');
+    router.push(nextOnboardingStep(user));
   }
 
   return (
@@ -246,9 +240,7 @@ export default function EventDetailScreen() {
           <Pressable
             accessibilityRole={mapUrl ? 'link' : undefined}
             accessibilityLabel={
-              mapUrl
-                ? `Open ${event.venue?.name ?? 'the venue'} in Google Maps`
-                : undefined
+              mapUrl ? `Open ${event.venue?.name ?? 'the venue'} in Google Maps` : undefined
             }
             accessibilityHint={mapUrl ? 'Opens Google Maps outside the app' : undefined}
             disabled={!mapUrl}

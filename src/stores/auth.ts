@@ -53,10 +53,23 @@ interface AuthState {
    * never persisted or shown in the UI (CLAUDE.md rule 4 is about UI copy, not analytics).
    */
   isNewUser: boolean;
+  /**
+   * Whether this user asked to browse before finishing registration, by taking the exit out
+   * of the selfie step.
+   *
+   * Persisted, unlike `isNewUser`. The launch redirect in `app/index.tsx` reads it to decide
+   * whether an unfinished account lands on its next step or on Discover, and without a stored
+   * answer the next cold start would put the selfie demand back in front of someone who has
+   * already declined it once, which is the wall guideline 5.1.1(v) objects to. Cleared by
+   * signing in, signing out, and finishing the profile, so it can only ever describe the
+   * account currently in hand.
+   */
+  setupDeferred: boolean;
 
   restore: () => Promise<void>;
   setPendingPhone: (phone: string | null) => void;
   setIsNewUser: (value: boolean) => void;
+  deferSetup: () => Promise<void>;
   signIn: (
     tokens: { accessToken: string; refreshToken: string },
     user: CurrentUser,
@@ -68,30 +81,40 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   status: 'loading',
   isNewUser: false,
+  setupDeferred: false,
   user: null,
   pendingPhone: null,
 
   async restore() {
     const generation = ++sessionGeneration;
-    const [accessToken, refreshToken] = await Promise.all([
+    // The deferral is read in the same pass as the tokens, so `status` and `setupDeferred`
+    // land in one `set` and the launch redirect never sees a signed-in user whose deferral
+    // has not loaded yet: that gap would route them into the step they had already skipped.
+    const [accessToken, refreshToken, deferred] = await Promise.all([
       getSecureItem(SECURE_KEYS.accessToken),
       getSecureItem(SECURE_KEYS.refreshToken),
+      getSecureItem(SECURE_KEYS.setupDeferred),
     ]);
     if (generation !== sessionGeneration) return;
+    const setupDeferred = deferred === 'true';
     if (!accessToken && !refreshToken) {
-      set({ status: 'signed-out', user: null });
+      set({ status: 'signed-out', user: null, setupDeferred: false });
       return;
     }
     try {
       const user = await api.auth.me();
       if (generation !== sessionGeneration) return;
-      set({ status: 'signed-in', user });
+      set({ status: 'signed-in', user, setupDeferred: setupDeferred && !user.profileComplete });
       identify(user.id);
     } catch {
       // Keep credentials for a later restore if this was a transient network/API failure.
       if (generation !== sessionGeneration) return;
       const currentUser = useAuthStore.getState().user;
-      set({ status: currentUser ? 'signed-in' : 'signed-out', user: currentUser });
+      set({
+        status: currentUser ? 'signed-in' : 'signed-out',
+        user: currentUser,
+        setupDeferred,
+      });
     }
   },
 
@@ -103,25 +126,46 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isNewUser: value });
   },
 
+  /**
+   * Record that this user is browsing with an unfinished profile. The session is kept: the
+   * number is already verified, and throwing it away would cost the signup this exit exists
+   * to preserve. Purchase stays gated on `profileComplete` (CLAUDE.md rule 8), so the selfie
+   * is still collected before a ticket can be bought.
+   */
+  async deferSetup() {
+    set({ setupDeferred: true });
+    await setSecureItem(SECURE_KEYS.setupDeferred, 'true');
+  },
+
   async signIn(tokens, user) {
     const generation = ++sessionGeneration;
     await queueSecureTransition(async () => {
       await setSecureItem(SECURE_KEYS.accessToken, tokens.accessToken);
       await setSecureItem(SECURE_KEYS.refreshToken, tokens.refreshToken);
+      // A deferral belongs to the account that made it. Whoever signs in here gets asked for
+      // the steps they still owe, even on a device where someone else once skipped them.
+      await deleteSecureItem(SECURE_KEYS.setupDeferred);
     });
     if (generation !== sessionGeneration) return;
-    set({ status: 'signed-in', user, pendingPhone: null });
+    set({ status: 'signed-in', user, pendingPhone: null, setupDeferred: false });
     identify(user.id);
   },
 
   setUser(user) {
+    // Finishing the profile settles the deferral, so a later launch stops treating this
+    // account as one that owes a step.
+    if (user.profileComplete && useAuthStore.getState().setupDeferred) {
+      set({ user, setupDeferred: false });
+      void deleteSecureItem(SECURE_KEYS.setupDeferred);
+      return;
+    }
     set({ user });
   },
 
   async signOut(options) {
     const generation = ++sessionGeneration;
     clearQueryCache?.();
-    set({ status: 'signed-out', user: null, pendingPhone: null });
+    set({ status: 'signed-out', user: null, pendingPhone: null, setupDeferred: false });
     resetAnalytics();
 
     await queueSecureTransition(async () => {
@@ -134,6 +178,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
       await deleteSecureItem(SECURE_KEYS.accessToken);
       await deleteSecureItem(SECURE_KEYS.refreshToken);
+      await deleteSecureItem(SECURE_KEYS.setupDeferred);
     });
 
     // A newer sign-in owns the state and tokens now. Never let an older sign-out write it back.
@@ -162,4 +207,19 @@ export function missingProfileFields(user: CurrentUser | null): string[] {
   if (requiresLivingArea(user.phoneNumber) && !user.area) missing.push('area');
   if (!user.selfieUploaded) missing.push('selfie');
   return missing;
+}
+
+/** Where an unfinished account resumes: the profile form while any field but the selfie is
+ * outstanding, and the selfie step once the rest are in hand.
+ *
+ * Kept beside `missingProfileFields` so the launch redirect and the resume row on Profile
+ * cannot disagree with the purchase gate about how far through the flow someone is.
+ */
+export function nextOnboardingStep(
+  user: CurrentUser | null,
+): '/(onboarding)/profile' | '/(onboarding)/selfie' {
+  const missing = missingProfileFields(user);
+  return missing.some((field) => field !== 'selfie')
+    ? '/(onboarding)/profile'
+    : '/(onboarding)/selfie';
 }

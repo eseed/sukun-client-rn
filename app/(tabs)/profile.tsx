@@ -8,10 +8,11 @@ import {
   Screen,
   Text,
 } from '../../src/components/ui';
+import { SignInPrompt } from '../../src/components/SignInPrompt';
 import { useAvatarUri, useTickets } from '../../src/hooks/queries';
 import { APP_VERSION_LINE, IS_STAGING_BUILD } from '../../src/lib/build-info';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
-import { useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, nextOnboardingStep, useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
@@ -27,6 +28,7 @@ export default function ProfileScreen() {
 
   const tickets = data?.data ?? [];
   const eventCount = new Set(tickets.map((t) => t.event.id)).size;
+  const missingFields = missingProfileFields(user);
   const dots = designAsset('bgProfileDots');
 
   return (
@@ -43,66 +45,111 @@ export default function ProfileScreen() {
           <BulletHeading title="Profile" size="md" />
         </View>
 
-        <View style={styles.identity}>
-          <Avatar name={user?.fullName ?? 'You'} uri={avatarUri} size={64} />
-          <View style={styles.identityText}>
-            <Text style={styles.name}>{user?.fullName ?? 'Your profile'}</Text>
-            <Text variant="meta">
-              {user?.phoneNumber ? formatPhoneForDisplay(user.phoneNumber) : ''}
+        {/*
+          A guest is shown what an account is for, not a blank one. The rows below would
+          otherwise offer to edit a profile that does not exist and to sign out of nothing,
+          and an empty ticket count reads as data loss rather than as an absence of data.
+        */}
+        {!user ? (
+          <>
+            <SignInPrompt
+              title="Sign in to Sukun"
+              message="Your tickets, your orders, and the details we need at the gate all live in your account."
+              actionLabel="Sign in"
+              onAction={() => router.push('/(onboarding)/phone')}
+            />
+
+            <View style={styles.rows}>
+              <Pressable onPress={() => router.push('/legal/terms')} accessibilityRole="button">
+                <ListRow label="Privacy policy & terms" />
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.identity}>
+              <Avatar name={user?.fullName ?? 'You'} uri={avatarUri} size={64} />
+              <View style={styles.identityText}>
+                <Text style={styles.name}>{user?.fullName ?? 'Your profile'}</Text>
+                <Text variant="meta">
+                  {user?.phoneNumber ? formatPhoneForDisplay(user.phoneNumber) : ''}
+                </Text>
+                {user?.email ? <Text variant="meta">{user.email}</Text> : null}
+              </View>
+            </View>
+
+            <ResourceState
+              status={isLoading ? 'loading' : isError ? 'error' : 'success'}
+              loadingLabel="Loading your ticket stats..."
+              errorMessage="We couldn't load your ticket stats."
+              onRetry={() => void refetch()}
+            >
+              <View style={styles.stats}>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{tickets.length}</Text>
+                  <Text style={styles.statLabel}>Tickets</Text>
+                </View>
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{eventCount}</Text>
+                  <Text style={styles.statLabel}>Events</Text>
+                </View>
+              </View>
+            </ResourceState>
+
+            <Text variant="eyebrow" style={styles.sectionLabel}>
+              Account
             </Text>
-            {user?.email ? <Text variant="meta">{user.email}</Text> : null}
-          </View>
-        </View>
 
-        <ResourceState
-          status={isLoading ? 'loading' : isError ? 'error' : 'success'}
-          loadingLabel="Loading your ticket stats..."
-          errorMessage="We couldn't load your ticket stats."
-          onRetry={() => void refetch()}
-        >
-          <View style={styles.stats}>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{tickets.length}</Text>
-              <Text style={styles.statLabel}>Tickets</Text>
+            <View style={styles.rows}>
+              {/*
+                The way back into a registration this user stepped out of. It is the only
+                route to the skipped step now that the launch redirect lets them past it, and
+                it names what is outstanding rather than saying "incomplete", so the cost of
+                having skipped is legible from here.
+              */}
+              {!user.profileComplete ? (
+                <Pressable
+                  onPress={() => router.push(nextOnboardingStep(user))}
+                  accessibilityRole="button"
+                >
+                  <ListRow
+                    label={
+                      missingFields.length === 1
+                        ? `Finish setup: ${missingFields[0]}`
+                        : 'Finish setup'
+                    }
+                  />
+                </Pressable>
+              ) : null}
+
+              <Pressable onPress={() => router.push('/account/profile')} accessibilityRole="button">
+                <ListRow label="Edit profile" />
+              </Pressable>
+
+              <Pressable onPress={() => router.push('/orders')} accessibilityRole="button">
+                <ListRow label="Order history" />
+              </Pressable>
+
+              <Pressable onPress={() => router.push('/legal/terms')} accessibilityRole="button">
+                <ListRow label="Privacy policy & terms" />
+              </Pressable>
+
+              <Pressable
+                onPress={async () => {
+                  await signOut();
+                  router.replace('/(onboarding)/welcome');
+                }}
+                accessibilityRole="button"
+              >
+                <ListRow label="Sign out" />
+              </Pressable>
+
+              <Pressable onPress={() => router.push('/account/delete')} accessibilityRole="button">
+                <ListRow label="Delete account" tone="danger" />
+              </Pressable>
             </View>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{eventCount}</Text>
-              <Text style={styles.statLabel}>Events</Text>
-            </View>
-          </View>
-        </ResourceState>
-
-        <Text variant="eyebrow" style={styles.sectionLabel}>
-          Account
-        </Text>
-
-        <View style={styles.rows}>
-          <Pressable onPress={() => router.push('/account/profile')} accessibilityRole="button">
-            <ListRow label="Edit profile" />
-          </Pressable>
-
-          <Pressable onPress={() => router.push('/orders')} accessibilityRole="button">
-            <ListRow label="Order history" />
-          </Pressable>
-
-          <Pressable onPress={() => router.push('/legal/terms')} accessibilityRole="button">
-            <ListRow label="Privacy policy & terms" />
-          </Pressable>
-
-          <Pressable
-            onPress={async () => {
-              await signOut();
-              router.replace('/(onboarding)/welcome');
-            }}
-            accessibilityRole="button"
-          >
-            <ListRow label="Sign out" />
-          </Pressable>
-
-          <Pressable onPress={() => router.push('/account/delete')} accessibilityRole="button">
-            <ListRow label="Delete account" tone="danger" />
-          </Pressable>
-        </View>
+          </>
+        )}
 
         {/*
           The version, and a badge on the staging build. Staging and production go to the same

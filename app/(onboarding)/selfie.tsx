@@ -14,6 +14,7 @@ import { ConicRing } from '../../src/components/ui/ConicRing';
 import { useUploadSelfie } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
+import { ALLOW_GUEST_BROWSING } from '../../src/lib/flags';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/stores/auth';
 
@@ -103,6 +104,23 @@ export default function SelfieScreen() {
           : "The camera didn't open. Try again.",
       );
     }
+  }
+
+  /**
+   * Out of the last step without giving up the account.
+   *
+   * Registration stays unfinished and the app does not pretend otherwise: `profileComplete`
+   * remains false, so purchase is still gated (CLAUDE.md rule 8) and the selfie is still
+   * collected before any ticket can be bought. The session is kept because the number is
+   * already verified, and the deferral is stored so the next cold start does not put this
+   * same demand back in front of someone who has declined it once. What it removes is a
+   * registered user with no way back to a catalogue they could browse freely a minute
+   * earlier, which is the dead end guideline 5.1.1(v) objects to.
+   */
+  async function onBrowseInstead() {
+    track('selfie_deferred');
+    await useAuthStore.getState().deferSetup();
+    router.replace('/(tabs)/discover');
   }
 
   async function onContinue() {
@@ -203,6 +221,21 @@ export default function SelfieScreen() {
           style={styles.retakeButton}
         />
       ) : null}
+
+      {ALLOW_GUEST_BROWSING ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Browse events without finishing setup"
+          onPress={() => void onBrowseInstead()}
+          disabled={uploadSelfie.isPending}
+          hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
+          style={({ pressed }) => [styles.defer, pressed && styles.deferPressed]}
+        >
+          <Text variant="meta" color={colors.textPrimary} style={styles.deferLabel}>
+            Not now, browse events
+          </Text>
+        </Pressable>
+      ) : null}
     </Screen>
   );
 }
@@ -210,6 +243,16 @@ export default function SelfieScreen() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 28,
+  },
+  defer: {
+    alignSelf: 'center',
+    marginTop: 16,
+  },
+  deferLabel: {
+    textDecorationLine: 'underline',
+  },
+  deferPressed: {
+    opacity: 0.6,
   },
   heading: {
     marginTop: 8,

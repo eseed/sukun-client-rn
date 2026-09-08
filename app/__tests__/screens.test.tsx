@@ -1,7 +1,7 @@
 import { AppState } from 'react-native';
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
 import { SOUND_BATH_ID, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
-import { useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
 
@@ -68,6 +68,9 @@ const mockRouter = {
   back: jest.fn(),
   replace: jest.fn(),
   navigate: jest.fn(),
+  // Defaults to "nothing to pop", which is the case for every screen reached by a `Redirect`
+  // or a `replace`. Tests that stand a screen on top of another opt in.
+  canGoBack: jest.fn(() => false),
 };
 
 jest.mock('expo-router', () => ({
@@ -121,7 +124,15 @@ beforeEach(() => {
   for (const key of Object.keys(mockParams)) delete mockParams[key];
   mockRouter.push.mockClear();
   mockRouter.replace.mockClear();
-  useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
+  mockRouter.back.mockClear();
+  mockRouter.canGoBack.mockReset();
+  mockRouter.canGoBack.mockReturnValue(false);
+  useAuthStore.setState({
+    status: 'signed-out',
+    user: null,
+    pendingPhone: null,
+    setupDeferred: false,
+  });
   useCheckoutStore.getState().reset();
 });
 
@@ -171,6 +182,36 @@ describe('01 Welcome', () => {
     // One way in. Signing in restores a deleted account, so there is nothing to offer here
     // that would make someone declare they had deleted theirs.
     expect(screen.queryByText('Restore account')).toBeNull();
+  });
+
+  /**
+   * The way past this screen without an account. App Store guideline 5.1.1(v) requires that
+   * the catalogue, which is not account based, be reachable without registering; the app was
+   * rejected for gating it. The link is deliberately quiet, so what is asserted here is that
+   * it exists, that it is a control rather than legal copy, and that it leads to Discover.
+   */
+  it('offers a way in without an account, and takes it to Discover', () => {
+    renderWithProviders(<WelcomeScreen />);
+
+    const skip = screen.getByText('Skip login');
+    expect(skip).toBeTruthy();
+
+    fireEvent.press(skip);
+    expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/discover');
+  });
+
+  /**
+   * The purchase gate pushes this screen on top of an event, so there is somewhere to go
+   * back to. Skipping there must return the visitor to what they were reading rather than
+   * dropping them on Discover having lost their place.
+   */
+  it('returns to the event underneath when it was reached from the purchase gate', () => {
+    mockRouter.canGoBack.mockReturnValue(true);
+    renderWithProviders(<WelcomeScreen />);
+
+    fireEvent.press(screen.getByText('Skip login'));
+    expect(mockRouter.back).toHaveBeenCalled();
+    expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 });
 
@@ -223,6 +264,25 @@ describe('04 About you', () => {
     expect(screen.queryByText('Living area')).toBeNull();
     expect(screen.getAllByText('Select').length).toBe(2);
   });
+
+  /**
+   * The number is verified by the time this form renders, so without an exit the only way
+   * back to the catalogue is the "wrong number" alert, which drops the account and lands on
+   * the phone field. That leaves a registered user four steps and a destructive confirmation
+   * away from public content, which is the same wall guideline 5.1.1(v) rejected, one screen
+   * earlier than the selfie step.
+   */
+  it('lets an unfinished profile out to browse, keeping the verified session', async () => {
+    useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
+    renderWithProviders(<ProfileFormScreen />);
+
+    await waitFor(() => expect(screen.getByText('Step 2 of 3')).toBeTruthy());
+    fireEvent.press(screen.getByText('Not now, browse events'));
+
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/discover'));
+    expect(useAuthStore.getState().status).toBe('signed-in');
+    expect(useAuthStore.getState().setupDeferred).toBe(true);
+  });
 });
 
 describe('05 Selfie', () => {
@@ -232,6 +292,45 @@ describe('05 Selfie', () => {
     expect(screen.getByText('One last thing, a selfie')).toBeTruthy();
     expect(screen.getByText('Tap to take a selfie')).toBeTruthy();
     expect(screen.getByText(/Gate staff compare this to your face at entry/)).toBeTruthy();
+  });
+
+  /**
+   * The exit out of the last step, and the reason this screen was a rejection.
+   *
+   * Registration cannot be finished without the selfie, so someone who declines it is left
+   * with an account that owes a step. Before this exit existed the screen had no back, no
+   * skip, and nothing to pop, and the launch redirect put them straight back: a registered
+   * user permanently walled out of a catalogue they had browsed freely a minute earlier,
+   * which is what guideline 5.1.1(v) forbids. The session is kept, because the number is
+   * already verified and the signup is the thing worth saving.
+   */
+  it('lets an unfinished account out to browse without dropping the session', async () => {
+    useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
+
+    renderWithProviders(<SelfieScreen />);
+    fireEvent.press(screen.getByText('Not now, browse events'));
+
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/discover'));
+    const state = useAuthStore.getState();
+    expect(state.status).toBe('signed-in');
+    expect(state.setupDeferred).toBe(true);
+  });
+
+  /**
+   * Purchase is still gated on the selfie (CLAUDE.md rules 3 and 8). The exit buys access to
+   * the catalogue, never a usable ticket, so nothing here may mark the profile complete.
+   */
+  it('does not treat the exit as having finished the profile', async () => {
+    useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
+
+    renderWithProviders(<SelfieScreen />);
+    fireEvent.press(screen.getByText('Not now, browse events'));
+
+    await waitFor(() => expect(useAuthStore.getState().setupDeferred).toBe(true));
+    const user = useAuthStore.getState().user!;
+    expect(user.profileComplete).toBe(false);
+    expect(user.selfieUploaded).toBe(false);
+    expect(missingProfileFields(user)).toContain('selfie');
   });
 });
 
@@ -318,9 +417,7 @@ describe('09 Guests', () => {
     renderWithProviders(<GuestsScreen />);
 
     expect(screen.getByText('Bringing anyone?')).toBeTruthy();
-    expect(
-      screen.getByText('1 of your 2 tickets is for a guest.'),
-    ).toBeTruthy();
+    expect(screen.getByText('1 of your 2 tickets is for a guest.')).toBeTruthy();
     expect(screen.getByText('0 of 1 picked')).toBeTruthy();
     expect(screen.getByPlaceholderText('Add by phone number')).toBeTruthy();
 
@@ -491,11 +588,7 @@ describe('09 Guests', () => {
     await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
     // Tulua sells extras, so this is step 2 of 4 and the extras step comes next.
     await waitFor(() => expect(screen.getByText('Checkout · step 2 of 4')).toBeTruthy());
-    expect(
-      screen.getByText(
-        'You already have a ticket, so this one is for a guest.',
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText('You already have a ticket, so this one is for a guest.')).toBeTruthy();
     // Nothing here is theirs to keep, so there are no tickets to add for friends either.
     expect(screen.queryByText('Go with friends')).toBeNull();
 
@@ -1036,16 +1129,33 @@ describe('13 My tickets', () => {
     expect(screen.getByText('View entry pass →')).toBeTruthy();
   });
 
-  // Regression: the tickets query is disabled while signed out, and a disabled TanStack query
-  // reports `isPending: true` with `fetchStatus: 'idle'` forever. Gating the spinner on
-  // `isPending` left a signed-out user staring at "Loading your tickets..." with no request
-  // ever in flight. The screen must settle on the empty state instead.
-  it('settles on the empty state when signed out instead of spinning forever', async () => {
+  /**
+   * A guest gets the offer rather than a report on an account they do not have.
+   *
+   * This also still covers the original regression here: the tickets query is disabled while
+   * signed out, and a disabled TanStack query reports `isPending: true` with
+   * `fetchStatus: 'idle'` forever, so gating the spinner on `isPending` once left a
+   * signed-out user staring at "Loading your tickets..." with no request ever in flight.
+   * Nothing may spin, and "No tickets yet" is now the wrong answer too: it reads as a fault
+   * to someone who has no account, and it talks past the ticket a friend may already have
+   * attached to their number (CLAUDE.md rule 2).
+   */
+  it('offers sign-in when signed out, without spinning or reporting an empty account', async () => {
     useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
     renderWithProviders(<TicketsScreen />);
 
-    await waitFor(() => expect(screen.getByText('No tickets yet')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Your tickets live here')).toBeTruthy());
+    expect(screen.getByText('Sign in')).toBeTruthy();
     expect(screen.queryByText('Loading your tickets...')).toBeNull();
+    expect(screen.queryByText('No tickets yet')).toBeNull();
+  });
+
+  it('sends a guest to the number field rather than back through the welcome pitch', async () => {
+    useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
+    renderWithProviders(<TicketsScreen />);
+
+    fireEvent.press(await screen.findByText('Sign in'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/(onboarding)/phone');
   });
 });
 
@@ -1130,6 +1240,63 @@ describe('15 Profile', () => {
     expect(screen.getByText('Privacy policy & terms')).toBeTruthy();
     expect(screen.getByText('Delete account')).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Tickets')).toBeTruthy());
+    // Nothing to resume: this account is complete.
+    expect(screen.queryByText(/Finish setup/)).toBeNull();
+  });
+
+  /**
+   * A guest is shown what an account is for, not a hollow one. The rows would otherwise offer
+   * to edit a profile that does not exist and to sign out of nothing, and a zero ticket count
+   * reads as data lost rather than data absent. Legal stays reachable either way.
+   */
+  it('offers sign-in to a guest instead of an empty account', () => {
+    useAuthStore.setState({ status: 'signed-out', user: null });
+    renderWithProviders(<ProfileTabScreen />);
+
+    expect(screen.getByText('Sign in to Sukun')).toBeTruthy();
+    expect(screen.getByText('Privacy policy & terms')).toBeTruthy();
+    expect(screen.queryByText('Edit profile')).toBeNull();
+    expect(screen.queryByText('Sign out')).toBeNull();
+    expect(screen.queryByText('Delete account')).toBeNull();
+    expect(screen.queryByText('Your profile')).toBeNull();
+  });
+
+  /**
+   * The only route back into a registration the user stepped out of, now that the launch
+   * redirect lets them past it. It names what is outstanding, so the cost of having skipped
+   * is legible from the one screen they will come looking for it on.
+   */
+  it('carries the way back into an unfinished registration', () => {
+    useAuthStore.setState({
+      status: 'signed-in',
+      user: { ...emptyForeignUser(), fullName: 'Yasmin El Sayed' },
+      setupDeferred: true,
+    });
+    renderWithProviders(<ProfileTabScreen />);
+
+    fireEvent.press(screen.getByText(/Finish setup/));
+    expect(mockRouter.push).toHaveBeenCalledWith('/(onboarding)/profile');
+  });
+
+  it('resumes at the selfie when it is the only thing outstanding', () => {
+    useAuthStore.setState({
+      status: 'signed-in',
+      user: {
+        ...emptyForeignUser(),
+        fullName: 'Yasmin El Sayed',
+        email: 'yasmin@email.com',
+        dateOfBirth: '1996-04-11',
+        gender: 'female',
+        selfieUploaded: false,
+        profileComplete: false,
+      },
+      setupDeferred: true,
+    });
+    renderWithProviders(<ProfileTabScreen />);
+
+    expect(screen.getByText('Finish setup: selfie')).toBeTruthy();
+    fireEvent.press(screen.getByText('Finish setup: selfie'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/(onboarding)/selfie');
   });
 
   /**
