@@ -13,7 +13,8 @@
         "EXPO_PUBLIC_API_MODE": "mock",
         "EXPO_PUBLIC_ANALYTICS_ENV": "staging",
         "EXPO_PUBLIC_MIXPANEL_TOKEN": "71571cdae3de3136c0c4318927206845",
-        "EXPO_PUBLIC_CLARITY_PROJECT_ID": "y6tknxh6u4"
+        "EXPO_PUBLIC_CLARITY_PROJECT_ID": "y6tknxh6u4",
+        "EXPO_PUBLIC_ALLOW_GUEST_BROWSING": "true"
       }
     },
     "staging": {
@@ -30,7 +31,8 @@
         "EXPO_PUBLIC_API_BASE_URL": "https://sukun-staging-staging.up.railway.app",
         "EXPO_PUBLIC_ANALYTICS_ENV": "staging",
         "EXPO_PUBLIC_MIXPANEL_TOKEN": "71571cdae3de3136c0c4318927206845",
-        "EXPO_PUBLIC_CLARITY_PROJECT_ID": "y6tknxh6u4"
+        "EXPO_PUBLIC_CLARITY_PROJECT_ID": "y6tknxh6u4",
+        "EXPO_PUBLIC_ALLOW_GUEST_BROWSING": "true"
       }
     },
     "production": {
@@ -40,7 +42,8 @@
         "EXPO_PUBLIC_API_BASE_URL": "https://api.sukunwellness.co",
         "EXPO_PUBLIC_ANALYTICS_ENV": "production",
         "EXPO_PUBLIC_MIXPANEL_TOKEN": "a13190d158d029d86139e40c769a0ab9",
-        "EXPO_PUBLIC_CLARITY_PROJECT_ID": "ybx65otc8o"
+        "EXPO_PUBLIC_CLARITY_PROJECT_ID": "ybx65otc8o",
+        "EXPO_PUBLIC_ALLOW_GUEST_BROWSING": "true"
       }
     }
   },
