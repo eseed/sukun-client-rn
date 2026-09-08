@@ -1062,6 +1062,51 @@ describe('10 Review & pay', () => {
       ),
     );
   });
+
+  /**
+   * Cancelling the card sheet leaves the order `awaiting_payment`, holding the event's
+   * capacity, so placing a second one is refused. A tester hit exactly this on production and
+   * got "Something went wrong. Try again." with no way forward until the hold lapsed: the
+   * backend refuses with `CART_ACTIVE_ORDER_EXISTS`, which the app did not map at all, and
+   * whose whole point is the order id it carries. The buyer is sent to finish the order they
+   * already have.
+   */
+  it('resumes the held order when a cancelled payment is tried again', async () => {
+    await signInAndComplete();
+    await placeOrderViaCart({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+
+    // A second cart for the same event, which is what the screen builds after a cancel.
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    useCheckoutStore.getState().setTermsAccepted(true);
+
+    renderWithProviders(<ReviewScreen />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
+    );
+
+    // The Paymob mocks are shared across this file, so only calls from here on count.
+    mockPaymob.presentPayVC!.mockClear();
+    fireEvent.press(screen.getByText('Continue to payment'));
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(
+        expect.stringContaining('/checkout/payment?orderId='),
+      ),
+    );
+    // Never the dead end the tester saw, and no second sheet for a second order.
+    expect(screen.queryByText('Something went wrong. Try again.')).toBeNull();
+    expect(mockPaymob.presentPayVC!).not.toHaveBeenCalled();
+  });
 });
 
 describe('11 Payment', () => {

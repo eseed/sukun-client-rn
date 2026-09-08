@@ -36,6 +36,14 @@ export class ApiError extends Error {
     public requestId?: string,
     public timestamp?: string,
     public retryAfterSeconds?: number,
+    /**
+     * Whatever else the refusal carried. The backend's exception filter spreads a domain
+     * exception's own fields into the error body alongside the envelope, and some refusals are
+     * only actionable because of them: `CART_ACTIVE_ORDER_EXISTS` names the order already
+     * holding capacity, which is the one thing the buyer can do something about. Dropping
+     * these turned that into a dead end.
+     */
+    public extra: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -136,6 +144,18 @@ function shouldRefresh(path: string, auth: boolean, retryOnUnauthorized: boolean
   return auth && retryOnUnauthorized && path !== REFRESH_PATH;
 }
 
+/** The envelope's own fields, so `ApiError.extra` carries only what is left over. */
+const ENVELOPE_KEYS = new Set([
+  'statusCode',
+  'error',
+  'message',
+  'details',
+  'requestId',
+  'timestamp',
+  'retryAfterSeconds',
+  'stack',
+]);
+
 function parseError(response: Response, payload: unknown): ApiError {
   const err =
     typeof payload === 'object' && payload !== null && !Array.isArray(payload)
@@ -159,7 +179,24 @@ function parseError(response: Response, payload: unknown): ApiError {
   const retryAfterSeconds =
     typeof err?.retryAfterSeconds === 'number' ? err.retryAfterSeconds : undefined;
 
-  return new ApiError(code, message, status, details, requestId, timestamp, retryAfterSeconds);
+  // Everything the envelope does not account for, kept as-is. See `ApiError.extra`.
+  const extra: Record<string, unknown> = {};
+  if (err) {
+    for (const [key, value] of Object.entries(err as Record<string, unknown>)) {
+      if (!ENVELOPE_KEYS.has(key)) extra[key] = value;
+    }
+  }
+
+  return new ApiError(
+    code,
+    message,
+    status,
+    details,
+    requestId,
+    timestamp,
+    retryAfterSeconds,
+    extra,
+  );
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {

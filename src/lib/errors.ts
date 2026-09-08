@@ -68,10 +68,16 @@ const MESSAGES: Record<string, string> = {
   PAYMENT_CONFIRMATION_PENDING:
     "We're still confirming your last payment attempt. Give it a moment, then try again.",
   // The backend blocks only on an order still awaiting payment, and answers 200 when that order
-  // already matches the request — so this code always means a *different* order is holding the
-  // capacity. `useCreateOrder` turns it into a `HeldOrderError` so the screen can offer that
-  // order instead of quietly swapping the buyer's basket for it.
+  // already matches the request — so these always mean a *different* order is holding the
+  // capacity. `heldOrderIdFromError` reads the order out so the screen can offer to finish it
+  // instead of quietly swapping the buyer's basket for it.
+  //
+  // Two codes because the checkout moved onto the cart: the cart endpoint refuses with
+  // `CART_ACTIVE_ORDER_EXISTS` and the older order endpoint with `DUPLICATE_ACTIVE_ORDER`. Only
+  // the second was ever mapped, so the live refusal fell through to "Something went wrong. Try
+  // again." — which is what a tester saw after cancelling the card sheet and trying once more.
   DUPLICATE_ACTIVE_ORDER: 'You already have an order in progress for this event.',
+  CART_ACTIVE_ORDER_EXISTS: 'You already have an order in progress for this event.',
   PAYMENT_ALREADY_COMPLETED: 'This order is already paid. Check your tickets.',
   PAYMENT_PROVIDER_ERROR: "The payment provider couldn't be reached. Nothing was charged.",
   ORDER_HOLD_EXPIRED: 'Your reservation expired before payment. Start the order again.',
@@ -176,4 +182,27 @@ export class HeldOrderError extends Error {
 
 export function isHeldOrderError(error: unknown): error is HeldOrderError {
   return error instanceof HeldOrderError;
+}
+
+/** The two refusals that mean "an order is already holding this event's capacity". */
+const HELD_ORDER_CODES = new Set(['CART_ACTIVE_ORDER_EXISTS', 'DUPLICATE_ACTIVE_ORDER']);
+
+/**
+ * The id of the order already holding capacity, or `null` when this is not that refusal, or is
+ * that refusal without an id attached.
+ *
+ * The backend names the order in the error body, which is what makes the refusal actionable:
+ * the buyer's way out is to finish paying the order they already have, not to place a second
+ * one. Without an id there is nothing to offer and the screen falls back to the copy above,
+ * which the second of the backend's two throw sites does not carry.
+ */
+export function heldOrderIdFromError(error: unknown): string | null {
+  if (isHeldOrderError(error)) return error.heldOrderId;
+  if (!isRecord(error)) return null;
+  if (typeof error.code !== 'string' || !HELD_ORDER_CODES.has(error.code)) return null;
+
+  const extra = error.extra;
+  if (!isRecord(extra)) return null;
+
+  return typeof extra.orderId === 'string' && extra.orderId ? extra.orderId : null;
 }

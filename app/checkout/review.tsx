@@ -26,7 +26,7 @@ import {
   useRemoveCartPromo,
 } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
-import { messageForError } from '../../src/lib/errors';
+import { heldOrderIdFromError, messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
@@ -232,7 +232,8 @@ export default function ReviewScreen() {
     }
 
     try {
-      const placed = order ?? (await placeOrder.mutateAsync({ cartId, pricingConfirmationToken: token }));
+      const placed =
+        order ?? (await placeOrder.mutateAsync({ cartId, pricingConfirmationToken: token }));
       setOrder(placed);
       setOrderId(placed.id);
 
@@ -265,6 +266,24 @@ export default function ReviewScreen() {
         return;
       }
 
+      /**
+       * An order for this event is already holding the capacity, which is what cancelling the
+       * card sheet leaves behind: the order stays `awaiting_payment` until it is paid or its
+       * hold lapses, so placing a second one is refused. The buyer's way through is to finish
+       * the one they have, and the payment screen already knows how to pick up an order with
+       * an open attempt, so send them there rather than reporting a conflict they cannot act
+       * on. Before this, a cancelled payment could not be retried at all.
+       */
+      const heldOrderId = heldOrderIdFromError(err);
+      if (heldOrderId) {
+        track('checkout_resumed_held_order', {
+          event_id: validEventId ?? '',
+          order_id: heldOrderId,
+        });
+        router.replace(`/checkout/payment?orderId=${heldOrderId}`);
+        return;
+      }
+
       setError(messageForError(err));
     }
   }
@@ -281,9 +300,7 @@ export default function ReviewScreen() {
     line.lineTotalEgp ? formatEgp(line.lineTotalEgp) : 'Not priced yet';
 
   const lineLabel = (line: CartPricingLine) =>
-    line.tierName ??
-    [line.addonName, line.optionLabel].filter(Boolean).join(' · ') ??
-    'Item';
+    line.tierName ?? [line.addonName, line.optionLabel].filter(Boolean).join(' · ') ?? 'Item';
 
   /**
    * Who a priced addon line went to.
@@ -299,9 +316,8 @@ export default function ReviewScreen() {
 
     const names = forLine.assignments.map(
       (assignment) =>
-        priced?.attendees.find(
-          (attendee) => attendee.cartAttendeeId === assignment.cartAttendeeId,
-        )?.name ?? 'Someone with a ticket',
+        priced?.attendees.find((attendee) => attendee.cartAttendeeId === assignment.cartAttendeeId)
+          ?.name ?? 'Someone with a ticket',
     );
 
     return [...new Set(names)].join(', ');
@@ -352,7 +368,9 @@ export default function ReviewScreen() {
           {pricing.addonLines.map((line) => (
             <View key={line.addonOptionId} style={styles.addonLine}>
               <SummaryRow
-                label={line.quantity > 1 ? `${lineLabel(line)} × ${line.quantity}` : lineLabel(line)}
+                label={
+                  line.quantity > 1 ? `${lineLabel(line)} × ${line.quantity}` : lineLabel(line)
+                }
                 value={lineValue(line)}
               />
               {recipientsFor(line) ? (
@@ -385,7 +403,11 @@ export default function ReviewScreen() {
 
         {/* No VAT row at all when the event does not charge it — a 0.00 line reads like a bug. */}
         {pricing?.vatEgp && vatPercent > 0 ? (
-          <SummaryRow label={`VAT (${vatPercent}%)`} value={formatEgp(pricing.vatEgp)} tone="muted" />
+          <SummaryRow
+            label={`VAT (${vatPercent}%)`}
+            value={formatEgp(pricing.vatEgp)}
+            tone="muted"
+          />
         ) : null}
 
         {pricing?.totalEgp ? (

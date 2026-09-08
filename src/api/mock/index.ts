@@ -125,6 +125,12 @@ export class MockApiError extends Error {
     public code: string,
     message: string,
     public status = 400,
+    /**
+     * Whatever else the refusal carries, in the shape `ApiError.extra` uses, so a screen reads
+     * it the same way against either implementation (CLAUDE.md: screens must never know which
+     * is active).
+     */
+    public extra: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'MockApiError';
@@ -1148,6 +1154,33 @@ export const mockApi: SukunApi = {
       if (cart.status === 'converted' && cart.convertedOrderId) {
         const existing = state.orders.find((order) => order.id === cart.convertedOrderId);
         if (existing) return delay(existing, 0.8);
+      }
+
+      /**
+       * One live order per event per buyer. The backend refuses a second one, and cancelling
+       * the card sheet is what makes this the common case rather than a rare one: the order
+       * stays `awaiting_payment` until it is paid or its hold lapses, so the next tap on
+       * "Continue to payment" lands here.
+       *
+       * The order's id rides along because that is what makes the refusal actionable, and the
+       * review screen resumes it instead of reporting a conflict the buyer cannot act on. This
+       * rule lived only in the backend until a tester found it: with the mock silent about it,
+       * nothing in the suite could have caught the screen's missing handling.
+       */
+      transitionExpiredOrders();
+      const heldOrder = state.orders.find(
+        (order) =>
+          order.eventId === cart.eventId &&
+          order.status === 'awaiting_payment' &&
+          order.id !== cart.convertedOrderId,
+      );
+      if (heldOrder) {
+        throw new MockApiError(
+          'CART_ACTIVE_ORDER_EXISTS',
+          'You already have an order in progress for this event.',
+          409,
+          { orderId: heldOrder.id },
+        );
       }
 
       const issued = state.pricingTokens.get(pricingConfirmationToken);
