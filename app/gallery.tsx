@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -28,7 +28,13 @@ import { colors, palette, space } from '../src/theme/tokens';
 
 /**
  * Component gallery — every base component and token in one place, so a change to the design
- * system can be eyeballed without walking the whole app. Reachable at `/gallery`.
+ * system can be eyeballed without walking the whole app. Reachable at `/gallery` in development.
+ *
+ * Everything under `app/` is a route, so this internal tool shipped in the release bundle and
+ * `sukun://gallery` opened it on a production build. Nothing links to it, but an unlinked route
+ * is still a reachable one, and App Review reads a shipped-but-hidden surface as a dormant
+ * feature (guideline 2.3.1). The file stays here so the route keeps working in development;
+ * the guard is what stops it resolving anywhere else.
  */
 export default function GalleryScreen() {
   const router = useRouter();
@@ -37,6 +43,8 @@ export default function GalleryScreen() {
   const [checked, setChecked] = useState(true);
   const [selected, setSelected] = useState('a');
   const [code, setCode] = useState('42');
+
+  if (!__DEV__) return <Redirect href="/" />;
 
   return (
     <Screen scroll contentStyle={styles.content}>
