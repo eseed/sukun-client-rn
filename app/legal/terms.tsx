@@ -62,7 +62,16 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Children',
-    body: 'Sukun is not intended for anyone under 13, and we do not knowingly collect data from them. Some events set a higher minimum age, which is shown on the event itself.',
+    /**
+     * The app's floor is 18, enforced by `MINIMUM_AGE` on both the profile form and the
+     * backend validator. This used to say 13, which contradicted every one of them, and it
+     * promised a per-event minimum age "shown on the event itself" that no event has ever
+     * carried: there is no such field in the domain types, the mock, or the backend.
+     *
+     * Sukun the company does run events children attend. What is 18-only is the account, so
+     * the distinction is drawn here rather than implying no Sukun event admits a child.
+     */
+    body: 'The Sukun app is for adults: you must be 18 or over to create an account, and we ask for your date of birth to check. Some Sukun events welcome children, and an adult books through the app on their behalf. Anything a child needs for an event is arranged with the event itself. We do not knowingly collect data from anyone under 18 through the app. If you believe we have, contact us and we will remove it.',
   },
   {
     title: 'Changes',
