@@ -106,7 +106,9 @@ export default function EventDetailScreen() {
     if (!firstPurchasableTier) return;
     // Purchase is app-only and gated on a complete profile (CLAUDE.md rules 5 and 8).
     if (!user) {
-      router.push('/(onboarding)/welcome');
+      // `gate=1` tells Welcome it is standing in front of an event rather than opening the app,
+      // so its escape reads "Not now, browse events" instead of "Skip login". See welcome.tsx.
+      router.push('/(onboarding)/welcome?gate=1');
       return;
     }
     // The backend is authoritative for purchase eligibility. A projection can omit profile
