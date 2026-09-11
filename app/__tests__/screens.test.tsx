@@ -1,4 +1,3 @@
-import { AppState } from 'react-native';
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
 import { SOUND_BATH_ID, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
@@ -51,15 +50,6 @@ function contactsPermission(response: {
 }) {
   mockContacts.requestPermissionsAsync.mockResolvedValue(response);
   mockContacts.getPermissionsAsync.mockResolvedValue(response);
-}
-
-/** Stands in for the app being brought back from Settings. */
-async function returnToForeground() {
-  const calls = (AppState.addEventListener as jest.Mock).mock.calls;
-  const listener = calls[calls.length - 1]?.[1] as ((state: string) => void) | undefined;
-  await act(async () => {
-    listener?.('active');
-  });
 }
 
 const mockParams: Record<string, string> = {};
@@ -408,8 +398,23 @@ describe('08 Choose your pass', () => {
 });
 
 describe('09 Guests', () => {
+  // The address book is never read any more, so the OS picker is where a contact comes from.
+  // Individual tests override this when they need a different person or several numbers.
+  beforeEach(() => {
+    mockPicker.mockResolvedValue({
+      firstName: 'Nour',
+      lastName: 'Hassan',
+      phoneNumbers: [{ number: '01022334455' }],
+    });
+  });
+
   it('offers contacts and a manual number, sized to the guest slots', async () => {
     mockParams.eventId = TULUA_ID;
+    mockPicker.mockResolvedValue({
+      firstName: 'Nour',
+      lastName: 'Hassan',
+      phoneNumbers: [{ number: '01022334455' }],
+    });
     await signInAndComplete();
     useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
     useCheckoutStore.getState().setQuantity(2);
@@ -421,34 +426,16 @@ describe('09 Guests', () => {
     expect(screen.getByText('0 of 1 picked')).toBeTruthy();
     expect(screen.getByPlaceholderText('Add by phone number')).toBeTruthy();
 
-    // Opening checkout must not touch the address book; the button is the only way in.
+    // Opening checkout must not reach for contacts at all; the button is the only way in,
+    // and what it opens is the OS picker, not a list this app holds.
     expect(screen.queryByText('Nour Hassan')).toBeNull();
 
-    fireEvent.press(screen.getByText('Add from Contacts'));
+    await act(async () => {
+      fireEvent.press(screen.getByText('Add from Contacts'));
+    });
 
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
     expect(screen.getByText('010 22334455')).toBeTruthy();
-  });
-
-  /**
-   * A search that finds nobody and a list with nobody left in it are different situations,
-   * and only one of them is the buyer's fault. Saying the wrong one reads as a broken screen.
-   */
-  it('says the search found nobody, not that everyone is already attached', async () => {
-    mockParams.eventId = TULUA_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
-    useCheckoutStore.getState().setQuantity(2);
-
-    renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-
-    fireEvent.changeText(screen.getByLabelText('Search contacts'), 'nobody by that name');
-
-    await waitFor(() => expect(screen.getByText('No match.')).toBeTruthy());
-    expect(screen.queryByText('Nour Hassan')).toBeNull();
-    expect(screen.queryByText('Everyone here is already attached.')).toBeNull();
   });
 
   /**
@@ -471,11 +458,8 @@ describe('09 Guests', () => {
     useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Choose from all contacts')).toBeTruthy());
-
     await act(async () => {
-      fireEvent.press(screen.getByText('Choose from all contacts'));
+      fireEvent.press(screen.getByText('Add from Contacts'));
     });
 
     expect(screen.getByText('Omar Fathy')).toBeTruthy();
@@ -498,11 +482,8 @@ describe('09 Guests', () => {
     useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Choose from all contacts')).toBeTruthy());
-
     await act(async () => {
-      fireEvent.press(screen.getByText('Choose from all contacts'));
+      fireEvent.press(screen.getByText('Add from Contacts'));
     });
 
     // Nobody is attached on the strength of a guess.
@@ -603,9 +584,10 @@ describe('09 Guests', () => {
     );
     expect(mockRouter.push).not.toHaveBeenCalled();
 
-    fireEvent.press(screen.getByText('Add from Contacts'));
+    await act(async () => {
+      fireEvent.press(screen.getByText('Add from Contacts'));
+    });
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    fireEvent.press(screen.getByText('Nour Hassan'));
 
     await waitFor(() => expect(screen.getByText('1 of 1 picked')).toBeTruthy());
     fireEvent.press(screen.getByText('Continue'));
@@ -631,9 +613,10 @@ describe('09 Guests', () => {
     renderWithProviders(<GuestsScreen />);
 
     await waitFor(() => expect(screen.getByText('Checkout · step 2 of 3')).toBeTruthy());
-    fireEvent.press(screen.getByText('Add from Contacts'));
+    await act(async () => {
+      fireEvent.press(screen.getByText('Add from Contacts'));
+    });
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
 
     fireEvent.press(screen.getByText('Continue'));
 
@@ -643,10 +626,13 @@ describe('09 Guests', () => {
   });
 
   /**
-   * The address book is a convenience, never the thing holding the order together. A number
-   * typed by hand has to be attachable, visible and removable with contacts switched off.
+   * A number typed by hand has to be attachable, visible and removable without contacts.
+   *
+   * On iOS a refusal no longer has any bearing on the picker either: it runs out of process and
+   * asks for nothing, which is the whole reason for using it (guideline 5.1.1(iii)). So the
+   * refusal here is set to prove it is irrelevant, not to switch the screen into another mode.
    */
-  it('attaches and removes a guest with contacts refused outright', async () => {
+  it('attaches and removes a guest typed by hand, with contacts refused outright', async () => {
     contactsPermission({ status: 'denied', canAskAgain: false });
     mockParams.eventId = SOUND_BATH_ID;
     await signInAndComplete();
@@ -656,10 +642,9 @@ describe('09 Guests', () => {
     renderWithProviders(<GuestsScreen />);
     await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
 
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Open Settings')).toBeTruthy());
-    // Asking again is pointless once the OS has stopped offering, so it is not offered.
-    expect(screen.queryByText('Add from Contacts')).toBeNull();
+    // Still offered, and still working, because iOS never asked for the permission that was
+    // refused.
+    expect(screen.getByText('Add from Contacts')).toBeTruthy();
 
     fireEvent.changeText(screen.getByLabelText('Guest phone number'), '1022334455');
     fireEvent.press(screen.getByText('Add'));
@@ -669,27 +654,6 @@ describe('09 Guests', () => {
     expect(screen.getByText('0 of 1 picked')).toBeTruthy();
   });
 
-  /**
-   * Nothing tells the app that the switch was flipped in Settings, so coming back to the
-   * foreground is what has to notice. Without this the Settings button is a dead end.
-   */
-  it('recovers the contact list after access is granted in Settings', async () => {
-    contactsPermission({ status: 'denied', canAskAgain: false });
-    mockParams.eventId = SOUND_BATH_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
-    useCheckoutStore.getState().setQuantity(2);
-
-    renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Open Settings')).toBeTruthy());
-
-    contactsPermission({ status: 'granted' });
-    await returnToForeground();
-
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    expect(screen.queryByText('Open Settings')).toBeNull();
-  });
 
   /**
    * "One of these guests already has a ticket" is useless if it does not say which. The
@@ -725,9 +689,10 @@ describe('09 Guests', () => {
       screen.queryByText("That's your own number. Your ticket is already included."),
     ).toBeNull();
 
-    fireEvent.press(screen.getByText('Add from Contacts'));
+    await act(async () => {
+      fireEvent.press(screen.getByText('Add from Contacts'));
+    });
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
     // Tulua sells extras, so the swapped-in guest leads on to the extras step, not to review.
     await waitFor(() => expect(screen.getByText('Checkout · step 2 of 4')).toBeTruthy());
     fireEvent.press(screen.getByText('Continue'));
@@ -745,13 +710,21 @@ describe('09 Guests', () => {
     useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
+    await act(async () => {
+      fireEvent.press(screen.getByText('Add from Contacts'));
+    });
     await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-
-    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
     expect(screen.getByText('1 of 1 picked')).toBeTruthy();
 
-    fireEvent.press(screen.getByLabelText('Add Dana Ward as a guest'));
+    // A second trip through the picker, with the only slot already spoken for.
+    mockPicker.mockResolvedValue({
+      firstName: 'Dana',
+      lastName: 'Ward',
+      phoneNumbers: [{ number: '01099887766' }],
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('Add from Contacts'));
+    });
     expect(
       screen.getByText(
         'You have 1 guest slot on this order. Remove someone first, or add a ticket.',
@@ -759,29 +732,13 @@ describe('09 Guests', () => {
     ).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText('Remove Nour Hassan'));
-    fireEvent.press(screen.getByLabelText('Add Dana Ward as a guest'));
+    await act(async () => {
+      fireEvent.press(screen.getByText('Add from Contacts'));
+    });
+    await waitFor(() => expect(screen.getByText('Dana Ward')).toBeTruthy());
     expect(screen.getByText('1 of 1 picked')).toBeTruthy();
   });
 
-  /** An address book of any real size is only usable through search. */
-  it('narrows a long contact list by name', async () => {
-    mockParams.eventId = SOUND_BATH_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
-    useCheckoutStore.getState().setQuantity(2);
-
-    renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-
-    fireEvent.changeText(screen.getByLabelText('Search contacts'), 'dana');
-
-    expect(screen.getByText('Dana Ward')).toBeTruthy();
-    expect(screen.queryByText('Nour Hassan')).toBeNull();
-
-    fireEvent.press(screen.getByLabelText('Clear contact search'));
-    expect(screen.getByText('Nour Hassan')).toBeTruthy();
-  });
 
   /**
    * Extras live in the app until the assignment steps finish them, and stepping back through

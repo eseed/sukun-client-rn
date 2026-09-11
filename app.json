@@ -13,8 +13,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry.",
-        "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification.",
-        "NSContactsUsageDescription": "Sukun uses your contacts so you can attach guests to tickets by phone number."
+        "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification."
       }
     },
     "android": {
@@ -67,7 +66,7 @@
       [
         "expo-contacts",
         {
-          "contactsPermission": "Sukun uses your contacts so you can attach guests to tickets by phone number."
+          "contactsPermission": false
         }
       ],
       "@react-native-community/datetimepicker",
