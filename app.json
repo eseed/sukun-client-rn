@@ -66,7 +66,7 @@
       [
         "expo-contacts",
         {
-          "contactsPermission": false
+          "contactsPermission": "Sukun opens your contact picker so you can choose who a ticket is for. Only the number you pick is sent to Sukun, and your contact list is never read."
         }
       ],
       "@react-native-community/datetimepicker",
