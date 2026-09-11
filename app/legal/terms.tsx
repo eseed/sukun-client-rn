@@ -58,7 +58,18 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Analytics and session replay',
-    body: 'We use Mixpanel to count how features are used and Microsoft Clarity to record anonymised replays of screens, so we can find what is broken or confusing. Both identify you only by an internal Sukun account id. We never put your name, email, or phone number into an analytics event. If you are in the EU, the UK, Switzerland, or California, the app asks your permission before either one starts, and answering no stops both the events and the replays.',
+    body: 'We use Mixpanel to count how features are used and Microsoft Clarity to record anonymised replays of screens, so we can find what is broken or confusing. Both identify you only by an internal Sukun account id. We never put your name, email, or phone number into an analytics event. If you are in the EU, the UK, Switzerland, or California, the app asks your permission before either one starts, and answering no stops both the events and the replays. Wherever you are, and whether or not you were asked, you can turn both off at any time under Analytics & session replay on the Profile tab. Turning them off takes effect immediately and clears anything collected on the device that has not been sent.',
+  },
+  {
+    /**
+     * Guideline 5.1.1(i) requires the policy to "Confirm that any third party with whom an app
+     * shares user data ... will provide the same or equal protection of user data as stated in
+     * the app's privacy policy". That confirmation was missing entirely, and it is a named,
+     * mandatory element rather than a nicety, so it gets a section of its own that covers every
+     * processor at once instead of a clause buried in one of them.
+     */
+    title: 'Who else sees your data',
+    body: 'We share only what each of these needs to do its job: Paymob to take a payment, our messaging provider to deliver your one time code and ticket messages on WhatsApp, our email provider to send receipts, Mixpanel and Microsoft Clarity for the analytics described above, and our hosting and file storage providers in the European Union. Each of them is required to protect your data to the same standard this policy sets out, to use it only for the work we ask of them, and not to use it for anything of their own. We do not sell your data, and we do not share it for advertising.',
   },
   {
     title: 'Where your data is held',
