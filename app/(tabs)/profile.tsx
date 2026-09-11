@@ -60,6 +60,18 @@ export default function ProfileScreen() {
             />
 
             <View style={styles.rows}>
+              {/*
+                Offered to a guest as well as an account holder: both SDKs record a signed-out
+                visitor exactly as they record a signed-in one, so both need the way to turn
+                that off (guideline 5.1.1(ii)).
+              */}
+              <Pressable
+                onPress={() => router.push('/account/analytics')}
+                accessibilityRole="button"
+              >
+                <ListRow label="Analytics & session replay" />
+              </Pressable>
+
               <Pressable onPress={() => router.push('/legal/terms')} accessibilityRole="button">
                 <ListRow label="Privacy policy & terms" />
               </Pressable>
@@ -128,6 +140,13 @@ export default function ProfileScreen() {
 
               <Pressable onPress={() => router.push('/orders')} accessibilityRole="button">
                 <ListRow label="Order history" />
+              </Pressable>
+
+              <Pressable
+                onPress={() => router.push('/account/analytics')}
+                accessibilityRole="button"
+              >
+                <ListRow label="Analytics & session replay" />
               </Pressable>
 
               <Pressable onPress={() => router.push('/legal/terms')} accessibilityRole="button">
