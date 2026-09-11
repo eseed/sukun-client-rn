@@ -67,3 +67,49 @@ describe('deferSetup', () => {
     await expect(getSecureItem(SECURE_KEYS.setupDeferred)).resolves.toBeNull();
   });
 });
+
+/**
+ * The same requirement, for the visitor who has no account to hang a deferral on.
+ *
+ * `setupDeferred` only ever rescued someone who was signed in, so a guest fell through to the
+ * plain signed-out branch and met Welcome again on every cold start. That is what App Store
+ * review rejected build 18 for under 5.1.1(v): the escape existed and worked, but answering it
+ * bought nothing beyond the current process, so the app went on demanding registration to
+ * browse. The keychain write is the whole fix, so it is what these assert.
+ */
+describe('browseAsGuest', () => {
+  it('persists the choice so it survives a cold start', async () => {
+    await useAuthStore.getState().browseAsGuest();
+
+    expect(useAuthStore.getState().guestBrowsing).toBe(true);
+    await expect(getSecureItem(SECURE_KEYS.guestBrowsing)).resolves.toBe('true');
+  });
+
+  /**
+   * The branch that matters. A guest has no tokens, so `restore` settles on signed-out without
+   * ever reaching the API, and that is exactly the path that has to carry the answer forward.
+   */
+  it('is read back by restore even though a guest has no session', async () => {
+    await useAuthStore.getState().browseAsGuest();
+
+    // A fresh process: nothing in memory, everything from the keychain, no tokens.
+    useAuthStore.setState({ status: 'loading', user: null, guestBrowsing: false });
+    await useAuthStore.getState().restore();
+
+    expect(useAuthStore.getState().status).toBe('signed-out');
+    expect(useAuthStore.getState().guestBrowsing).toBe(true);
+  });
+
+  /**
+   * Unlike a deferral, this one is deliberately not cleared by signing out: someone who has
+   * held an account is not a first-time visitor, and putting the wall back in front of them
+   * would re-create the rejection for everyone who signs out.
+   */
+  it('outlives a sign-out', async () => {
+    await useAuthStore.getState().browseAsGuest();
+    await useAuthStore.getState().signOut({ remote: false });
+
+    expect(useAuthStore.getState().guestBrowsing).toBe(true);
+    await expect(getSecureItem(SECURE_KEYS.guestBrowsing)).resolves.toBe('true');
+  });
+});

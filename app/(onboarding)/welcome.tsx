@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, ImageSlot, Text } from '../../src/components/ui';
 import { track } from '../../src/lib/analytics';
 import { ALLOW_GUEST_BROWSING } from '../../src/lib/flags';
+import { useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
@@ -13,6 +14,7 @@ export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const dancers = designAsset('welcomeDancers');
   const logo = designAsset('logoBlack');
+  const browseAsGuest = useAuthStore((s) => s.browseAsGuest);
 
   /**
    * Whether this screen is standing in front of something the visitor was already doing, rather
@@ -37,6 +39,11 @@ export default function WelcomeScreen() {
    */
   function onSkipLogin() {
     track('guest_browsing_started');
+    // Remembered, so this screen is asked once rather than on every cold start. A first-time
+    // visitor still meets it: the product would rather they registered, and that is what the
+    // prominence of the two controls says. Asking again after they have answered is what made
+    // the app read as registration-gated. See `guestBrowsing` in `src/stores/auth.ts`.
+    void browseAsGuest();
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)/discover');
   }

@@ -65,11 +65,30 @@ interface AuthState {
    * account currently in hand.
    */
   setupDeferred: boolean;
+  /**
+   * Whether a visitor with no account has already chosen to browse, by taking "Skip login"
+   * off the Welcome screen.
+   *
+   * The sibling of `setupDeferred`, for the case that has no account to hang a deferral on.
+   * Welcome is the first thing a new visitor sees and it is meant to be: the product would
+   * rather they registered, and the exit is offered quietly rather than advertised. But it is
+   * offered *once*. Without a stored answer every cold start put that screen back in front of
+   * someone who had already declined it, so the app asked a signed-out visitor to register on
+   * launch, forever, which is the wall guideline 5.1.1(v) objects to and what App Store review
+   * rejected build 18 for. A guest who has answered gets Discover from then on, and Welcome
+   * stays reachable from the Profile tab's sign-in prompt.
+   *
+   * Deliberately *not* cleared on sign-out: someone who has held an account is not a
+   * first-time visitor, and putting the wall back in front of them would re-create the same
+   * problem for anyone who signs out.
+   */
+  guestBrowsing: boolean;
 
   restore: () => Promise<void>;
   setPendingPhone: (phone: string | null) => void;
   setIsNewUser: (value: boolean) => void;
   deferSetup: () => Promise<void>;
+  browseAsGuest: () => Promise<void>;
   signIn: (
     tokens: { accessToken: string; refreshToken: string },
     user: CurrentUser,
@@ -82,29 +101,38 @@ export const useAuthStore = create<AuthState>((set) => ({
   status: 'loading',
   isNewUser: false,
   setupDeferred: false,
+  guestBrowsing: false,
   user: null,
   pendingPhone: null,
 
   async restore() {
     const generation = ++sessionGeneration;
-    // The deferral is read in the same pass as the tokens, so `status` and `setupDeferred`
-    // land in one `set` and the launch redirect never sees a signed-in user whose deferral
-    // has not loaded yet: that gap would route them into the step they had already skipped.
-    const [accessToken, refreshToken, deferred] = await Promise.all([
+    // Both answers are read in the same pass as the tokens, so `status`, `setupDeferred` and
+    // `guestBrowsing` land in one `set` and the launch redirect never sees a state whose
+    // answer has not loaded yet: that gap would route a signed-in user into the step they had
+    // already skipped, and a guest back into the Welcome screen they had already declined.
+    const [accessToken, refreshToken, deferred, guest] = await Promise.all([
       getSecureItem(SECURE_KEYS.accessToken),
       getSecureItem(SECURE_KEYS.refreshToken),
       getSecureItem(SECURE_KEYS.setupDeferred),
+      getSecureItem(SECURE_KEYS.guestBrowsing),
     ]);
     if (generation !== sessionGeneration) return;
     const setupDeferred = deferred === 'true';
+    const guestBrowsing = guest === 'true';
     if (!accessToken && !refreshToken) {
-      set({ status: 'signed-out', user: null, setupDeferred: false });
+      set({ status: 'signed-out', user: null, setupDeferred: false, guestBrowsing });
       return;
     }
     try {
       const user = await api.auth.me();
       if (generation !== sessionGeneration) return;
-      set({ status: 'signed-in', user, setupDeferred: setupDeferred && !user.profileComplete });
+      set({
+        status: 'signed-in',
+        user,
+        setupDeferred: setupDeferred && !user.profileComplete,
+        guestBrowsing,
+      });
       identify(user.id);
     } catch {
       // Keep credentials for a later restore if this was a transient network/API failure.
@@ -114,6 +142,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         status: currentUser ? 'signed-in' : 'signed-out',
         user: currentUser,
         setupDeferred,
+        guestBrowsing,
       });
     }
   },
@@ -135,6 +164,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   async deferSetup() {
     set({ setupDeferred: true });
     await setSecureItem(SECURE_KEYS.setupDeferred, 'true');
+  },
+
+  /**
+   * Record that a visitor with no account has chosen to browse. Answering Welcome once is
+   * enough: from here the launch redirect sends them to Discover instead of putting the same
+   * question back in front of them on every cold start. Nothing else changes, and nothing is
+   * waived — purchase is still gated on an account and a complete profile.
+   */
+  async browseAsGuest() {
+    set({ guestBrowsing: true });
+    await setSecureItem(SECURE_KEYS.guestBrowsing, 'true');
   },
 
   async signIn(tokens, user) {

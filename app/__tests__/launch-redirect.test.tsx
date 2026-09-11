@@ -8,9 +8,10 @@ import Index from '../index';
  * sent every signed-out visitor to Welcome, so the event catalogue, which is not an
  * account-based feature, could not be reached without registering (guideline 5.1.1(v)).
  *
- * The guest path is the escape from Welcome rather than a change here, so signed-out still
- * goes to Welcome. What changed is that an account which has already declined a step is not
- * marched back into it on every launch.
+ * The rule now is the same for both kinds of visitor: whoever has already been asked and
+ * already answered is not asked again. An account that declined a registration step is not
+ * marched back into it, and a guest who took "Skip login" is not shown Welcome again. A
+ * genuinely first-time visitor still meets it, which is the product's intent.
  */
 
 const hrefs: string[] = [];
@@ -54,6 +55,7 @@ beforeEach(() => {
     user: null,
     pendingPhone: null,
     setupDeferred: false,
+    guestBrowsing: false,
   });
 });
 
@@ -63,10 +65,21 @@ describe('Launch redirect', () => {
     expect(hrefs).toEqual([]);
   });
 
-  it('sends a signed-out visitor to Welcome, which carries the way past it', () => {
+  it('sends a first-time visitor to Welcome, which carries the way past it', () => {
     useAuthStore.setState({ status: 'signed-out', user: null });
     renderWithProviders(<Index />);
     expect(hrefs).toEqual(['/(onboarding)/welcome']);
+  });
+
+  /**
+   * Build 18 was rejected under 5.1.1(v) for this. The escape off Welcome worked, but nothing
+   * remembered it had been taken, so a visitor with no account met the same demand to register
+   * on every single cold start. Answering once has to be enough, or the exit is decorative.
+   */
+  it('does not ask a guest who already chose to browse a second time', () => {
+    useAuthStore.setState({ status: 'signed-out', user: null, guestBrowsing: true });
+    renderWithProviders(<Index />);
+    expect(hrefs).toEqual(['/(tabs)/discover']);
   });
 
   it('sends a finished account straight to Discover', () => {
