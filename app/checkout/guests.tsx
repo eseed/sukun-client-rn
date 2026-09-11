@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import {
   Avatar,
   avatarColor,
@@ -13,11 +13,14 @@ import {
   OptionSheet,
   QuantityStepper,
   Screen,
+  SearchIcon,
   StepLabel,
   Text,
 } from '../../src/components/ui';
 import {
+  canReadContacts,
   useContacts,
+  type PhoneContact,
   type PickedContact,
 } from '../../src/hooks/useContacts';
 import {
@@ -51,6 +54,12 @@ import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 
 /**
+ * A long address book cannot all be rendered at once, and a picker that stutters is a picker
+ * nobody gets through. Everything past this is reached by searching.
+ */
+const MAX_VISIBLE_CONTACTS = 25;
+
+/**
  * Design screen 09 · Checkout, guests.
  *
  * Guests are attached by phone number. A ticket may exist before its owner does — it binds
@@ -66,16 +75,6 @@ import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
  *   2. Manual entry is always on screen. It needs no permission, so there is always a way
  *      forward no matter what the OS says.
  */
-/**
- * The shape a guest row renders. Local to this screen now: the hook that used to export it
- * held an address book, and no longer does.
- */
-interface GuestRowContact {
-  id: string;
-  name: string;
-  phoneNumber: string;
-}
-
 export default function GuestsScreen() {
   const router = useRouter();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
@@ -93,7 +92,15 @@ export default function GuestsScreen() {
   // refusal from the server two screens later.
   const buyerPhone = useAuthStore((s) => s.user?.phoneNumber ?? null);
 
-  const { pickContact, openSettings, canPickContact } = useContacts();
+  const {
+    contacts,
+    access: contactsAccess,
+    loading: contactsLoading,
+    request: requestContacts,
+    pickContact,
+    openSettings,
+    canPickContact,
+  } = useContacts();
   const validateGuests = useValidateGuests();
   const cartId = useCheckoutStore((s) => s.cartId);
   const setCartId = useCheckoutStore((s) => s.setCartId);
@@ -106,8 +113,7 @@ export default function GuestsScreen() {
   const steps = useCheckoutSteps(validEventId);
 
   const [manual, setManual] = useState('');
-  // Only set by a refusal the OS will not re-ask, which is the one dead end left.
-  const [contactsBlocked, setContactsBlocked] = useState(false);
+  const [search, setSearch] = useState('');
   // Sticky once they touch the stepper, so adding a ticket here does not hide the control
   // that would take it back off. Arriving with more than one ticket leaves the screen as it was.
   const [ticketsAdjusted, setTicketsAdjusted] = useState(false);
@@ -134,6 +140,15 @@ export default function GuestsScreen() {
     if (!holdsTicketPending) setBuyerTakesTicket(!holdsTicket);
   }, [holdsTicket, holdsTicketPending, setBuyerTakesTicket]);
 
+  // Worth knowing which permission state buyers actually land in, since this is the step that
+  // strands them. The status only, never a name or a number (CLAUDE.md, analytics).
+  const reportedAccess = useRef<string | null>(null);
+  useEffect(() => {
+    if (contactsAccess === 'unasked' || reportedAccess.current === contactsAccess) return;
+    reportedAccess.current = contactsAccess;
+    track('contacts_access', { access: contactsAccess, contact_count: contacts.length });
+  }, [contactsAccess, contacts.length]);
+
   const slots = guestSlots(quantity, !holdsTicket);
   const picked = guests.length;
   const full = picked >= slots;
@@ -155,7 +170,7 @@ export default function GuestsScreen() {
    * The attached guests, straight from the draft. Deliberately not derived from `contacts`:
    * that is what used to make a guest unremovable once the address book went away.
    */
-  const attached: GuestRowContact[] = useMemo(
+  const attached: PhoneContact[] = useMemo(
     () =>
       guests.map((guest) => ({
         id: `guest:${guest.phoneNumber}`,
@@ -165,9 +180,51 @@ export default function GuestsScreen() {
     [guests],
   );
 
+  /** Contacts not yet attached, narrowed by the search box. */
+  const suggestions: PhoneContact[] = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const digits = query.replace(/\D/g, '');
+
+    const available = contacts.filter(
+      (contact) => !selectedNumbers.has(contact.phoneNumber) && contact.phoneNumber !== buyerPhone,
+    );
+
+    if (!query) return available;
+    return available.filter(
+      (contact) =>
+        contact.name.toLowerCase().includes(query) ||
+        (digits.length > 0 && contact.phoneNumber.includes(digits)),
+    );
+  }, [buyerPhone, contacts, search, selectedNumbers]);
+
+  const visible = suggestions.slice(0, MAX_VISIBLE_CONTACTS);
+  const hidden = suggestions.length - visible.length;
+
+  /**
+   * Under limited access the list above holds only the handful of people already shared, so
+   * everything it says about what it did not find has to be read in that light.
+   */
+  const sharedSubsetOnly = contactsAccess === 'limited';
+
   /** Any change to who is attached invalidates the last verdict from the server. */
   function clearVerdict() {
     setError(null);
+  }
+
+  function onAttach(contact: PhoneContact) {
+    clearVerdict();
+    if (full) {
+      setError(
+        `You have ${slots} guest ${slots === 1 ? 'slot' : 'slots'} on this order. Remove someone first, or add a ticket.`,
+      );
+      return;
+    }
+    if (contact.phoneNumber === buyerPhone) {
+      setError(messageForCode('GUEST_IS_BUYER'));
+      return;
+    }
+    addGuest({ phoneNumber: contact.phoneNumber, name: contact.name, fromContacts: true });
+    setSearch('');
   }
 
   function onRemove(phoneNumber: string) {
@@ -208,9 +265,13 @@ export default function GuestsScreen() {
       );
       return;
     }
-    // Nothing to borrow a name from any more: the app never holds the address book, so a
-    // number typed by hand is shown as a number until the server says who it belongs to.
-    addGuest({ phoneNumber: e164, name: formatPhoneLocal(e164), fromContacts: false });
+    // A number typed by hand may well be in the address book too; keep that name if it is.
+    const known = contacts.find((contact) => contact.phoneNumber === e164);
+    addGuest({
+      phoneNumber: e164,
+      name: known?.name ?? formatPhoneLocal(e164),
+      fromContacts: Boolean(known),
+    });
     setManual('');
   }
 
@@ -235,6 +296,7 @@ export default function GuestsScreen() {
       return;
     }
     addGuest({ phoneNumber, name: name || formatPhoneLocal(phoneNumber), fromContacts: true });
+    setSearch('');
   }
 
   /**
@@ -259,7 +321,6 @@ export default function GuestsScreen() {
           ? 'Sukun needs access to your contacts to open your address book. Add their number below instead.'
           : 'Contacts access is turned off for Sukun. Turn it on in Settings, or add their number below.',
       );
-      if (!result.canAskAgain) setContactsBlocked(true);
       return;
     }
     if (result.status === 'no-number') {
@@ -496,9 +557,66 @@ export default function GuestsScreen() {
             </View>
           ) : null}
 
+          {canReadContacts(contactsAccess) && contacts.length > 0 ? (
+            <>
+              <View style={styles.searchRow}>
+                <SearchIcon />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Search your contacts"
+                  placeholderTextColor={colors.textMuted}
+                  autoCorrect={false}
+                  style={styles.searchField}
+                  accessibilityLabel="Search contacts"
+                />
+                {search.length > 0 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear contact search"
+                    onPress={() => setSearch('')}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.clearSearch}>Clear</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+
+              {visible.map((contact) => (
+                <GuestRow
+                  key={contact.id}
+                  contact={contact}
+                  selected={false}
+                  onPress={() => onAttach(contact)}
+                />
+              ))}
+
+              {hidden > 0 ? (
+                <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
+                  {`Showing ${visible.length} of ${suggestions.length}.`}
+                </Text>
+              ) : null}
+
+              {suggestions.length === 0 ? (
+                <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
+                  {search.trim().length === 0
+                    ? 'Everyone here is already attached.'
+                    : // "No match." would be untrue under limited access: the search only ever
+                      // ran against the handful of people shared with the app.
+                      sharedSubsetOnly
+                      ? 'No match in the contacts you shared.'
+                      : 'No match.'}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+
           <ContactsAccessFooter
+            access={contactsAccess}
+            loading={contactsLoading}
+            contactCount={contacts.length}
             canPickContact={canPickContact}
-            blocked={contactsBlocked}
+            onRequest={requestContacts}
             onPickContact={() => void onPickContact()}
             onOpenSettings={openSettings}
           />
@@ -589,7 +707,7 @@ function GuestRow({
   issue,
   onPress,
 }: {
-  contact: GuestRowContact;
+  contact: PhoneContact;
   selected: boolean;
   issue?: string;
   onPress: () => void;
@@ -635,41 +753,99 @@ function GuestRow({
  * Nothing here is a dead end, and none of it is the only way forward, because the number field
  * below never stops working.
  */
-/**
- * The one way into the address book: the OS picker.
- *
- * There is no standing permission state to report here any more. On iOS the picker needs no
- * grant at all, and on Android `pickContact` asks for READ_CONTACTS on the tap that opens it,
- * so a refusal is something the caller hears back from that call rather than a mode this
- * footer has to sit in. "Open Settings" is kept for the Android refusal that cannot be asked
- * again, which is the only dead end left.
- */
 function ContactsAccessFooter({
+  access,
+  loading,
+  contactCount,
   canPickContact,
-  blocked,
+  onRequest,
   onPickContact,
   onOpenSettings,
 }: {
+  access: ReturnType<typeof useContacts>['access'];
+  loading: boolean;
+  contactCount: number;
   canPickContact: boolean;
-  blocked: boolean;
+  onRequest: () => void;
   onPickContact: () => void;
   onOpenSettings: () => void;
 }) {
-  if (!canPickContact) return null;
-
-  return (
-    <>
+  if (access === 'unasked' || access === 'undetermined') {
+    return (
       <Button
         label="Add from Contacts"
         variant="secondary"
-        onPress={onPickContact}
+        onPress={onRequest}
+        loading={loading}
         style={styles.contactsButton}
       />
-      {blocked ? (
+    );
+  }
+
+  if (access === 'denied') {
+    return (
+      <Button
+        label="Turn on contacts"
+        variant="secondary"
+        onPress={onRequest}
+        loading={loading}
+        style={styles.contactsButton}
+      />
+    );
+  }
+
+  if (access === 'blocked') {
+    return (
+      <>
+        <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
+          {Platform.OS === 'ios'
+            ? 'Contacts are off for Sukun. Turning them on in Settings restarts the app.'
+            : 'Contacts are off for Sukun.'}
+        </Text>
         <Button
           label="Open Settings"
           variant="secondary"
           onPress={onOpenSettings}
+          style={styles.contactsButton}
+        />
+      </>
+    );
+  }
+
+  if (access === 'unavailable') {
+    return (
+      <>
+        <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
+          {"We couldn't read your contacts."}
+        </Text>
+        <Button
+          label="Try again"
+          variant="secondary"
+          onPress={onRequest}
+          loading={loading}
+          style={styles.contactsButton}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {contactCount === 0 ? (
+        <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
+          No mobile numbers in your contacts.
+        </Text>
+      ) : null}
+      {/*
+        Limited access only. The list above is the shared subset and cannot grow from in here,
+        so this is the way to reach the rest: the OS's own picker, which shows the whole
+        address book and passes back the one person tapped without granting anything.
+      */}
+      {canPickContact && access === 'limited' ? (
+        <Button
+          label="Choose from all contacts"
+          variant="secondary"
+          onPress={onPickContact}
           style={styles.contactsButton}
         />
       ) : null}

@@ -46,7 +46,17 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Contacts',
-    body: 'If you add a guest to a ticket, the app opens your phone’s own contact picker. Only the single number you choose is sent to Sukun, and only at the moment you choose it. We never read, upload, or store your contact list. You can type a number by hand instead, and the app works normally if you decline the contacts permission.',
+    /**
+     * This section has to say what the binary does, and for a while it did not. It claimed "we
+     * never read, upload, or store your contact list" while the guest screen was reading the
+     * whole address book to build its own searchable list. The reading is the part that was
+     * true and the sentence was the part that was wrong, so the sentence is what changed.
+     *
+     * The distinction that matters to someone reading this, and the one the old wording
+     * collapsed, is between the app reading contacts *on the phone* to show you a list, and
+     * Sukun receiving them. Only the second ever happens, and only for the people picked.
+     */
+    body: 'If you add a guest to a ticket, the app reads your contacts on your phone so it can show you a list to pick from, and asks your permission first. That list is only ever on your device: nothing about it is sent to Sukun, and we do not upload or store your contact list. Only the numbers you actually pick are sent to us, at the moment you pick them. You can type a number by hand instead, and the app works normally if you decline the contacts permission.',
   },
   {
     title: 'Guests and tickets',
