@@ -22,7 +22,15 @@ const CONTACT = 'sukunwellness.co/support';
 const SECTIONS: { title: string; body: string }[] = [
   {
     title: 'Who we are',
-    body: `Sukun is operated by eSEED in Egypt. We decide how the personal data described here is used. For any privacy question, or to ask for a copy of your data, reach us at ${CONTACT}.`,
+    /**
+     * eSEED builds and maintains the app; it does not run the service. Sukun is operated by
+     * Sukun, and Sukun is therefore the one deciding what is collected here and why. This used
+     * to name eSEED as the operator, which was both wrong and the only place in either policy
+     * that said so: the hosted policy App Store Connect links to already names Sukun as the
+     * controller and does not mention eSEED at all. Guideline 5.1.1(i) turns on identifying
+     * who collects the data, so the two have to agree.
+     */
+    body: `The Sukun app is built and maintained by eSEED in Egypt. Sukun is operated by Sukun, which decides what personal data is collected here and how it is used. For any privacy question, or to ask for a copy of your data, reach us at ${CONTACT}.`,
   },
   {
     title: 'Your phone number',
