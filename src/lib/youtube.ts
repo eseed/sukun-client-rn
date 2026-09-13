@@ -122,6 +122,22 @@ export function stripYoutubeEmbeds(html: string | null | undefined): string {
 }
 
 /**
+ * The origin the player document is served from.
+ *
+ * YouTube checks who is embedding it and refuses to play with error 153 when the answer is
+ * nobody. A `WebView` pointed straight at the embed URL is exactly that case: the embed becomes
+ * the top-level document, there is no parent frame and no referrer, and the player loads as a
+ * perfectly healthy 200 that renders "Video player configuration error". Serving our own
+ * document under this base URL and putting the embed in an iframe inside it gives the player
+ * the origin it asks for, on both platforms.
+ *
+ * It has to be a domain we actually have: claiming `https://www.youtube.com` here clears 153
+ * and earns error 152 instead, since the player will not accept an embed pretending to be
+ * YouTube's own site.
+ */
+export const PLAYER_ORIGIN = 'https://sukunwellness.co';
+
+/**
  * The privacy-preserving embed URL for a video id. `youtube-nocookie.com` is YouTube's own
  * host for embeds that must not set tracking cookies until playback starts, and `playsinline`
  * is what keeps iOS from throwing the video into the OS fullscreen player on tap.
@@ -131,9 +147,70 @@ export function youtubeEmbedUrl(videoId: string, autoplay = false): string {
     playsinline: '1',
     rel: '0',
     modestbranding: '1',
+    // `origin` is half of the referrer check above; `enablejsapi` is the other half of knowing
+    // whether the video played, since a refusal arrives as a rendered page rather than an error.
+    enablejsapi: '1',
+    origin: PLAYER_ORIGIN,
     ...(autoplay ? { autoplay: '1' } : {}),
   });
   return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
+}
+
+/**
+ * The document the player runs in: an iframe filling the frame, plus the IFrame Player API to
+ * report back. The API is the only way to hear that a video will not play, because every
+ * refusal (private, deleted, embedding disabled, the 153 above) is a page that loads fine and
+ * says so in pixels. `ready` and `error` come back over `postMessage`; see `YoutubeEmbed`.
+ */
+export function youtubePlayerHtml(videoId: string): string {
+  if (!VIDEO_ID.test(videoId)) return '';
+  const src = youtubeEmbedUrl(videoId, true);
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+      iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+    </style>
+  </head>
+  <body>
+    <iframe
+      id="player"
+      src="${src}"
+      allow="autoplay; encrypted-media; picture-in-picture"
+      allowfullscreen
+    ></iframe>
+    <script>
+      function post(message) {
+        try {
+          window.ReactNativeWebView.postMessage(JSON.stringify(message));
+        } catch (error) {}
+      }
+      window.onYouTubeIframeAPIReady = function () {
+        new YT.Player('player', {
+          events: {
+            onReady: function (event) {
+              post({ type: 'ready' });
+              event.target.playVideo();
+            },
+            onError: function (event) {
+              post({ type: 'error', code: event.data });
+            }
+          }
+        });
+      };
+      var api = document.createElement('script');
+      api.src = 'https://www.youtube.com/iframe_api';
+      api.onerror = function () {
+        post({ type: 'error', code: 'api' });
+      };
+      document.head.appendChild(api);
+    </script>
+  </body>
+</html>`;
 }
 
 /** The watch page, for the "open in YouTube" fallback when the player cannot load. */

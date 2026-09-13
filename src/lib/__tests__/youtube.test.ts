@@ -1,8 +1,10 @@
 import {
+  PLAYER_ORIGIN,
   extractYoutubeIds,
   isYoutubeUrl,
   stripYoutubeEmbeds,
   youtubeEmbedUrl,
+  youtubePlayerHtml,
   youtubeThumbnailUrl,
   youtubeVideoId,
   youtubeWatchUrl,
@@ -114,6 +116,23 @@ describe('url builders', () => {
 
   it('asks for autoplay only when told to', () => {
     expect(youtubeEmbedUrl(ID, true)).toContain('autoplay=1');
+  });
+
+  it('names the origin the player is embedded under, and asks it to report back', () => {
+    // No origin means error 153 and a player that loads fine but refuses to play.
+    expect(youtubeEmbedUrl(ID)).toContain(`origin=${encodeURIComponent(PLAYER_ORIGIN)}`);
+    expect(youtubeEmbedUrl(ID)).toContain('enablejsapi=1');
+  });
+
+  it('wraps the embed in a document that loads the player API', () => {
+    const html = youtubePlayerHtml(ID);
+    expect(html).toContain(`src="${youtubeEmbedUrl(ID, true)}"`);
+    expect(html).toContain('https://www.youtube.com/iframe_api');
+    expect(html).toContain('onError');
+  });
+
+  it('builds no player document for something that is not a video id', () => {
+    expect(youtubePlayerHtml('"><script>alert(1)</script>')).toBe('');
   });
 
   it('builds the watch page and the poster frame', () => {
