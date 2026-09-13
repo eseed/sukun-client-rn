@@ -1,6 +1,16 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Image,
+  Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BackButton,
@@ -36,6 +46,11 @@ export default function EventDetailScreen() {
   const user = useAuthStore((s) => s.user);
   const startCheckout = useCheckoutStore((s) => s.start);
   const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
+  // The hero runs full-bleed under the status bar, so nothing ever separates the clock from the
+  // page: it sits on the cover image at rest, and on the description once the hero has scrolled
+  // away, where the two overlapped outright (build 22). Track whether the hero still covers the
+  // status bar; the page puts a background-coloured band there once it does not.
+  const [heroUnderStatusBar, setHeroUnderStatusBar] = useState(true);
   const eventSlug =
     typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
@@ -95,6 +110,11 @@ export default function EventDetailScreen() {
 
   const mapUrl = venueMapUrl(event.venue);
 
+  function onScroll(scrollEvent: NativeSyntheticEvent<NativeScrollEvent>) {
+    const covered = scrollEvent.nativeEvent.contentOffset.y < HERO_HEIGHT - insets.top;
+    setHeroUnderStatusBar((previous) => (previous === covered ? previous : covered));
+  }
+
   function onOpenVenue() {
     track('venue_map_opened', { event_id: eventId, event_slug: eventSlug ?? '' });
     void openVenueInMaps(event?.venue);
@@ -129,9 +149,15 @@ export default function EventDetailScreen() {
 
   return (
     <View style={styles.root}>
+      {/* Dark cover image and black full-screen viewer both need a light clock; the cream page
+          below them needs a dark one. */}
+      <StatusBar style={selectedMediaUrl !== null || heroUnderStatusBar ? 'light' : 'dark'} />
+
       <ScrollView
         style={styles.flex}
         contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
@@ -287,6 +313,10 @@ export default function EventDetailScreen() {
         </View>
       </ScrollView>
 
+      {heroUnderStatusBar ? null : (
+        <View pointerEvents="none" style={[styles.statusScrim, { height: insets.top }]} />
+      )}
+
       <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.barPriceBlock}>
           <Text style={styles.barLabel}>From</Text>
@@ -365,6 +395,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.bgPage,
+  },
+  statusScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     backgroundColor: colors.bgPage,
   },
   hero: {

@@ -124,6 +124,17 @@ export function Screen({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {body}
+      {/*
+        Scrolled content otherwise runs under the status bar and collides with the clock, which
+        has no backdrop of its own. The band is the page colour, so it is invisible at rest (the
+        content starts below it) and hides the copy that scrolls past.
+      */}
+      {scroll && top > 0 ? (
+        <View
+          pointerEvents="none"
+          style={[styles.statusScrim, { height: top, backgroundColor: background }]}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -131,4 +142,5 @@ export function Screen({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   grow: { flexGrow: 1 },
+  statusScrim: { position: 'absolute', top: 0, left: 0, right: 0 },
 });
