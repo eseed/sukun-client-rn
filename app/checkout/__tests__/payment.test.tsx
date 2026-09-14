@@ -2,6 +2,7 @@ import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../../s
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src/api/mock';
 import { TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
 import { useAuthStore } from '../../../src/stores/auth';
+import { useCheckoutStore } from '../../../src/stores/checkout';
 
 import PaymentScreen from '../payment';
 
@@ -185,6 +186,43 @@ it('keeps waiting when the SDK reports PENDING', async () => {
     ).toBeTruthy(),
   );
   expect(mockRouter.replace).not.toHaveBeenCalled();
+});
+
+/**
+ * Cancelling an order does not return its cart to `draft`; the cart stays converted and can never
+ * be edited again. Keeping the stale checkout would send the buyer back into screens whose every
+ * mutation the server refuses, so the cancellation clears it and lands on the event, where a new
+ * checkout can actually start.
+ */
+it('cancels the order, clears the stale checkout and returns to the event', async () => {
+  await signInAndComplete();
+  const order = await placeOrderViaCart({
+    eventId: TULUA_ID,
+    buyerTierId: null,
+    items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
+    guests: [
+      { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+      { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+    ],
+  });
+  mockParams.orderId = order.id;
+  // The draft the order was placed from, still sitting in the store exactly as Review left it.
+  useCheckoutStore.setState({
+    cartId: 'cart-stale',
+    orderId: order.id,
+    addons: [],
+  });
+
+  renderWithProviders(<PaymentScreen />);
+
+  await waitFor(() => expect(screen.getByText('Cancel this order')).toBeTruthy());
+  fireEvent.press(screen.getByText('Cancel this order'));
+
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/event/${TULUA_ID}`));
+  expect(mockRouter.back).not.toHaveBeenCalled();
+  const state = useCheckoutStore.getState();
+  expect(state.cartId).toBeNull();
+  expect(state.orderId).toBeNull();
 });
 
 it('still reads the outcome if a release switches to the documented bare string', async () => {

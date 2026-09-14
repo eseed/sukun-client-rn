@@ -643,6 +643,39 @@ describe('09 Guests', () => {
   });
 
   /**
+   * An order placed after this screen loaded converts the cart, and the ticket save behind
+   * Continue can then only come back `CART_NOT_EDITABLE`. The stored order id is the recovery
+   * path, so the buyer goes to payment instead of tapping a mutation that will never land.
+   */
+  it('hands a converted cart to payment instead of retrying the ticket save', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+    useCheckoutStore.getState().setQuantity(1);
+    useCheckoutStore.getState().setBuyerTakesTicket(true);
+    const cart = await mockApi.carts.create(SOUND_BATH_ID);
+    useCheckoutStore.getState().setCartId(cart.id);
+    useCheckoutStore.getState().setOrderId('ord-99');
+
+    const refuse = jest
+      .spyOn(mockApi.carts, 'replaceTickets')
+      .mockRejectedValue(Object.assign(new Error('placed'), { code: 'CART_NOT_EDITABLE' }));
+
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled(),
+    );
+
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith('/checkout/payment?orderId=ord-99'),
+    );
+    expect(mockRouter.push).not.toHaveBeenCalled();
+    refuse.mockRestore();
+  });
+
+  /**
    * The address book is a convenience, never the thing holding the order together. A number
    * typed by hand has to be attachable, visible and removable with contacts switched off.
    */
@@ -1106,6 +1139,108 @@ describe('10 Review & pay', () => {
     // Never the dead end the tester saw, and no second sheet for a second order.
     expect(screen.queryByText('Something went wrong. Try again.')).toBeNull();
     expect(mockPaymob.presentPayVC!).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The order is commercially final once Place Order succeeds, and the cart endpoints refuse
+   * every later edit with `CART_NOT_EDITABLE`. Review therefore stops being a cart-editing screen
+   * the moment the order exists: the promo controls go, Back would only lead to a cart that can
+   * no longer be edited, and the CTA's only remaining job is to hand off to payment.
+   */
+  it('stops offering cart edits once the order has been placed', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(1);
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    useCheckoutStore.getState().addGuest({
+      phoneNumber: '+201022334455',
+      name: 'Nour Hassan',
+      fromContacts: false,
+    });
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    useCheckoutStore.getState().setTermsAccepted(true);
+
+    const place = jest.spyOn(mockApi.carts, 'placeOrder');
+    renderWithProviders(<ReviewScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
+    );
+    // The promo controls exist while the cart is still editable.
+    expect(screen.getByLabelText('Promo code')).toBeTruthy();
+
+    fireEvent.press(screen.getByText('Continue to payment'));
+
+    await waitFor(() => expect(useCheckoutStore.getState().orderId).toBeTruthy());
+    const orderId = useCheckoutStore.getState().orderId!;
+
+    // Placed: the cart-editing controls are gone.
+    await waitFor(() => expect(screen.queryByLabelText('Promo code')).toBeNull());
+    expect(screen.queryByText('Apply')).toBeNull();
+
+    // A second tap neither places nor prices the cart again: it routes to the order.
+    fireEvent.press(screen.getByText('Continue to payment'));
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${orderId}`),
+    );
+    expect(place).toHaveBeenCalledTimes(1);
+
+    // Back is the recovery path too, never an editable cart screen.
+    fireEvent.press(screen.getByLabelText('Go back'));
+    expect(mockRouter.back).not.toHaveBeenCalled();
+
+    place.mockRestore();
+  });
+
+  /**
+   * Paymob's own verdict is a hint, not the truth: CANCELLED follows a real charge, so the
+   * screen waits for the server. Once the server has resolved the attempt as not paid, the order
+   * belongs to the payment screen, which owns retrying and resolution. Review does not grow a
+   * second retry flow.
+   */
+  it('hands a resolved sheet failure to the payment screen', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(1);
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    useCheckoutStore.getState().addGuest({
+      phoneNumber: '+201022334455',
+      name: 'Nour Hassan',
+      fromContacts: false,
+    });
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    useCheckoutStore.getState().setTermsAccepted(true);
+
+    renderWithProviders(<ReviewScreen />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
+    );
+
+    fireEvent.press(screen.getByText('Continue to payment'));
+    await waitFor(() => expect(useCheckoutStore.getState().orderId).toBeTruthy());
+    const orderId = useCheckoutStore.getState().orderId!;
+
+    // The server resolves the attempt as not paid before the sheet's verdict arrives.
+    await mockApi.orders.cancel(orderId);
+
+    const listener = mockPaymob.setSdkListener!.mock.calls.at(-1)?.[0] as (r: unknown) => void;
+    act(() => listener({ status: 'Fail' }));
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${orderId}`),
+    );
   });
 });
 

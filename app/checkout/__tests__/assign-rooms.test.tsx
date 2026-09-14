@@ -184,6 +184,8 @@ const lodgeDouble = (quantity = 1, extra: Partial<DraftAddon> = {}): DraftAddon 
   unitPriceEgp: '2200.00',
   quantity,
   rooms: [],
+  // The occupancy the add-on detail screen records off the chosen option.
+  occupancy: 2,
   ...extra,
 });
 
@@ -196,6 +198,7 @@ const lodgeSingle = (quantity = 1, extra: Partial<DraftAddon> = {}): DraftAddon 
   unitPriceEgp: '1400.00',
   quantity,
   rooms: [],
+  occupancy: 1,
   ...extra,
 });
 
@@ -690,6 +693,62 @@ describe('13 Assign add-ons', () => {
     expect(screen.getByText('This checkout has expired')).toBeTruthy();
     expect(screen.queryByText('Loading your cart...')).toBeNull();
   });
+
+  /**
+   * Coming back to this step after Place Order converts the cart offers only mutations the
+   * server refuses with `CART_NOT_EDITABLE`. Retrying is a dead end; the order id the checkout
+   * store kept is the one usable thing, and it hands the buyer to the payment screen that owns
+   * the order. The cart is never reopened (it cannot be).
+   */
+  it('hands a converted cart to payment instead of retrying the save', async () => {
+    await signInAsBuyer();
+    await seedCheckout({ quantity: 1, addons: [dinner(1)] });
+    useCheckoutStore.getState().setOrderId('ord-42');
+
+    const refuse = jest
+      .spyOn(mockApi.carts, 'replaceAddons')
+      .mockRejectedValue(Object.assign(new Error('placed'), { code: 'CART_NOT_EDITABLE' }));
+
+    renderWithProviders(<AssignAddonsScreen />);
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Continue'));
+    });
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith('/checkout/payment?orderId=ord-42'),
+    );
+    refuse.mockRestore();
+  });
+
+  /**
+   * With no order id there is nothing to route to, and none may be invented. The mapped refusal
+   * still says what happened, and the mutation is not retried.
+   */
+  it('shows the mapped refusal when a converted cart has no order to recover', async () => {
+    await signInAsBuyer();
+    await seedCheckout({ quantity: 1, addons: [dinner(1)] });
+
+    const refuse = jest
+      .spyOn(mockApi.carts, 'replaceAddons')
+      .mockRejectedValue(Object.assign(new Error('placed'), { code: 'CART_NOT_EDITABLE' }));
+
+    renderWithProviders(<AssignAddonsScreen />);
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Continue'));
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('This checkout has already been placed. Finish the payment instead.'),
+      ).toBeTruthy(),
+    );
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+    refuse.mockRestore();
+  });
 });
 
 describe('14 Room occupancy', () => {
@@ -811,6 +870,43 @@ describe('14 Room occupancy', () => {
     expect(saved.addons).toHaveLength(2);
     for (const line of saved.addons) expect(line.assignments.length).toBeGreaterThan(0);
     expect(saved.validation?.canPlaceOrder).toBe(true);
+  });
+
+  /**
+   * The order was placed on Review, so these rooms can no longer be written to the cart. The
+   * screen stops on the mapped refusal and sends the buyer to the order it already has.
+   */
+  it('hands a converted cart to payment instead of retrying the room save', async () => {
+    await signInAsBuyer();
+    await seedCheckout({
+      quantity: 2,
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan' }],
+      addons: [lodgeDouble(1)],
+    });
+    useCheckoutStore.getState().setOrderId('ord-77');
+
+    renderWithProviders(<RoomsScreen />);
+    await waitFor(() => expect(screen.getByText('0 of 2 assigned')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Yasmin El Sayed'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('Nour Hassan'));
+    });
+
+    const refuse = jest
+      .spyOn(mockApi.carts, 'replaceAddons')
+      .mockRejectedValue(Object.assign(new Error('placed'), { code: 'CART_NOT_EDITABLE' }));
+
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
+    });
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith('/checkout/payment?orderId=ord-77'),
+    );
+    refuse.mockRestore();
   });
 
   it('refuses somebody who already has a room, and offers another choice', async () => {

@@ -34,6 +34,7 @@ import {
 import { reassignToRefreshedCart } from '../../src/components/checkout/RecipientPicker';
 import { isSendableAddonLine } from '../../src/lib/addons';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
+import { useConvertedCartRecovery } from '../../src/hooks/useConvertedCartRecovery';
 import { track } from '../../src/lib/analytics';
 import { messageForCode, messageForError } from '../../src/lib/errors';
 import {
@@ -110,6 +111,7 @@ export default function GuestsScreen() {
   const createCart = useCreateCart();
   const replaceTickets = useReplaceCartTickets();
   const replaceAddons = useReplaceCartAddons();
+  const recoverFromConvertedCart = useConvertedCartRecovery();
   const steps = useCheckoutSteps(validEventId);
 
   const [manual, setManual] = useState('');
@@ -445,6 +447,10 @@ export default function GuestsScreen() {
         }
       }
     } catch (err) {
+      // The cart was converted by an order placed after this screen loaded: there is no edit
+      // left to make, so stop here rather than leaving the buyer tapping a mutation that can
+      // only fail. The order id routes them to the payment screen that owns the order.
+      if (recoverFromConvertedCart(err)) return;
       setError(messageForError(err));
       return;
     }

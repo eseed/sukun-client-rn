@@ -56,6 +56,7 @@ export default function ReviewScreen() {
   const steps = useCheckoutSteps(validEventId);
 
   const cartId = useCheckoutStore((s) => s.cartId);
+  const storedOrderId = useCheckoutStore((s) => s.orderId);
   const promoCode = useCheckoutStore((s) => s.promoCode);
   const setPromoCode = useCheckoutStore((s) => s.setPromoCode);
   const termsAccepted = useCheckoutStore((s) => s.termsAccepted);
@@ -75,6 +76,21 @@ export default function ReviewScreen() {
   const [promoDraft, setPromoDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [repriced, setRepriced] = useState(false);
+
+  const cart = cartQuery.data;
+  /**
+   * Whether this cart has become an order and is therefore commercially immutable.
+   *
+   * This is derived from actual commercial state, never from `validation.canPlaceOrder`: that
+   * flag is advisory validity, and a draft cart with validation problems has to stay editable so
+   * the buyer can go back and fix it. An order in this session, the order id the store kept, or
+   * a cart the server no longer calls `draft` all mean Place Order already happened — and once it
+   * has, every cart edit can only come back `CART_NOT_EDITABLE`.
+   */
+  const placed =
+    Boolean(order) || Boolean(storedOrderId) || (cart != null && cart.status !== 'draft');
+  /** The order a placed checkout can be recovered through, if this session knows its id. */
+  const recoveryOrderId = order?.id ?? storedOrderId ?? null;
 
   /**
    * The sheet's verdict is a hint, not the truth. Paymob's own SDK reports CANCELLED when the
@@ -101,8 +117,33 @@ export default function ReviewScreen() {
     } else if (sheet.outcome === 'pending') {
       // Still settling on Paymob's side. The payment screen polls until the order resolves.
       router.replace(`/checkout/payment?orderId=${order.id}`);
+    } else if (
+      (sheet.outcome === 'fail' || sheet.outcome === 'cancelled') &&
+      rejectedByServer
+    ) {
+      // The server has resolved the attempt as not paid, so the order now belongs to the payment
+      // screen: it owns retrying and resolving, and Review must not grow a second retry flow.
+      router.replace(`/checkout/payment?orderId=${order.id}`);
     }
-  }, [order, resetCheckout, router, serverSaysPaid, sheet.outcome]);
+  }, [order, rejectedByServer, resetCheckout, router, serverSaysPaid, sheet.outcome]);
+
+  /**
+   * A remount is not a return to editing.
+   *
+   * The checkout store remembers the order this cart became, even when this screen's local
+   * `order` state is gone (a remount, or navigating back to it later). Place Order is
+   * irrevocable, so the only place left to finish or resolve that order is the payment screen,
+   * which routes a paid order on to confirmation itself. `placed` also keeps every cart control
+   * hidden in the moment before this runs, so a remount never flashes an editable Review.
+   */
+  useEffect(() => {
+    const orderId = useCheckoutStore.getState().orderId;
+    if (!orderId) return;
+    router.replace(`/checkout/payment?orderId=${orderId}` as never);
+    // Mount only: an order id that appears later belongs to this screen placing the order, and
+    // the sheet it just opened owns what happens next.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Only claim nothing was charged once the server has actually said so.
   const sheetError =
@@ -125,14 +166,16 @@ export default function ReviewScreen() {
   const { mutateAsync: takePrice } = preview;
 
   useEffect(() => {
-    if (!cartId) return;
     // Prices the cart on arrival. The result is read straight off the mutation rather than
     // copied into state: a second copy meant the screen went on showing the previous total
     // while a new one was being fetched, which is the one moment it must not do that.
+    //
+    // Only a draft cart is previewed. A converted one is already an order, and asking the cart
+    // endpoints to price it again is exactly the mutation this screen has to stop making.
+    if (!cartId || placed || cart?.status !== 'draft') return;
     takePrice(cartId).catch((err: unknown) => setError(messageForError(err)));
-  }, [cartId, takePrice]);
+  }, [cart?.status, cartId, placed, takePrice]);
 
-  const cart = cartQuery.data;
   const priced = preview.data ?? null;
   const pricing = priced?.pricing;
 
@@ -187,6 +230,9 @@ export default function ReviewScreen() {
 
   async function onApplyPromo() {
     setError(null);
+    // A placed cart cannot take a promo: the order it became is final. The controls are hidden
+    // once `placed`, and this guard keeps the mutations unreachable from any other path.
+    if (placed) return;
     const code = promoDraft.trim().toUpperCase();
     if (!code || !cartId) return;
 
@@ -203,7 +249,7 @@ export default function ReviewScreen() {
   }
 
   async function onRemovePromo() {
-    if (!cartId) return;
+    if (!cartId || placed) return;
     setError(null);
     try {
       await removePromo.mutateAsync(cartId);
@@ -219,10 +265,24 @@ export default function ReviewScreen() {
    *
    * A `CART_PRICING_CHANGED` refusal is never retried: the screen takes a new preview, says the
    * price moved, and waits for the buyer to look at the new total and tap again.
+   *
+   * Once the order exists this only routes: placing it again (or editing the cart it converted)
+   * can only come back `CART_NOT_EDITABLE`, and the payment screen already owns what happens next.
    */
   async function onContinue() {
     setError(null);
     setRepriced(false);
+
+    if (placed) {
+      if (recoveryOrderId) {
+        router.replace(`/checkout/payment?orderId=${recoveryOrderId}` as never);
+      } else if (validEventId) {
+        router.replace(`/event/${validEventId}` as never);
+      } else {
+        router.replace('/(tabs)/discover' as never);
+      }
+      return;
+    }
 
     if (!cartId || !token) return;
 
@@ -328,7 +388,25 @@ export default function ReviewScreen() {
   return (
     <Screen scroll contentStyle={styles.content}>
       <FlowerCorner top={52} />
-      <BackButton onPress={() => router.back()} style={styles.back} />
+      <BackButton
+        onPress={() => {
+          // Back must never re-enter an editable cart screen once the cart has become an order:
+          // those screens would only let the buyer start an edit the server refuses. The order
+          // id is the recovery path; without one the event is where a fresh checkout starts.
+          if (placed) {
+            if (recoveryOrderId) {
+              router.replace(`/checkout/payment?orderId=${recoveryOrderId}` as never);
+            } else if (validEventId) {
+              router.replace(`/event/${validEventId}` as never);
+            } else {
+              router.replace('/(tabs)/discover' as never);
+            }
+            return;
+          }
+          router.back();
+        }}
+        style={styles.back}
+      />
 
       <StepLabel>{`Checkout · step ${steps.reviewStep} of ${steps.total}`}</StepLabel>
       <View style={styles.heading}>
@@ -425,35 +503,39 @@ export default function ReviewScreen() {
         <InlineError message="The price changed while you were here. Check the new total, then tap again." />
       ) : null}
 
-      {promoCode ? (
-        <View style={styles.promoApplied}>
-          <Text variant="metaSm">Promo {promoCode} applied</Text>
-          <Pressable accessibilityRole="button" onPress={onRemovePromo}>
-            <Text variant="metaSm" color={colors.sky500}>
-              Remove
-            </Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.promoRow}>
-          <TextInput
-            accessibilityLabel="Promo code"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            onChangeText={setPromoDraft}
-            placeholder="Promo code"
-            placeholderTextColor={colors.textMuted}
-            style={styles.promoInput}
-            value={promoDraft}
-          />
-          <Button
-            label="Apply"
-            variant="secondary"
-            loading={applyPromo.isPending}
-            onPress={onApplyPromo}
-          />
-        </View>
-      )}
+      {/* A promo cannot be attached to an order after the fact, so the controls disappear with
+          the cart. The discount the order was placed with still shows in the card above. */}
+      {!placed ? (
+        promoCode ? (
+          <View style={styles.promoApplied}>
+            <Text variant="metaSm">Promo {promoCode} applied</Text>
+            <Pressable accessibilityRole="button" onPress={onRemovePromo}>
+              <Text variant="metaSm" color={colors.sky500}>
+                Remove
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.promoRow}>
+            <TextInput
+              accessibilityLabel="Promo code"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              onChangeText={setPromoDraft}
+              placeholder="Promo code"
+              placeholderTextColor={colors.textMuted}
+              style={styles.promoInput}
+              value={promoDraft}
+            />
+            <Button
+              label="Apply"
+              variant="secondary"
+              loading={applyPromo.isPending}
+              onPress={onApplyPromo}
+            />
+          </View>
+        )
+      ) : null}
 
       <Checkbox
         checked={termsAccepted}
@@ -469,17 +551,23 @@ export default function ReviewScreen() {
         A blocked CTA is grey rather than black, but grey at the bottom of a long screen still
         reads as "tap me": the label is the only thing that says why it will not move. The two
         blockers are different problems, and the box is the one the buyer can actually solve.
+
+        Once the order exists the CTA only ever hands off to payment; it never places again.
       */}
       <Button
         label={
-          !termsAccepted
-            ? 'Accept the terms to pay'
-            : canPlace
+          placed
+            ? recoveryOrderId
               ? 'Continue to payment'
-              : 'This order cannot be paid yet'
+              : 'Back to the event'
+            : !termsAccepted
+              ? 'Accept the terms to pay'
+              : canPlace
+                ? 'Continue to payment'
+                : 'This order cannot be paid yet'
         }
-        disabled={!canPlace || !termsAccepted}
-        loading={placeOrder.isPending || initiatePayment.isPending || preview.isPending}
+        disabled={placed ? false : !canPlace || !termsAccepted}
+        loading={!placed && (placeOrder.isPending || initiatePayment.isPending || preview.isPending)}
         onPress={onContinue}
       />
     </Screen>

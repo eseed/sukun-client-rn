@@ -236,7 +236,12 @@ export default function AddonDetailScreen() {
       unitPriceEgp: resolvedOption.priceEgpNow,
       quantity,
       // Recipients are chosen on the next step; nothing can be ordered until they are.
-      ...(addon.type === 'accommodation' ? { rooms: [] } : { assignments: [] }),
+      ...(addon.type === 'accommodation'
+        ? {
+            rooms: [],
+            occupancy: isAccommodation(resolvedOption) ? resolvedOption.occupancy : null,
+          }
+        : { assignments: [] }),
     });
     router.back();
   }

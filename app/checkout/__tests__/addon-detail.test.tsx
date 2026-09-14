@@ -342,8 +342,10 @@ describe('add-on detail · adding to the cart', () => {
         optionLabel: 'Double · 2 nights',
         unitPriceEgp: '2200.00',
         quantity: 1,
-        // Occupants are named on the assignment step; the room slots start empty.
+        // Occupants are named on the assignment step; the room slots start empty. The occupancy
+        // is the option's own figure, kept so the draft can be checked the way the backend does.
         rooms: [],
+        occupancy: 2,
       },
     ]);
     expect(mockRouter.back).toHaveBeenCalled();

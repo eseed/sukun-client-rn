@@ -162,6 +162,9 @@ export function describeAddonKinds(addons: readonly { type: AddonType }[]): stri
  * accommodation line stays empty until the rooms step. Sending a line mid-flight is a guaranteed
  * 400, so the draft stays local until the line is whole.
  *
+ * Accommodation is stricter: every room must hold exactly the option's published occupancy, and
+ * an unknown occupancy fails closed.
+ *
  * The whole set is still sent as one `PUT`, which replaces what the cart holds. Leaving an
  * unfinished line out is therefore not a partial save: it is the cart saying that line is not
  * ordered yet, which is exactly true until its step is done.
@@ -169,12 +172,18 @@ export function describeAddonKinds(addons: readonly { type: AddonType }[]): stri
 export function isSendableAddonLine(line: {
   type: AddonType;
   quantity: number;
+  occupancy?: number | null;
   assignments?: readonly { quantity?: number }[];
   rooms?: readonly { occupants: readonly unknown[] }[];
 }): boolean {
   if (line.type === 'accommodation') {
+    const occupancy = line.occupancy ?? 0;
     const rooms = line.rooms ?? [];
-    return rooms.length === line.quantity && rooms.every((room) => room.occupants.length > 0);
+    return (
+      occupancy > 0 &&
+      rooms.length === line.quantity &&
+      rooms.every((room) => room.occupants.length === occupancy)
+    );
   }
   const assigned = (line.assignments ?? []).reduce(
     (total, assignment) => total + (assignment.quantity ?? 1),
