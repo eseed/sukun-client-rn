@@ -52,8 +52,9 @@ const MESSAGES: Record<string, string> = {
   GUEST_ALLOCATION_INVALID: 'Every ticket needs a guest. Go back and pick who each one is for.',
   GUEST_VALIDATION_FAILED: 'Check the guest numbers and try again.',
 
-  // A converted cart refuses every later edit; the next two are incomplete-draft refusals.
-  CART_NOT_EDITABLE: 'This checkout has already been placed. Finish the payment instead.',
+  // The backend uses this for converted, abandoned, and expired carts; it does not prove an
+  // order exists, so recovery decides whether payment or a fresh event checkout is appropriate.
+  CART_NOT_EDITABLE: 'This checkout is no longer available. Start again from the event.',
   ROOM_OCCUPANCY_UNFILLED: 'Every room has to be full before you can check out.',
   ADDON_ASSIGNMENT_COUNT_MISMATCH: 'Every extra needs somebody to go to.',
 
@@ -171,13 +172,7 @@ export function messageForError(error: unknown): string {
   return FALLBACK;
 }
 
-/**
- * True when the server refused an edit because that cart has already become an order.
- *
- * Place Order is the only Cart to Order boundary, and it is final: a converted cart can never be
- * edited again. A screen still holding one after an earlier screen placed the order has to stop
- * and route the buyer to the order it already has, never retry the mutation.
- */
+/** True when the server refused an edit because the cart is no longer editable. */
 export function isCartNotEditableError(error: unknown): boolean {
   return isRecord(error) && error.code === 'CART_NOT_EDITABLE';
 }

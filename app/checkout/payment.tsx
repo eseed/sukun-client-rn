@@ -171,13 +171,8 @@ export default function PaymentScreen() {
   }
 
   /**
-   * Releases the order and its capacity hold, then clears the checkout that produced it.
-   *
-   * Cancelling an order does not put its cart back to `draft`; the cart stays converted and can
-   * never be edited again. Going back into Guests / Assign / Rooms / Review would therefore only
-   * offer mutations the server refuses, so the stale draft is reset and the buyer lands on the
-   * event, where a genuinely new checkout starts. Discover is the fallback only when the event
-   * cannot be resolved.
+   * Releases the order and its hold, then clears the checkout: the converted cart cannot be
+   * edited again, so the buyer restarts from the event (Discover if it cannot be resolved).
    */
   async function onCancel() {
     if (!validOrderId) return;

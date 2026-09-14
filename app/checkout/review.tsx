@@ -31,6 +31,7 @@ import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
+import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRecovery';
 import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
 import { colors, fontFamily, space } from '../../src/theme/tokens';
 import type { CartPricingLine, OrderDetail } from '../../src/api/types';
@@ -62,6 +63,7 @@ export default function ReviewScreen() {
   const termsAccepted = useCheckoutStore((s) => s.termsAccepted);
   const setTermsAccepted = useCheckoutStore((s) => s.setTermsAccepted);
   const setOrderId = useCheckoutStore((s) => s.setOrderId);
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(validEventId);
   const resetCheckout = useCheckoutStore((s) => s.reset);
 
   const cartQuery = useCart(cartId ?? undefined);
@@ -78,18 +80,9 @@ export default function ReviewScreen() {
   const [repriced, setRepriced] = useState(false);
 
   const cart = cartQuery.data;
-  /**
-   * Whether this cart has become an order and is therefore commercially immutable.
-   *
-   * This is derived from actual commercial state, never from `validation.canPlaceOrder`: that
-   * flag is advisory validity, and a draft cart with validation problems has to stay editable so
-   * the buyer can go back and fix it. An order in this session, the order id the store kept, or
-   * a cart the server no longer calls `draft` all mean Place Order already happened — and once it
-   * has, every cart edit can only come back `CART_NOT_EDITABLE`.
-   */
+  /** Placed state is commercial state, never advisory `canPlaceOrder`. */
   const placed =
     Boolean(order) || Boolean(storedOrderId) || (cart != null && cart.status !== 'draft');
-  /** The order a placed checkout can be recovered through, if this session knows its id. */
   const recoveryOrderId = order?.id ?? storedOrderId ?? null;
 
   /**
@@ -121,27 +114,19 @@ export default function ReviewScreen() {
       (sheet.outcome === 'fail' || sheet.outcome === 'cancelled') &&
       rejectedByServer
     ) {
-      // The server has resolved the attempt as not paid, so the order now belongs to the payment
-      // screen: it owns retrying and resolving, and Review must not grow a second retry flow.
+      // The server has resolved it as not paid; the payment screen owns retrying from here.
       router.replace(`/checkout/payment?orderId=${order.id}`);
     }
   }, [order, rejectedByServer, resetCheckout, router, serverSaysPaid, sheet.outcome]);
 
   /**
-   * A remount is not a return to editing.
-   *
-   * The checkout store remembers the order this cart became, even when this screen's local
-   * `order` state is gone (a remount, or navigating back to it later). Place Order is
-   * irrevocable, so the only place left to finish or resolve that order is the payment screen,
-   * which routes a paid order on to confirmation itself. `placed` also keeps every cart control
-   * hidden in the moment before this runs, so a remount never flashes an editable Review.
+   * A remount with an order already in the store goes straight to payment, which resolves a paid
+   * order to confirmation. Mount-only: an id appearing later came from a placement made here.
    */
   useEffect(() => {
     const orderId = useCheckoutStore.getState().orderId;
     if (!orderId) return;
     router.replace(`/checkout/payment?orderId=${orderId}` as never);
-    // Mount only: an order id that appears later belongs to this screen placing the order, and
-    // the sheet it just opened owns what happens next.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -159,7 +144,7 @@ export default function ReviewScreen() {
     try {
       await preview.mutateAsync(cartId);
     } catch (err) {
-      setError(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
     }
   };
 
@@ -169,12 +154,11 @@ export default function ReviewScreen() {
     // Prices the cart on arrival. The result is read straight off the mutation rather than
     // copied into state: a second copy meant the screen went on showing the previous total
     // while a new one was being fetched, which is the one moment it must not do that.
-    //
-    // Only a draft cart is previewed. A converted one is already an order, and asking the cart
-    // endpoints to price it again is exactly the mutation this screen has to stop making.
     if (!cartId || placed || cart?.status !== 'draft') return;
-    takePrice(cartId).catch((err: unknown) => setError(messageForError(err)));
-  }, [cart?.status, cartId, placed, takePrice]);
+    takePrice(cartId).catch((err: unknown) => {
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
+    });
+  }, [cart?.status, cartId, placed, recoverFromCartNotEditable, takePrice]);
 
   const priced = preview.data ?? null;
   const pricing = priced?.pricing;
@@ -230,8 +214,6 @@ export default function ReviewScreen() {
 
   async function onApplyPromo() {
     setError(null);
-    // A placed cart cannot take a promo: the order it became is final. The controls are hidden
-    // once `placed`, and this guard keeps the mutations unreachable from any other path.
     if (placed) return;
     const code = promoDraft.trim().toUpperCase();
     if (!code || !cartId) return;
@@ -244,7 +226,7 @@ export default function ReviewScreen() {
       await refresh();
     } catch (err) {
       track('promo_failed', { event_id: validEventId ?? '', promo_code: code });
-      setError(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
     }
   }
 
@@ -256,7 +238,7 @@ export default function ReviewScreen() {
       setPromoCode(null);
       await refresh();
     } catch (err) {
-      setError(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
     }
   }
 
@@ -265,9 +247,6 @@ export default function ReviewScreen() {
    *
    * A `CART_PRICING_CHANGED` refusal is never retried: the screen takes a new preview, says the
    * price moved, and waits for the buyer to look at the new total and tap again.
-   *
-   * Once the order exists this only routes: placing it again (or editing the cart it converted)
-   * can only come back `CART_NOT_EDITABLE`, and the payment screen already owns what happens next.
    */
   async function onContinue() {
     setError(null);
@@ -325,6 +304,8 @@ export default function ReviewScreen() {
         await refresh();
         return;
       }
+
+      if (recoverFromCartNotEditable(err)) return;
 
       /**
        * An order for this event is already holding the capacity, which is what cancelling the
@@ -390,9 +371,7 @@ export default function ReviewScreen() {
       <FlowerCorner top={52} />
       <BackButton
         onPress={() => {
-          // Back must never re-enter an editable cart screen once the cart has become an order:
-          // those screens would only let the buyer start an edit the server refuses. The order
-          // id is the recovery path; without one the event is where a fresh checkout starts.
+          // Once placed, Back must not re-enter an editable cart screen.
           if (placed) {
             if (recoveryOrderId) {
               router.replace(`/checkout/payment?orderId=${recoveryOrderId}` as never);
@@ -503,8 +482,6 @@ export default function ReviewScreen() {
         <InlineError message="The price changed while you were here. Check the new total, then tap again." />
       ) : null}
 
-      {/* A promo cannot be attached to an order after the fact, so the controls disappear with
-          the cart. The discount the order was placed with still shows in the card above. */}
       {!placed ? (
         promoCode ? (
           <View style={styles.promoApplied}>
@@ -551,8 +528,6 @@ export default function ReviewScreen() {
         A blocked CTA is grey rather than black, but grey at the bottom of a long screen still
         reads as "tap me": the label is the only thing that says why it will not move. The two
         blockers are different problems, and the box is the one the buyer can actually solve.
-
-        Once the order exists the CTA only ever hands off to payment; it never places again.
       */}
       <Button
         label={

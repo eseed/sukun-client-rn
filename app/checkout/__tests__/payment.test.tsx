@@ -188,12 +188,7 @@ it('keeps waiting when the SDK reports PENDING', async () => {
   expect(mockRouter.replace).not.toHaveBeenCalled();
 });
 
-/**
- * Cancelling an order does not return its cart to `draft`; the cart stays converted and can never
- * be edited again. Keeping the stale checkout would send the buyer back into screens whose every
- * mutation the server refuses, so the cancellation clears it and lands on the event, where a new
- * checkout can actually start.
- */
+/** Cancelling clears the stale checkout and returns to the event, never back a screen. */
 it('cancels the order, clears the stale checkout and returns to the event', async () => {
   await signInAndComplete();
   const order = await placeOrderViaCart({
@@ -206,7 +201,6 @@ it('cancels the order, clears the stale checkout and returns to the event', asyn
     ],
   });
   mockParams.orderId = order.id;
-  // The draft the order was placed from, still sitting in the store exactly as Review left it.
   useCheckoutStore.setState({
     cartId: 'cart-stale',
     orderId: order.id,

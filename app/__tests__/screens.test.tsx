@@ -642,11 +642,7 @@ describe('09 Guests', () => {
     );
   });
 
-  /**
-   * An order placed after this screen loaded converts the cart, and the ticket save behind
-   * Continue can then only come back `CART_NOT_EDITABLE`. The stored order id is the recovery
-   * path, so the buyer goes to payment instead of tapping a mutation that will never land.
-   */
+  /** A converted cart's ticket save routes to payment through the stored order id. */
   it('hands a converted cart to payment instead of retrying the ticket save', async () => {
     mockParams.eventId = SOUND_BATH_ID;
     await signInAndComplete();
@@ -1141,12 +1137,7 @@ describe('10 Review & pay', () => {
     expect(mockPaymob.presentPayVC!).not.toHaveBeenCalled();
   });
 
-  /**
-   * The order is commercially final once Place Order succeeds, and the cart endpoints refuse
-   * every later edit with `CART_NOT_EDITABLE`. Review therefore stops being a cart-editing screen
-   * the moment the order exists: the promo controls go, Back would only lead to a cart that can
-   * no longer be edited, and the CTA's only remaining job is to hand off to payment.
-   */
+  /** Once placed, no cart edit is offered and every way out leads to payment. */
   it('stops offering cart edits once the order has been placed', async () => {
     mockParams.eventId = TULUA_ID;
     await signInAndComplete();
@@ -1172,7 +1163,6 @@ describe('10 Review & pay', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
     );
-    // The promo controls exist while the cart is still editable.
     expect(screen.getByLabelText('Promo code')).toBeTruthy();
 
     fireEvent.press(screen.getByText('Continue to payment'));
@@ -1180,30 +1170,22 @@ describe('10 Review & pay', () => {
     await waitFor(() => expect(useCheckoutStore.getState().orderId).toBeTruthy());
     const orderId = useCheckoutStore.getState().orderId!;
 
-    // Placed: the cart-editing controls are gone.
     await waitFor(() => expect(screen.queryByLabelText('Promo code')).toBeNull());
     expect(screen.queryByText('Apply')).toBeNull();
 
-    // A second tap neither places nor prices the cart again: it routes to the order.
     fireEvent.press(screen.getByText('Continue to payment'));
     await waitFor(() =>
       expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${orderId}`),
     );
     expect(place).toHaveBeenCalledTimes(1);
 
-    // Back is the recovery path too, never an editable cart screen.
     fireEvent.press(screen.getByLabelText('Go back'));
     expect(mockRouter.back).not.toHaveBeenCalled();
 
     place.mockRestore();
   });
 
-  /**
-   * Paymob's own verdict is a hint, not the truth: CANCELLED follows a real charge, so the
-   * screen waits for the server. Once the server has resolved the attempt as not paid, the order
-   * belongs to the payment screen, which owns retrying and resolution. Review does not grow a
-   * second retry flow.
-   */
+  /** A resolved failure hands off to payment rather than growing a retry flow here. */
   it('hands a resolved sheet failure to the payment screen', async () => {
     mockParams.eventId = TULUA_ID;
     await signInAndComplete();
@@ -1232,7 +1214,6 @@ describe('10 Review & pay', () => {
     await waitFor(() => expect(useCheckoutStore.getState().orderId).toBeTruthy());
     const orderId = useCheckoutStore.getState().orderId!;
 
-    // The server resolves the attempt as not paid before the sheet's verdict arrives.
     await mockApi.orders.cancel(orderId);
 
     const listener = mockPaymob.setSdkListener!.mock.calls.at(-1)?.[0] as (r: unknown) => void;

@@ -342,8 +342,7 @@ describe('add-on detail · adding to the cart', () => {
         optionLabel: 'Double · 2 nights',
         unitPriceEgp: '2200.00',
         quantity: 1,
-        // Occupants are named on the assignment step; the room slots start empty. The occupancy
-        // is the option's own figure, kept so the draft can be checked the way the backend does.
+        // Occupants are named on the assignment step; the room slots start empty.
         rooms: [],
         occupancy: 2,
       },

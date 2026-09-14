@@ -1,13 +1,8 @@
 import { isSendableAddonLine } from '../addons';
 
 /**
- * The shared sendability predicate, unit-tested because every cart-mutation path relies on it:
- * the assignment step, the rooms step, the guests step's rebuild, and "add a ticket for them".
- *
- * The accommodation rule is the one that used to be wrong. `PUT /carts/:id/addons` checks each
- * room against the option's published occupancy, so a room holding somebody is not a room holding
- * the right number of people. A partial line sent anyway is a guaranteed `ROOM_OCCUPANCY_UNFILLED`
- * 400, and the draft must therefore stay local until every room is exactly full.
+ * The shared predicate behind every cart write: accommodation rooms must hold exactly the
+ * option's published occupancy, and an unknown occupancy fails closed.
  */
 
 function room(occupants: number) {

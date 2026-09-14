@@ -23,7 +23,7 @@ import {
 import { useAddon, useCart, useEvent, useReplaceCartAddons } from '../../src/hooks/queries';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
-import { useConvertedCartRecovery } from '../../src/hooks/useConvertedCartRecovery';
+import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRecovery';
 import { isAccommodation, isSendableAddonLine } from '../../src/lib/addons';
 import { messageForError } from '../../src/lib/errors';
 import { formatDate, formatEgp } from '../../src/lib/format';
@@ -78,7 +78,7 @@ export default function RoomsScreen() {
   const eventQuery = useEvent(validEventId);
   const replaceAddons = useReplaceCartAddons();
   const addTicketFor = useAddTicketToCart(validEventId);
-  const recoverFromConvertedCart = useConvertedCartRecovery();
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(validEventId);
 
   const [external, setExternal] = useState<Person[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -316,9 +316,7 @@ export default function RoomsScreen() {
         addons: addons.filter(isSendableAddonLine).map(toInput),
       });
     } catch (err) {
-      // The cart was converted by an order placed after this screen loaded. Reopening it is not
-      // possible on purpose, so stop and hand the buyer the order id they can recover.
-      if (recoverFromConvertedCart(err)) return;
+      if (recoverFromCartNotEditable(err)) return;
       setError(messageForError(err));
       return;
     }
@@ -360,6 +358,7 @@ export default function RoomsScreen() {
 
       <AddRecipient
         cartId={cartId}
+        eventId={validEventId}
         eventTitle={eventTitle}
         refuseRoomHolders
         canAddTicket={!orderFull}

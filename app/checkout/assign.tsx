@@ -25,7 +25,7 @@ import { useCart, useEvent, useReplaceCartAddons } from '../../src/hooks/queries
 import { isSendableAddonLine } from '../../src/lib/addons';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
-import { useConvertedCartRecovery } from '../../src/hooks/useConvertedCartRecovery';
+import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRecovery';
 import { messageForError } from '../../src/lib/errors';
 import { formatPhoneLocal } from '../../src/lib/phone';
 import { useCheckoutStore } from '../../src/stores/checkout';
@@ -64,7 +64,7 @@ export default function AssignAddonsScreen() {
   const eventQuery = useEvent(validEventId);
   const replaceAddons = useReplaceCartAddons();
   const addTicketFor = useAddTicketToCart(validEventId);
-  const recoverFromConvertedCart = useConvertedCartRecovery();
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(validEventId);
 
   const [external, setExternal] = useState<Recipient[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -227,9 +227,7 @@ export default function AssignAddonsScreen() {
         addons: addons.filter(isSendableAddonLine).map(toInput),
       });
     } catch (err) {
-      // The cart has already become an order, so no edit here can land. Stop retrying and let
-      // the order id carry the buyer to the payment screen that owns it.
-      if (recoverFromConvertedCart(err)) return;
+      if (recoverFromCartNotEditable(err)) return;
       setError(messageForError(err));
       return;
     }
@@ -285,6 +283,7 @@ export default function AssignAddonsScreen() {
       {lines.length > 0 ? (
         <AddRecipient
           cartId={cartId}
+          eventId={validEventId}
           eventTitle={eventTitle}
           canAddTicket={!orderFull}
           alreadyInOrder={(phoneNumber) =>

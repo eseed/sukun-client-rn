@@ -143,8 +143,7 @@ describe('20 · My tickets, extras on the card', () => {
 
     renderWithProviders(<TicketsScreen />);
 
-    // Room, dinner voucher and shuttle all landed on the buyer's own ticket. The extras row
-    // hangs off a separate catalogue query, so it is waited for too rather than raced.
+    // Room, dinner voucher and shuttle all landed on the buyer's own ticket.
     await waitFor(() => expect(screen.getByText('3 add-ons attached')).toBeTruthy());
     await waitFor(() => expect(screen.getByText('Add extras to this ticket')).toBeTruthy());
   });

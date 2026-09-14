@@ -34,14 +34,9 @@ describe('messageForError', () => {
     }
   });
 
-  /**
-   * The three refusals that used to fall through to "Something went wrong. Try again.": a cart
-   * edit after Place Order, and the two ways a draft line can be incomplete. Each one has an
-   * action attached, and the generic copy hides it.
-   */
-  it('speaks plainly about a converted cart and about incomplete addon lines', () => {
+  it('speaks neutrally about any cart that is no longer editable', () => {
     expect(messageForError(apiError('CART_NOT_EDITABLE'))).toBe(
-      'This checkout has already been placed. Finish the payment instead.',
+      'This checkout is no longer available. Start again from the event.',
     );
     expect(messageForError(apiError('ROOM_OCCUPANCY_UNFILLED'))).toBe(
       'Every room has to be full before you can check out.',

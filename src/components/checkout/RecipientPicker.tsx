@@ -14,9 +14,9 @@ import {
   useValidateGuests,
 } from '../../hooks/queries';
 import { useContacts, type PickedContact } from '../../hooks/useContacts';
-import { useConvertedCartRecovery } from '../../hooks/useConvertedCartRecovery';
+import { useCartNotEditableRecovery } from '../../hooks/useCartNotEditableRecovery';
 import { isSendableAddonLine } from '../../lib/addons';
-import { isCartNotEditableError, messageForCode, messageForError } from '../../lib/errors';
+import { messageForCode, messageForError } from '../../lib/errors';
 import { formatPhoneLocal } from '../../lib/phone';
 import { useCheckoutStore } from '../../stores/checkout';
 import { colors, space } from '../../theme/tokens';
@@ -188,6 +188,7 @@ export function refusalMessage(kind: RefusalKind, name: string, eventTitle: stri
  */
 export function AddRecipient({
   cartId,
+  eventId,
   eventTitle,
   refuseRoomHolders = false,
   canAddTicket,
@@ -197,6 +198,7 @@ export function AddRecipient({
   label = 'Add someone else',
 }: {
   cartId: string;
+  eventId?: string;
   eventTitle: string;
   /** The rooms screen also refuses somebody who already has a room: one room per person. */
   refuseRoomHolders?: boolean;
@@ -210,7 +212,7 @@ export function AddRecipient({
 }) {
   const { pickContact, canPickContact, openSettings } = useContacts();
   const lookup = useLookupRecipients();
-  const recoverFromConvertedCart = useConvertedCartRecovery();
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(eventId);
 
   const [numberChoice, setNumberChoice] = useState<PickedContact | null>(null);
   const [refusal, setRefusal] = useState<{
@@ -260,9 +262,7 @@ export function AddRecipient({
         hasAccommodation: result.hasAccommodation,
       });
     } catch (err) {
-      // A converted cart refuses this lookup, and retrying is pointless. The recovery hook sends
-      // the buyer to the order when its id is known, otherwise the mapped copy still explains it.
-      if (!recoverFromConvertedCart(err)) setMessage(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setMessage(messageForError(err));
     } finally {
       setBusy(false);
     }
@@ -453,7 +453,7 @@ export function useAddTicketToCart(eventId: string | undefined) {
   const replaceTickets = useReplaceCartTickets();
   const replaceAddons = useReplaceCartAddons();
   const validateGuests = useValidateGuests();
-  const recoverFromConvertedCart = useConvertedCartRecovery();
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(eventId);
 
   return async function addTicketFor(person: {
     name: string;
@@ -506,9 +506,7 @@ export function useAddTicketToCart(eventId: string | undefined) {
         },
       });
     } catch (err) {
-      // This cart is already an order: no ticket edit can land, so instead of reporting a
-      // failure the buyer cannot act on, route to the order through the recovery hook.
-      if (recoverFromConvertedCart(err)) return { ticketAdded: false, problem: null };
+      if (recoverFromCartNotEditable(err)) return { ticketAdded: false, problem: null };
       return { ticketAdded: false, problem: messageForError(err) };
     }
 
@@ -538,12 +536,7 @@ export function useAddTicketToCart(eventId: string | undefined) {
         })),
       });
     } catch (err) {
-      // The cart converted underneath the edit. The recovery hook takes the buyer to the order
-      // that now owns it when its id is known; with no id there is still nothing to retry, so
-      // the mapped refusal replaces the "extras did not save" sentence instead of dressing up
-      // a failure the buyer cannot fix here.
-      if (recoverFromConvertedCart(err)) return { ticketAdded: true, problem: null };
-      if (isCartNotEditableError(err)) return { ticketAdded: true, problem: messageForError(err) };
+      if (recoverFromCartNotEditable(err)) return { ticketAdded: true, problem: null };
       return {
         ticketAdded: true,
         problem: `${person.name} has a ticket now, but your extras did not save: ${messageForError(err)}`,

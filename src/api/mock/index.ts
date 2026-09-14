@@ -387,7 +387,11 @@ function requireDraftCart(cartId: string, options: { allowConverted?: boolean } 
     throw new MockApiError('CART_NOT_FOUND', 'That cart no longer exists.', 404);
   }
   if (cart.status !== 'draft' && !options.allowConverted) {
-    throw new MockApiError('CART_NOT_EDITABLE', 'This checkout has already been placed.', 409);
+    throw new MockApiError(
+      'CART_NOT_EDITABLE',
+      'This checkout is no longer available. Start again from the event.',
+      409,
+    );
   }
 
   return cart;

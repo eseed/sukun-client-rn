@@ -184,7 +184,6 @@ const lodgeDouble = (quantity = 1, extra: Partial<DraftAddon> = {}): DraftAddon 
   unitPriceEgp: '2200.00',
   quantity,
   rooms: [],
-  // The occupancy the add-on detail screen records off the chosen option.
   occupancy: 2,
   ...extra,
 });
@@ -694,12 +693,7 @@ describe('13 Assign add-ons', () => {
     expect(screen.queryByText('Loading your cart...')).toBeNull();
   });
 
-  /**
-   * Coming back to this step after Place Order converts the cart offers only mutations the
-   * server refuses with `CART_NOT_EDITABLE`. Retrying is a dead end; the order id the checkout
-   * store kept is the one usable thing, and it hands the buyer to the payment screen that owns
-   * the order. The cart is never reopened (it cannot be).
-   */
+  /** `CART_NOT_EDITABLE` with a stored order id routes to that order's payment screen. */
   it('hands a converted cart to payment instead of retrying the save', async () => {
     await signInAsBuyer();
     await seedCheckout({ quantity: 1, addons: [dinner(1)] });
@@ -722,11 +716,8 @@ describe('13 Assign add-ons', () => {
     refuse.mockRestore();
   });
 
-  /**
-   * With no order id there is nothing to route to, and none may be invented. The mapped refusal
-   * still says what happened, and the mutation is not retried.
-   */
-  it('shows the mapped refusal when a converted cart has no order to recover', async () => {
+  /** No order id: discard the stale checkout and restart from its event. */
+  it('starts a fresh checkout when no order can be recovered', async () => {
     await signInAsBuyer();
     await seedCheckout({ quantity: 1, addons: [dinner(1)] });
 
@@ -741,12 +732,13 @@ describe('13 Assign add-ons', () => {
       fireEvent.press(screen.getByText('Continue'));
     });
 
-    await waitFor(() =>
-      expect(
-        screen.getByText('This checkout has already been placed. Finish the payment instead.'),
-      ).toBeTruthy(),
-    );
-    expect(mockRouter.replace).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/event/${TULUA_ID}`));
+    expect(mockRouter.replace).not.toHaveBeenCalledWith(expect.stringContaining('/checkout/payment'));
+    expect(
+      screen.queryByText('This checkout has already been placed. Finish the payment instead.'),
+    ).toBeNull();
+    expect(useCheckoutStore.getState().cartId).toBeNull();
+    expect(useCheckoutStore.getState().eventId).toBeNull();
     refuse.mockRestore();
   });
 });
@@ -872,10 +864,7 @@ describe('14 Room occupancy', () => {
     expect(saved.validation?.canPlaceOrder).toBe(true);
   });
 
-  /**
-   * The order was placed on Review, so these rooms can no longer be written to the cart. The
-   * screen stops on the mapped refusal and sends the buyer to the order it already has.
-   */
+  /** A converted cart's room save recovers the same way. */
   it('hands a converted cart to payment instead of retrying the room save', async () => {
     await signInAsBuyer();
     await seedCheckout({
