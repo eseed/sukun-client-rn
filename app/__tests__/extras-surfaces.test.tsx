@@ -145,7 +145,7 @@ describe('20 · My tickets, extras on the card', () => {
 
     // Room, dinner voucher and shuttle all landed on the buyer's own ticket.
     await waitFor(() => expect(screen.getByText('3 add-ons attached')).toBeTruthy());
-    expect(screen.getByText('Add extras to this ticket')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Add extras to this ticket')).toBeTruthy());
   });
 
   it('says nothing about extras on a ticket that has none', async () => {

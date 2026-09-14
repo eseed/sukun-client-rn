@@ -25,6 +25,7 @@ import { useCart, useEvent, useReplaceCartAddons } from '../../src/hooks/queries
 import { isSendableAddonLine } from '../../src/lib/addons';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
+import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRecovery';
 import { messageForError } from '../../src/lib/errors';
 import { formatPhoneLocal } from '../../src/lib/phone';
 import { useCheckoutStore } from '../../src/stores/checkout';
@@ -63,6 +64,7 @@ export default function AssignAddonsScreen() {
   const eventQuery = useEvent(validEventId);
   const replaceAddons = useReplaceCartAddons();
   const addTicketFor = useAddTicketToCart(validEventId);
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(validEventId);
 
   const [external, setExternal] = useState<Recipient[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -225,6 +227,7 @@ export default function AssignAddonsScreen() {
         addons: addons.filter(isSendableAddonLine).map(toInput),
       });
     } catch (err) {
+      if (recoverFromCartNotEditable(err)) return;
       setError(messageForError(err));
       return;
     }
@@ -280,6 +283,7 @@ export default function AssignAddonsScreen() {
       {lines.length > 0 ? (
         <AddRecipient
           cartId={cartId}
+          eventId={validEventId}
           eventTitle={eventTitle}
           canAddTicket={!orderFull}
           alreadyInOrder={(phoneNumber) =>

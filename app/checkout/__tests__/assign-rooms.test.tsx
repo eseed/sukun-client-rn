@@ -184,6 +184,7 @@ const lodgeDouble = (quantity = 1, extra: Partial<DraftAddon> = {}): DraftAddon 
   unitPriceEgp: '2200.00',
   quantity,
   rooms: [],
+  occupancy: 2,
   ...extra,
 });
 
@@ -196,6 +197,7 @@ const lodgeSingle = (quantity = 1, extra: Partial<DraftAddon> = {}): DraftAddon 
   unitPriceEgp: '1400.00',
   quantity,
   rooms: [],
+  occupancy: 1,
   ...extra,
 });
 
@@ -690,6 +692,55 @@ describe('13 Assign add-ons', () => {
     expect(screen.getByText('This checkout has expired')).toBeTruthy();
     expect(screen.queryByText('Loading your cart...')).toBeNull();
   });
+
+  /** `CART_NOT_EDITABLE` with a stored order id routes to that order's payment screen. */
+  it('hands a converted cart to payment instead of retrying the save', async () => {
+    await signInAsBuyer();
+    await seedCheckout({ quantity: 1, addons: [dinner(1)] });
+    useCheckoutStore.getState().setOrderId('ord-42');
+
+    const refuse = jest
+      .spyOn(mockApi.carts, 'replaceAddons')
+      .mockRejectedValue(Object.assign(new Error('placed'), { code: 'CART_NOT_EDITABLE' }));
+
+    renderWithProviders(<AssignAddonsScreen />);
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Continue'));
+    });
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith('/checkout/payment?orderId=ord-42'),
+    );
+    refuse.mockRestore();
+  });
+
+  /** No order id: discard the stale checkout and restart from its event. */
+  it('starts a fresh checkout when no order can be recovered', async () => {
+    await signInAsBuyer();
+    await seedCheckout({ quantity: 1, addons: [dinner(1)] });
+
+    const refuse = jest
+      .spyOn(mockApi.carts, 'replaceAddons')
+      .mockRejectedValue(Object.assign(new Error('placed'), { code: 'CART_NOT_EDITABLE' }));
+
+    renderWithProviders(<AssignAddonsScreen />);
+    await waitFor(() => expect(screen.getByText('1 of 1')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Continue'));
+    });
+
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/event/${TULUA_ID}`));
+    expect(mockRouter.replace).not.toHaveBeenCalledWith(expect.stringContaining('/checkout/payment'));
+    expect(
+      screen.queryByText('This checkout has already been placed. Finish the payment instead.'),
+    ).toBeNull();
+    expect(useCheckoutStore.getState().cartId).toBeNull();
+    expect(useCheckoutStore.getState().eventId).toBeNull();
+    refuse.mockRestore();
+  });
 });
 
 describe('14 Room occupancy', () => {
@@ -811,6 +862,40 @@ describe('14 Room occupancy', () => {
     expect(saved.addons).toHaveLength(2);
     for (const line of saved.addons) expect(line.assignments.length).toBeGreaterThan(0);
     expect(saved.validation?.canPlaceOrder).toBe(true);
+  });
+
+  /** A converted cart's room save recovers the same way. */
+  it('hands a converted cart to payment instead of retrying the room save', async () => {
+    await signInAsBuyer();
+    await seedCheckout({
+      quantity: 2,
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan' }],
+      addons: [lodgeDouble(1)],
+    });
+    useCheckoutStore.getState().setOrderId('ord-77');
+
+    renderWithProviders(<RoomsScreen />);
+    await waitFor(() => expect(screen.getByText('0 of 2 assigned')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Yasmin El Sayed'));
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('Nour Hassan'));
+    });
+
+    const refuse = jest
+      .spyOn(mockApi.carts, 'replaceAddons')
+      .mockRejectedValue(Object.assign(new Error('placed'), { code: 'CART_NOT_EDITABLE' }));
+
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
+    });
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith('/checkout/payment?orderId=ord-77'),
+    );
+    refuse.mockRestore();
   });
 
   it('refuses somebody who already has a room, and offers another choice', async () => {

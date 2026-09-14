@@ -53,7 +53,12 @@
             "type": "string"
           }
         },
-        "required": ["id", "title", "startsAt", "ticketCount"],
+        "required": [
+          "id",
+          "title",
+          "startsAt",
+          "ticketCount"
+        ],
         "type": "object"
       },
       "AppUserAreaResponseDto": {
@@ -74,7 +79,11 @@
             "type": "string"
           }
         },
-        "required": ["id", "code", "name"],
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
         "type": "object"
       },
       "AppUserSelfieResponseDto": {
@@ -99,12 +108,23 @@
             "type": "string"
           },
           "status": {
-            "enum": ["pending_profile", "active", "suspended", "deleted"],
+            "enum": [
+              "pending_profile",
+              "active",
+              "suspended",
+              "deleted"
+            ],
             "example": "active",
             "type": "string"
           }
         },
-        "required": ["selfieUrl", "expiresAt", "selfieUploaded", "profileComplete", "status"],
+        "required": [
+          "selfieUrl",
+          "expiresAt",
+          "selfieUploaded",
+          "profileComplete",
+          "status"
+        ],
         "type": "object"
       },
       "ApplyCheckoutCartPromoRequestDto": {
@@ -114,7 +134,9 @@
             "type": "string"
           }
         },
-        "required": ["code"],
+        "required": [
+          "code"
+        ],
         "type": "object"
       },
       "CartAddonAssignmentRequestDto": {
@@ -159,7 +181,10 @@
             "type": "array"
           }
         },
-        "required": ["optionId", "quantity"],
+        "required": [
+          "optionId",
+          "quantity"
+        ],
         "type": "object"
       },
       "CartAddonRecipientRequestDto": {
@@ -185,7 +210,9 @@
             "type": "array"
           }
         },
-        "required": ["occupants"],
+        "required": [
+          "occupants"
+        ],
         "type": "object"
       },
       "CartGuestDto": {
@@ -206,7 +233,11 @@
             "type": "string"
           }
         },
-        "required": ["phoneNumber", "name", "tierId"],
+        "required": [
+          "phoneNumber",
+          "name",
+          "tierId"
+        ],
         "type": "object"
       },
       "CartRecipientLookupResponseDto": {
@@ -219,7 +250,9 @@
             "type": "array"
           }
         },
-        "required": ["results"],
+        "required": [
+          "results"
+        ],
         "type": "object"
       },
       "CartRecipientLookupResultResponseDto": {
@@ -246,7 +279,11 @@
             "type": "string"
           }
         },
-        "required": ["phoneNumber", "eligible", "hasAccommodation"],
+        "required": [
+          "phoneNumber",
+          "eligible",
+          "hasAccommodation"
+        ],
         "type": "object"
       },
       "CartTicketSelectionDto": {
@@ -260,7 +297,10 @@
             "type": "string"
           }
         },
-        "required": ["tierId", "quantity"],
+        "required": [
+          "tierId",
+          "quantity"
+        ],
         "type": "object"
       },
       "CheckoutCartAddonAssignmentResponseDto": {
@@ -290,7 +330,10 @@
             "type": "string"
           }
         },
-        "required": ["id", "quantity"],
+        "required": [
+          "id",
+          "quantity"
+        ],
         "type": "object"
       },
       "CheckoutCartAddonResponseDto": {
@@ -324,18 +367,31 @@
             "type": "object"
           },
           "type": {
-            "enum": ["accommodation", "meal", "transport", "other"],
+            "enum": [
+              "accommodation",
+              "meal",
+              "transport",
+              "other"
+            ],
             "nullable": true,
             "type": "string"
           }
         },
-        "required": ["cartAddonItemId", "optionId", "quantity", "assignments"],
+        "required": [
+          "cartAddonItemId",
+          "optionId",
+          "quantity",
+          "assignments"
+        ],
         "type": "object"
       },
       "CheckoutCartAttendeeResponseDto": {
         "properties": {
           "attendeeType": {
-            "enum": ["buyer", "guest"],
+            "enum": [
+              "buyer",
+              "guest"
+            ],
             "type": "string"
           },
           "cartAttendeeId": {
@@ -355,7 +411,13 @@
             "type": "string"
           }
         },
-        "required": ["cartAttendeeId", "cartTicketItemId", "attendeeType", "name", "phoneNumber"],
+        "required": [
+          "cartAttendeeId",
+          "cartTicketItemId",
+          "attendeeType",
+          "name",
+          "phoneNumber"
+        ],
         "type": "object"
       },
       "CheckoutCartPreviewResponseDto": {
@@ -414,7 +476,9 @@
             "type": "string"
           }
         },
-        "required": ["code"],
+        "required": [
+          "code"
+        ],
         "type": "object"
       },
       "CheckoutCartPricingLineResponseDto": {
@@ -453,7 +517,9 @@
             "type": "string"
           }
         },
-        "required": ["quantity"],
+        "required": [
+          "quantity"
+        ],
         "type": "object"
       },
       "CheckoutCartPricingResponseDto": {
@@ -487,7 +553,10 @@
             "type": "object"
           },
           "status": {
-            "enum": ["complete", "unavailable"],
+            "enum": [
+              "complete",
+              "unavailable"
+            ],
             "type": "string"
           },
           "subtotalEgp": {
@@ -530,7 +599,9 @@
             "type": "string"
           },
           "reason": {
-            "enum": ["PROMO_SCOPE_NO_LONGER_APPLICABLE"],
+            "enum": [
+              "PROMO_SCOPE_NO_LONGER_APPLICABLE"
+            ],
             "type": "string"
           },
           "removed": {
@@ -538,7 +609,11 @@
             "type": "boolean"
           }
         },
-        "required": ["removed", "reason", "previousPromoCode"],
+        "required": [
+          "removed",
+          "reason",
+          "previousPromoCode"
+        ],
         "type": "object"
       },
       "CheckoutCartPromoBreakdownResponseDto": {
@@ -561,7 +636,11 @@
             "type": "string"
           },
           "scope": {
-            "enum": ["ticket_only", "cart", "addon_option"],
+            "enum": [
+              "ticket_only",
+              "cart",
+              "addon_option"
+            ],
             "type": "string"
           },
           "tierId": {
@@ -607,7 +686,12 @@
             "$ref": "#/components/schemas/CheckoutCartPromoAdjustmentResponseDto"
           },
           "status": {
-            "enum": ["draft", "converted", "abandoned", "expired"],
+            "enum": [
+              "draft",
+              "converted",
+              "abandoned",
+              "expired"
+            ],
             "type": "string"
           },
           "tickets": {
@@ -654,7 +738,11 @@
             "type": "string"
           }
         },
-        "required": ["cartTicketItemId", "tierId", "quantity"],
+        "required": [
+          "cartTicketItemId",
+          "tierId",
+          "quantity"
+        ],
         "type": "object"
       },
       "CheckoutCartValidationIssueResponseDto": {
@@ -667,7 +755,10 @@
             "type": "object"
           },
           "kind": {
-            "enum": ["structural", "commerce"],
+            "enum": [
+              "structural",
+              "commerce"
+            ],
             "type": "string"
           },
           "message": {
@@ -684,7 +775,13 @@
             "type": "string"
           }
         },
-        "required": ["code", "kind", "path", "message", "messageKey"],
+        "required": [
+          "code",
+          "kind",
+          "path",
+          "message",
+          "messageKey"
+        ],
         "type": "object"
       },
       "CheckoutCartValidationResponseDto": {
@@ -703,7 +800,11 @@
             "type": "string"
           }
         },
-        "required": ["canPlaceOrder", "validatedAt", "issues"],
+        "required": [
+          "canPlaceOrder",
+          "validatedAt",
+          "issues"
+        ],
         "type": "object"
       },
       "CreateCheckoutCartRequestDto": {
@@ -713,7 +814,9 @@
             "type": "string"
           }
         },
-        "required": ["eventId"],
+        "required": [
+          "eventId"
+        ],
         "type": "object"
       },
       "CreateOrderGuestRequestDto": {
@@ -734,7 +837,11 @@
             "type": "string"
           }
         },
-        "required": ["phoneNumber", "name", "tierId"],
+        "required": [
+          "phoneNumber",
+          "name",
+          "tierId"
+        ],
         "type": "object"
       },
       "CreateOrderItemRequestDto": {
@@ -751,7 +858,10 @@
             "type": "string"
           }
         },
-        "required": ["tierId", "quantity"],
+        "required": [
+          "tierId",
+          "quantity"
+        ],
         "type": "object"
       },
       "CreateOrderRequestDto": {
@@ -786,7 +896,11 @@
             "type": "string"
           }
         },
-        "required": ["eventId", "items", "guests"],
+        "required": [
+          "eventId",
+          "items",
+          "guests"
+        ],
         "type": "object"
       },
       "CursorPageMetaDto": {
@@ -805,7 +919,11 @@
             "type": "string"
           }
         },
-        "required": ["limit", "hasNextPage", "nextCursor"],
+        "required": [
+          "limit",
+          "hasNextPage",
+          "nextCursor"
+        ],
         "type": "object"
       },
       "DeleteAppUserAccountRequestDto": {
@@ -823,7 +941,9 @@
             "type": "string"
           }
         },
-        "required": ["otpCode"],
+        "required": [
+          "otpCode"
+        ],
         "type": "object"
       },
       "DiscountedItemDto": {
@@ -838,7 +958,10 @@
             "type": "string"
           }
         },
-        "required": ["tierId", "discountAmountEgp"],
+        "required": [
+          "tierId",
+          "discountAmountEgp"
+        ],
         "type": "object"
       },
       "ErrorDetailDto": {
@@ -852,7 +975,10 @@
             "type": "string"
           }
         },
-        "required": ["field", "issue"],
+        "required": [
+          "field",
+          "issue"
+        ],
         "type": "object"
       },
       "ErrorResponseDto": {
@@ -890,7 +1016,14 @@
             "type": "string"
           }
         },
-        "required": ["statusCode", "error", "message", "details", "requestId", "timestamp"],
+        "required": [
+          "statusCode",
+          "error",
+          "message",
+          "details",
+          "requestId",
+          "timestamp"
+        ],
         "type": "object"
       },
       "GuestValidationIssueResponseDto": {
@@ -912,14 +1045,20 @@
             "type": "number"
           }
         },
-        "required": ["guestIndex", "error"],
+        "required": [
+          "guestIndex",
+          "error"
+        ],
         "type": "object"
       },
       "LookupCartRecipientsRequestDto": {
         "properties": {
           "phoneNumbers": {
             "description": "Phone numbers from the buyer's own contacts to test as addon recipients for this cart's event. Numbers are normalized server-side and echoed back in E.164 so the app can match them against what it sent.",
-            "example": ["01012345678", "+201098765432"],
+            "example": [
+              "01012345678",
+              "+201098765432"
+            ],
             "items": {
               "type": "string"
             },
@@ -927,7 +1066,9 @@
             "type": "array"
           }
         },
-        "required": ["phoneNumbers"],
+        "required": [
+          "phoneNumbers"
+        ],
         "type": "object"
       },
       "MobileAuthenticatedResponseDto": {
@@ -997,7 +1138,11 @@
             "type": "string"
           },
           "gender": {
-            "enum": ["male", "female", "prefer_not_to_say"],
+            "enum": [
+              "male",
+              "female",
+              "prefer_not_to_say"
+            ],
             "example": null,
             "nullable": true,
             "type": "string"
@@ -1035,7 +1180,12 @@
             "type": "string"
           },
           "status": {
-            "enum": ["pending_profile", "active", "suspended", "deleted"],
+            "enum": [
+              "pending_profile",
+              "active",
+              "suspended",
+              "deleted"
+            ],
             "example": "pending_profile",
             "type": "string"
           }
@@ -1083,7 +1233,9 @@
             "type": "string"
           }
         },
-        "required": ["ticketId"],
+        "required": [
+          "ticketId"
+        ],
         "type": "object"
       },
       "MobileOrderAddonResponseDto": {
@@ -1160,16 +1312,30 @@
             "type": "object"
           },
           "status": {
-            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "enum": [
+              "active",
+              "pending_ticket_replacement",
+              "refunded",
+              "cancelled",
+              "voided"
+            ],
             "type": "string"
           },
           "transportDirection": {
-            "enum": ["one_way", "round_trip"],
+            "enum": [
+              "one_way",
+              "round_trip"
+            ],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": ["accommodation", "meal", "transport", "other"],
+            "enum": [
+              "accommodation",
+              "meal",
+              "transport",
+              "other"
+            ],
             "type": "string"
           },
           "unitPriceEgp": {
@@ -1227,7 +1393,12 @@
             "type": "string"
           },
           "status": {
-            "enum": ["active", "reassignment_required", "cancelled", "refunded"],
+            "enum": [
+              "active",
+              "reassignment_required",
+              "cancelled",
+              "refunded"
+            ],
             "type": "string"
           }
         },
@@ -1314,13 +1485,33 @@
             "nullable": true,
             "type": "object"
           },
+          "promo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/MobileOrderPromoResponseDto"
+              }
+            ],
+            "description": "Immutable promo provenance snapshotted when the order was placed, or null when the order was placed without a promo. Historical values are never re-derived from current promo configuration.",
+            "nullable": true,
+            "type": "object"
+          },
           "refundStatus": {
-            "enum": ["none", "full"],
+            "enum": [
+              "none",
+              "full"
+            ],
             "example": "none",
             "type": "string"
           },
           "status": {
-            "enum": ["awaiting_payment", "paid", "failed", "expired", "cancelled", "refunded"],
+            "enum": [
+              "awaiting_payment",
+              "paid",
+              "failed",
+              "expired",
+              "cancelled",
+              "refunded"
+            ],
             "example": "awaiting_payment",
             "type": "string"
           },
@@ -1359,7 +1550,8 @@
           "createdAt",
           "items",
           "guests",
-          "addons"
+          "addons",
+          "promo"
         ],
         "type": "object"
       },
@@ -1378,7 +1570,11 @@
             "type": "string"
           }
         },
-        "required": ["phoneNumber", "name", "tierId"],
+        "required": [
+          "phoneNumber",
+          "name",
+          "tierId"
+        ],
         "type": "object"
       },
       "MobileOrderItemResponseDto": {
@@ -1400,7 +1596,66 @@
             "type": "string"
           }
         },
-        "required": ["tierId", "quantity", "unitPriceEgp", "lineTotalEgp"],
+        "required": [
+          "tierId",
+          "quantity",
+          "unitPriceEgp",
+          "lineTotalEgp"
+        ],
+        "type": "object"
+      },
+      "MobileOrderPromoResponseDto": {
+        "properties": {
+          "addonOptionId": {
+            "description": "The addon option the promo was scoped to, or null for other scopes.",
+            "nullable": true,
+            "type": "string"
+          },
+          "code": {
+            "description": "The immutable promo code snapshotted when the order was placed.",
+            "example": "SUKUN10",
+            "type": "string"
+          },
+          "configuredDiscountEgp": {
+            "description": "The fixed discount configured on the promo when the order was placed.",
+            "example": "100.00",
+            "type": "string"
+          },
+          "discountEgp": {
+            "description": "The discount actually applied to the order after capping by the eligible subtotal.",
+            "example": "100.00",
+            "type": "string"
+          },
+          "eligibleSubtotalEgp": {
+            "description": "The immutable order-line subtotal the promo could be applied to.",
+            "example": "750.00",
+            "type": "string"
+          },
+          "scope": {
+            "description": "The scope that determined which order lines the promo could discount.",
+            "enum": [
+              "ticket_only",
+              "cart",
+              "addon_option"
+            ],
+            "example": "ticket_only",
+            "type": "string"
+          },
+          "tierId": {
+            "description": "The tier the promo was scoped to, or null for cart/global scopes.",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "scope",
+          "tierId",
+          "addonOptionId",
+          "configuredDiscountEgp",
+          "eligibleSubtotalEgp",
+          "discountEgp"
+        ],
         "type": "object"
       },
       "MobileOrderSummaryResponseDto": {
@@ -1432,12 +1687,22 @@
             "type": "string"
           },
           "refundStatus": {
-            "enum": ["none", "full"],
+            "enum": [
+              "none",
+              "full"
+            ],
             "example": "none",
             "type": "string"
           },
           "status": {
-            "enum": ["awaiting_payment", "paid", "failed", "expired", "cancelled", "refunded"],
+            "enum": [
+              "awaiting_payment",
+              "paid",
+              "failed",
+              "expired",
+              "cancelled",
+              "refunded"
+            ],
             "example": "awaiting_payment",
             "type": "string"
           },
@@ -1512,7 +1777,12 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": ["active", "cancelled", "refunded", "voided"],
+            "enum": [
+              "active",
+              "cancelled",
+              "refunded",
+              "voided"
+            ],
             "type": "string"
           },
           "label": {
@@ -1555,16 +1825,27 @@
             "type": "object"
           },
           "status": {
-            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "enum": [
+              "active",
+              "pending_ticket_replacement",
+              "refunded",
+              "cancelled",
+              "voided"
+            ],
             "type": "string"
           },
           "transportDirection": {
-            "enum": ["one_way", "round_trip"],
+            "enum": [
+              "one_way",
+              "round_trip"
+            ],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": ["accommodation"],
+            "enum": [
+              "accommodation"
+            ],
             "type": "string"
           },
           "voidedQuantity": {
@@ -1601,7 +1882,10 @@
             "type": "boolean"
           }
         },
-        "required": ["addons", "hasAccommodation"],
+        "required": [
+          "addons",
+          "hasAccommodation"
+        ],
         "type": "object"
       },
       "MobileTicketAddonContextResponseDto": {
@@ -1637,7 +1921,12 @@
             "type": "string"
           }
         },
-        "required": ["ticketId", "eventId", "existing", "catalog"],
+        "required": [
+          "ticketId",
+          "eventId",
+          "existing",
+          "catalog"
+        ],
         "type": "object"
       },
       "MobileTicketAddonResponseDto": {
@@ -1666,7 +1955,12 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": ["active", "cancelled", "refunded", "voided"],
+            "enum": [
+              "active",
+              "cancelled",
+              "refunded",
+              "voided"
+            ],
             "type": "string"
           },
           "label": {
@@ -1709,16 +2003,30 @@
             "type": "object"
           },
           "status": {
-            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "enum": [
+              "active",
+              "pending_ticket_replacement",
+              "refunded",
+              "cancelled",
+              "voided"
+            ],
             "type": "string"
           },
           "transportDirection": {
-            "enum": ["one_way", "round_trip"],
+            "enum": [
+              "one_way",
+              "round_trip"
+            ],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": ["accommodation", "meal", "transport", "other"],
+            "enum": [
+              "accommodation",
+              "meal",
+              "transport",
+              "other"
+            ],
             "type": "string"
           },
           "voidedQuantity": {
@@ -1771,7 +2079,12 @@
             "type": "string"
           },
           "status": {
-            "enum": ["active", "reassignment_required", "cancelled", "refunded"],
+            "enum": [
+              "active",
+              "reassignment_required",
+              "cancelled",
+              "refunded"
+            ],
             "type": "string"
           }
         },
@@ -1813,7 +2126,12 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": ["active", "cancelled", "refunded", "voided"],
+            "enum": [
+              "active",
+              "cancelled",
+              "refunded",
+              "voided"
+            ],
             "type": "string"
           },
           "label": {
@@ -1856,16 +2174,27 @@
             "type": "object"
           },
           "status": {
-            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "enum": [
+              "active",
+              "pending_ticket_replacement",
+              "refunded",
+              "cancelled",
+              "voided"
+            ],
             "type": "string"
           },
           "transportDirection": {
-            "enum": ["one_way", "round_trip"],
+            "enum": [
+              "one_way",
+              "round_trip"
+            ],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": ["meal"],
+            "enum": [
+              "meal"
+            ],
             "type": "string"
           },
           "voidedQuantity": {
@@ -1916,7 +2245,12 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": ["active", "cancelled", "refunded", "voided"],
+            "enum": [
+              "active",
+              "cancelled",
+              "refunded",
+              "voided"
+            ],
             "type": "string"
           },
           "label": {
@@ -1959,16 +2293,27 @@
             "type": "object"
           },
           "status": {
-            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "enum": [
+              "active",
+              "pending_ticket_replacement",
+              "refunded",
+              "cancelled",
+              "voided"
+            ],
             "type": "string"
           },
           "transportDirection": {
-            "enum": ["one_way", "round_trip"],
+            "enum": [
+              "one_way",
+              "round_trip"
+            ],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": ["other"],
+            "enum": [
+              "other"
+            ],
             "type": "string"
           },
           "voidedQuantity": {
@@ -2027,11 +2372,19 @@
             "$ref": "#/components/schemas/PurchasedByDto"
           },
           "source": {
-            "enum": ["order", "invitation"],
+            "enum": [
+              "order",
+              "invitation"
+            ],
             "type": "string"
           },
           "status": {
-            "enum": ["pending_claim", "active", "voided", "refunded"],
+            "enum": [
+              "pending_claim",
+              "active",
+              "voided",
+              "refunded"
+            ],
             "type": "string"
           },
           "ticketNumber": {
@@ -2093,7 +2446,12 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": ["active", "cancelled", "refunded", "voided"],
+            "enum": [
+              "active",
+              "cancelled",
+              "refunded",
+              "voided"
+            ],
             "type": "string"
           },
           "label": {
@@ -2136,16 +2494,27 @@
             "type": "object"
           },
           "status": {
-            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
+            "enum": [
+              "active",
+              "pending_ticket_replacement",
+              "refunded",
+              "cancelled",
+              "voided"
+            ],
             "type": "string"
           },
           "transportDirection": {
-            "enum": ["one_way", "round_trip"],
+            "enum": [
+              "one_way",
+              "round_trip"
+            ],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": ["transport"],
+            "enum": [
+              "transport"
+            ],
             "type": "string"
           },
           "voidedQuantity": {
@@ -2192,7 +2561,11 @@
             "type": "boolean"
           }
         },
-        "required": ["sent", "expiresInSeconds", "resendAfterSeconds"],
+        "required": [
+          "sent",
+          "expiresInSeconds",
+          "resendAfterSeconds"
+        ],
         "type": "object"
       },
       "PaymentInitiateResponseDto": {
@@ -2230,7 +2603,9 @@
           },
           "provider": {
             "description": "Payment provider name",
-            "enum": ["paymob"],
+            "enum": [
+              "paymob"
+            ],
             "example": "paymob",
             "type": "string"
           },
@@ -2269,7 +2644,14 @@
         "properties": {
           "orderStatus": {
             "description": "Order status",
-            "enum": ["awaiting_payment", "paid", "failed", "expired", "cancelled", "refunded"],
+            "enum": [
+              "awaiting_payment",
+              "paid",
+              "failed",
+              "expired",
+              "cancelled",
+              "refunded"
+            ],
             "example": "awaiting_payment",
             "type": "string"
           },
@@ -2301,7 +2683,12 @@
             "type": "number"
           }
         },
-        "required": ["orderStatus", "paymentStatus", "ticketsIssued", "paidAt"],
+        "required": [
+          "orderStatus",
+          "paymentStatus",
+          "ticketsIssued",
+          "paidAt"
+        ],
         "type": "object"
       },
       "PlaceCheckoutCartOrderRequestDto": {
@@ -2311,13 +2698,18 @@
             "type": "string"
           }
         },
-        "required": ["pricingConfirmationToken"],
+        "required": [
+          "pricingConfirmationToken"
+        ],
         "type": "object"
       },
       "PublicAccommodationAddonOptionResponseDto": {
         "properties": {
           "availability": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           },
@@ -2393,7 +2785,10 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           },
@@ -2449,12 +2844,20 @@
             "type": "array"
           },
           "type": {
-            "enum": ["accommodation"],
+            "enum": [
+              "accommodation"
+            ],
             "example": "accommodation",
             "type": "string"
           }
         },
-        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "required": [
+          "id",
+          "type",
+          "name",
+          "featuredImageUrl",
+          "options"
+        ],
         "type": "object"
       },
       "PublicAddonNextPriceWindowResponseDto": {
@@ -2473,13 +2876,20 @@
             "type": "string"
           }
         },
-        "required": ["name", "priceEgp", "startsAt"],
+        "required": [
+          "name",
+          "priceEgp",
+          "startsAt"
+        ],
         "type": "object"
       },
       "PublicAddonOptionBaseResponseDto": {
         "properties": {
           "availability": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           },
@@ -2527,7 +2937,10 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           }
@@ -2566,18 +2979,31 @@
             "type": "string"
           },
           "type": {
-            "enum": ["accommodation", "meal", "transport", "other"],
+            "enum": [
+              "accommodation",
+              "meal",
+              "transport",
+              "other"
+            ],
             "example": "accommodation",
             "type": "string"
           }
         },
-        "required": ["id", "type", "name", "featuredImageUrl"],
+        "required": [
+          "id",
+          "type",
+          "name",
+          "featuredImageUrl"
+        ],
         "type": "object"
       },
       "PublicMealAddonOptionResponseDto": {
         "properties": {
           "availability": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           },
@@ -2625,7 +3051,10 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           }
@@ -2670,18 +3099,29 @@
             "type": "array"
           },
           "type": {
-            "enum": ["meal"],
+            "enum": [
+              "meal"
+            ],
             "example": "meal",
             "type": "string"
           }
         },
-        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "required": [
+          "id",
+          "type",
+          "name",
+          "featuredImageUrl",
+          "options"
+        ],
         "type": "object"
       },
       "PublicOtherAddonOptionResponseDto": {
         "properties": {
           "availability": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           },
@@ -2729,7 +3169,10 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           }
@@ -2774,18 +3217,29 @@
             "type": "array"
           },
           "type": {
-            "enum": ["other"],
+            "enum": [
+              "other"
+            ],
             "example": "other",
             "type": "string"
           }
         },
-        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "required": [
+          "id",
+          "type",
+          "name",
+          "featuredImageUrl",
+          "options"
+        ],
         "type": "object"
       },
       "PublicTransportAddonOptionResponseDto": {
         "properties": {
           "availability": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           },
@@ -2843,7 +3297,10 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": ["available", "unavailable"],
+            "enum": [
+              "available",
+              "unavailable"
+            ],
             "example": "available",
             "type": "string"
           },
@@ -2860,7 +3317,10 @@
             "type": "string"
           },
           "transportDirection": {
-            "enum": ["one_way", "round_trip"],
+            "enum": [
+              "one_way",
+              "round_trip"
+            ],
             "example": "one_way",
             "type": "string"
           }
@@ -2908,12 +3368,20 @@
             "type": "array"
           },
           "type": {
-            "enum": ["transport"],
+            "enum": [
+              "transport"
+            ],
             "example": "transport",
             "type": "string"
           }
         },
-        "required": ["id", "type", "name", "featuredImageUrl", "options"],
+        "required": [
+          "id",
+          "type",
+          "name",
+          "featuredImageUrl",
+          "options"
+        ],
         "type": "object"
       },
       "PurchasedByDto": {
@@ -2925,7 +3393,10 @@
             "type": "string"
           }
         },
-        "required": ["name", "isSelf"],
+        "required": [
+          "name",
+          "isSelf"
+        ],
         "type": "object"
       },
       "RefreshMobileSessionRequestDto": {
@@ -2936,7 +3407,9 @@
             "type": "string"
           }
         },
-        "required": ["refreshToken"],
+        "required": [
+          "refreshToken"
+        ],
         "type": "object"
       },
       "ReplaceCartAddonsRequestDto": {
@@ -2948,7 +3421,9 @@
             "type": "array"
           }
         },
-        "required": ["addons"],
+        "required": [
+          "addons"
+        ],
         "type": "object"
       },
       "ReplaceCartTicketsRequestDto": {
@@ -2971,7 +3446,10 @@
             "type": "array"
           }
         },
-        "required": ["items", "guests"],
+        "required": [
+          "items",
+          "guests"
+        ],
         "type": "object"
       },
       "RequestOtpRequestDto": {
@@ -2982,7 +3460,9 @@
             "type": "string"
           }
         },
-        "required": ["phoneNumber"],
+        "required": [
+          "phoneNumber"
+        ],
         "type": "object"
       },
       "SendEmailVerificationResponseDto": {
@@ -2998,7 +3478,10 @@
             "type": "boolean"
           }
         },
-        "required": ["queued", "expiresInSeconds"],
+        "required": [
+          "queued",
+          "expiresInSeconds"
+        ],
         "type": "object"
       },
       "TicketDayDto": {
@@ -3019,7 +3502,11 @@
             "type": "string"
           }
         },
-        "required": ["id", "date", "startsAt"],
+        "required": [
+          "id",
+          "date",
+          "startsAt"
+        ],
         "type": "object"
       },
       "TicketEventDto": {
@@ -3046,7 +3533,11 @@
             "type": "string"
           }
         },
-        "required": ["id", "slug", "title"],
+        "required": [
+          "id",
+          "slug",
+          "title"
+        ],
         "type": "object"
       },
       "TicketTierDto": {
@@ -3058,7 +3549,10 @@
             "type": "string"
           }
         },
-        "required": ["id", "name"],
+        "required": [
+          "id",
+          "name"
+        ],
         "type": "object"
       },
       "UpdateAppUserProfileRequestDto": {
@@ -3092,7 +3586,11 @@
           },
           "gender": {
             "description": "Gender",
-            "enum": ["male", "female", "prefer_not_to_say"],
+            "enum": [
+              "male",
+              "female",
+              "prefer_not_to_say"
+            ],
             "example": "female",
             "type": "string"
           },
@@ -3123,12 +3621,23 @@
             "type": "boolean"
           },
           "status": {
-            "enum": ["pending_profile", "active", "suspended", "deleted"],
+            "enum": [
+              "pending_profile",
+              "active",
+              "suspended",
+              "deleted"
+            ],
             "example": "pending_profile",
             "type": "string"
           }
         },
-        "required": ["id", "phoneNumber", "status", "profileComplete", "emailVerified"],
+        "required": [
+          "id",
+          "phoneNumber",
+          "status",
+          "profileComplete",
+          "emailVerified"
+        ],
         "type": "object"
       },
       "ValidateGuestRequestDto": {
@@ -3139,7 +3648,9 @@
             "type": "string"
           }
         },
-        "required": ["phoneNumber"],
+        "required": [
+          "phoneNumber"
+        ],
         "type": "object"
       },
       "ValidateGuestsRequestDto": {
@@ -3162,7 +3673,10 @@
             "type": "array"
           }
         },
-        "required": ["eventId", "guests"],
+        "required": [
+          "eventId",
+          "guests"
+        ],
         "type": "object"
       },
       "ValidateGuestsResponseDto": {
@@ -3185,7 +3699,11 @@
             "type": "boolean"
           }
         },
-        "required": ["valid", "issues", "buyerAlreadyHasTicket"],
+        "required": [
+          "valid",
+          "issues",
+          "buyerAlreadyHasTicket"
+        ],
         "type": "object"
       },
       "ValidatePromoCodeItemDto": {
@@ -3200,7 +3718,10 @@
             "type": "string"
           }
         },
-        "required": ["tierId", "quantity"],
+        "required": [
+          "tierId",
+          "quantity"
+        ],
         "type": "object"
       },
       "ValidatePromoCodeRequestDto": {
@@ -3217,7 +3738,10 @@
             "type": "string"
           }
         },
-        "required": ["items", "promoCode"],
+        "required": [
+          "items",
+          "promoCode"
+        ],
         "type": "object"
       },
       "ValidatePromoCodeResponseDto": {
@@ -3271,7 +3795,9 @@
             "type": "string"
           }
         },
-        "required": ["token"],
+        "required": [
+          "token"
+        ],
         "type": "object"
       },
       "VerifyEmailResponseDto": {
@@ -3282,7 +3808,9 @@
             "type": "boolean"
           }
         },
-        "required": ["verified"],
+        "required": [
+          "verified"
+        ],
         "type": "object"
       },
       "VerifyOtpRequestDto": {
@@ -3303,7 +3831,10 @@
             "type": "string"
           }
         },
-        "required": ["phoneNumber", "code"],
+        "required": [
+          "phoneNumber",
+          "code"
+        ],
         "type": "object"
       }
     },
@@ -3333,7 +3864,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3369,7 +3902,9 @@
           }
         ],
         "summary": "Logout current session",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/auth/logout-all": {
@@ -3382,7 +3917,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3418,7 +3955,9 @@
           }
         ],
         "summary": "Logout all sessions",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/auth/me": {
@@ -3431,7 +3970,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3474,7 +4015,9 @@
           }
         ],
         "summary": "Get current authenticated user",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/auth/otp/request": {
@@ -3487,7 +4030,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3555,7 +4100,9 @@
           }
         },
         "summary": "Request OTP verification code",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/auth/otp/verify": {
@@ -3568,7 +4115,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3636,7 +4185,9 @@
           }
         },
         "summary": "Verify OTP code and authenticate",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/auth/refresh": {
@@ -3649,7 +4200,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3717,7 +4270,9 @@
           }
         },
         "summary": "Refresh access token",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/carts": {
@@ -3731,7 +4286,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3764,7 +4321,9 @@
           }
         ],
         "summary": "Create or reuse a draft checkout cart",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/carts/{cartId}": {
@@ -3786,7 +4345,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3801,6 +4362,9 @@
               }
             },
             "description": ""
+          },
+          "409": {
+            "description": "CART_NOT_EDITABLE — a converted or expired cart cannot be abandoned"
           }
         },
         "security": [
@@ -3809,7 +4373,9 @@
           }
         ],
         "summary": "Abandon a draft cart",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       },
       "get": {
         "description": "Cart validation is advisory and non-reserving. Place Order revalidates authoritatively.",
@@ -3830,7 +4396,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3853,7 +4421,9 @@
           }
         ],
         "summary": "Get an owned checkout cart",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/carts/{cartId}/addons": {
@@ -3876,7 +4446,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3901,6 +4473,9 @@
               }
             },
             "description": ""
+          },
+          "409": {
+            "description": "CART_NOT_EDITABLE — the cart is no longer draft; or ADDONS_FEATURE_DISABLED"
           }
         },
         "security": [
@@ -3909,7 +4484,9 @@
           }
         ],
         "summary": "Replace addon selections and assignments",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/carts/{cartId}/place-order": {
@@ -3932,7 +4509,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -3957,6 +4536,9 @@
               }
             },
             "description": ""
+          },
+          "409": {
+            "description": "CART_NOT_EDITABLE (cart is converted, abandoned or expired), CART_PRICING_CHANGED, ZERO_TOTAL_ORDER_NOT_ALLOWED or CART_ACTIVE_ORDER_EXISTS"
           }
         },
         "security": [
@@ -3965,7 +4547,9 @@
           }
         ],
         "summary": "Authoritatively convert the draft cart into an awaiting-payment Order",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/carts/{cartId}/preview": {
@@ -3988,7 +4572,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4011,7 +4597,9 @@
           }
         ],
         "summary": "Preview the current cart price",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/carts/{cartId}/promo-code": {
@@ -4033,7 +4621,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4048,6 +4638,9 @@
               }
             },
             "description": ""
+          },
+          "409": {
+            "description": "CART_NOT_EDITABLE — the cart is no longer draft"
           }
         },
         "security": [
@@ -4056,7 +4649,9 @@
           }
         ],
         "summary": "Remove the promo code from the draft cart",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       },
       "put": {
         "description": "Applying a promo code does not claim or consume it.",
@@ -4077,7 +4672,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4102,6 +4699,9 @@
               }
             },
             "description": ""
+          },
+          "409": {
+            "description": "CART_NOT_EDITABLE — the cart is no longer draft"
           }
         },
         "security": [
@@ -4110,7 +4710,9 @@
           }
         ],
         "summary": "Apply a promo code to the draft cart",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/carts/{cartId}/recipient-lookup": {
@@ -4133,7 +4735,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4169,7 +4773,9 @@
           }
         ],
         "summary": "Check which phone numbers can receive an addon on this cart",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/carts/{cartId}/tickets": {
@@ -4192,7 +4798,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4217,6 +4825,9 @@
               }
             },
             "description": ""
+          },
+          "409": {
+            "description": "CART_NOT_EDITABLE — the cart is no longer draft"
           }
         },
         "security": [
@@ -4225,7 +4836,9 @@
           }
         ],
         "summary": "Replace ticket selections and recipients",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/carts/{cartId}/validate-addons": {
@@ -4248,7 +4861,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4271,7 +4886,9 @@
           }
         ],
         "summary": "Revalidate persisted cart addon state",
-        "tags": ["Mobile - Checkout Cart"]
+        "tags": [
+          "Mobile - Checkout Cart"
+        ]
       }
     },
     "/api/v1/mobile/orders": {
@@ -4310,7 +4927,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4331,7 +4950,10 @@
                       "$ref": "#/components/schemas/CursorPageMetaDto"
                     }
                   },
-                  "required": ["data", "meta"],
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
                   "type": "object"
                 }
               }
@@ -4365,7 +4987,9 @@
           }
         ],
         "summary": "List orders",
-        "tags": ["Mobile - Orders"]
+        "tags": [
+          "Mobile - Orders"
+        ]
       },
       "post": {
         "deprecated": true,
@@ -4378,7 +5002,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4471,7 +5097,9 @@
           }
         ],
         "summary": "Create an order (deprecated, use the Cart flow)",
-        "tags": ["Mobile - Orders"]
+        "tags": [
+          "Mobile - Orders"
+        ]
       }
     },
     "/api/v1/mobile/orders/validate-guests": {
@@ -4485,7 +5113,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4568,7 +5198,9 @@
           }
         ],
         "summary": "Validate guest phone numbers for an order",
-        "tags": ["Mobile - Orders"]
+        "tags": [
+          "Mobile - Orders"
+        ]
       }
     },
     "/api/v1/mobile/orders/validate-promo-code": {
@@ -4582,7 +5214,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4665,7 +5299,9 @@
           }
         ],
         "summary": "Validate a promo code (read-only preview)",
-        "tags": ["Mobile - Orders"]
+        "tags": [
+          "Mobile - Orders"
+        ]
       }
     },
     "/api/v1/mobile/orders/{orderId}": {
@@ -4690,7 +5326,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4733,7 +5371,9 @@
           }
         ],
         "summary": "Get order detail",
-        "tags": ["Mobile - Orders"]
+        "tags": [
+          "Mobile - Orders"
+        ]
       }
     },
     "/api/v1/mobile/orders/{orderId}/cancel": {
@@ -4758,7 +5398,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4821,7 +5463,9 @@
           }
         ],
         "summary": "Cancel an order",
-        "tags": ["Mobile - Orders"]
+        "tags": [
+          "Mobile - Orders"
+        ]
       }
     },
     "/api/v1/mobile/orders/{orderId}/payment/initiate": {
@@ -4846,7 +5490,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4929,7 +5575,9 @@
           }
         ],
         "summary": "Initiate Paymob payment",
-        "tags": ["Mobile - Payments"]
+        "tags": [
+          "Mobile - Payments"
+        ]
       }
     },
     "/api/v1/mobile/orders/{orderId}/payment/status": {
@@ -4954,7 +5602,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -4997,7 +5647,9 @@
           }
         ],
         "summary": "Get payment status",
-        "tags": ["Mobile - Payments"]
+        "tags": [
+          "Mobile - Payments"
+        ]
       }
     },
     "/api/v1/mobile/orders/{orderId}/retry-payment": {
@@ -5020,7 +5672,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5103,7 +5757,9 @@
           }
         ],
         "summary": "Retry payment for a failed or expired order",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/reference/areas": {
@@ -5116,7 +5772,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5147,7 +5805,9 @@
           }
         },
         "summary": "List active areas (public, no auth required)",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/tickets": {
@@ -5186,9 +5846,17 @@
             "name": "statuses",
             "required": false,
             "schema": {
-              "example": ["active", "pending_claim"],
+              "example": [
+                "active",
+                "pending_claim"
+              ],
               "items": {
-                "enum": ["pending_claim", "active", "voided", "refunded"],
+                "enum": [
+                  "pending_claim",
+                  "active",
+                  "voided",
+                  "refunded"
+                ],
                 "type": "string"
               },
               "type": "array"
@@ -5200,7 +5868,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5221,7 +5891,10 @@
                       "$ref": "#/components/schemas/CursorPageMetaDto"
                     }
                   },
-                  "required": ["data", "meta"],
+                  "required": [
+                    "data",
+                    "meta"
+                  ],
                   "type": "object"
                 }
               }
@@ -5265,7 +5938,9 @@
           }
         ],
         "summary": "List authenticated holder Tickets",
-        "tags": ["Mobile - Tickets"]
+        "tags": [
+          "Mobile - Tickets"
+        ]
       }
     },
     "/api/v1/mobile/tickets/{ticketId}": {
@@ -5289,7 +5964,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5342,7 +6019,9 @@
           }
         ],
         "summary": "Get Ticket detail",
-        "tags": ["Mobile - Tickets"]
+        "tags": [
+          "Mobile - Tickets"
+        ]
       }
     },
     "/api/v1/mobile/tickets/{ticketId}/addon-context": {
@@ -5366,7 +6045,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5419,7 +6100,9 @@
           }
         ],
         "summary": "Get Ticket addon purchase context",
-        "tags": ["Mobile - Tickets"]
+        "tags": [
+          "Mobile - Tickets"
+        ]
       }
     },
     "/api/v1/mobile/tickets/{ticketId}/addons": {
@@ -5453,7 +6136,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5531,7 +6216,9 @@
           }
         ],
         "summary": "Get Addons attached to a Ticket",
-        "tags": ["Mobile - Tickets"]
+        "tags": [
+          "Mobile - Tickets"
+        ]
       }
     },
     "/api/v1/mobile/tickets/{ticketId}/claim": {
@@ -5555,7 +6242,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5608,7 +6297,9 @@
           }
         ],
         "summary": "Claim a pending Ticket",
-        "tags": ["Mobile - Tickets"]
+        "tags": [
+          "Mobile - Tickets"
+        ]
       }
     },
     "/api/v1/mobile/users/me": {
@@ -5621,7 +6312,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5677,7 +6370,9 @@
           }
         ],
         "summary": "Delete account with OTP confirmation",
-        "tags": ["Account Lifecycle"]
+        "tags": [
+          "Account Lifecycle"
+        ]
       }
     },
     "/api/v1/mobile/users/me/deletion-preview": {
@@ -5690,7 +6385,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5733,7 +6430,9 @@
           }
         ],
         "summary": "Preview what account deletion will affect",
-        "tags": ["Account Lifecycle"]
+        "tags": [
+          "Account Lifecycle"
+        ]
       }
     },
     "/api/v1/mobile/users/me/deletion/otp/request": {
@@ -5746,7 +6445,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5812,7 +6513,9 @@
           }
         ],
         "summary": "Request a fresh account deletion OTP",
-        "tags": ["Account Lifecycle"]
+        "tags": [
+          "Account Lifecycle"
+        ]
       }
     },
     "/api/v1/mobile/users/me/email/send-verification": {
@@ -5826,7 +6529,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5899,7 +6604,9 @@
           }
         ],
         "summary": "Send an email verification link to the current user",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/users/me/email/verify": {
@@ -5913,7 +6620,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -5986,7 +6695,9 @@
           }
         ],
         "summary": "Verify the current user email with a one-time token",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/users/me/profile": {
@@ -5999,7 +6710,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -6072,7 +6785,9 @@
           }
         ],
         "summary": "Update current user profile (partial PATCH)",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     },
     "/api/v1/mobile/users/me/selfie": {
@@ -6085,7 +6800,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -6138,7 +6855,9 @@
           }
         ],
         "summary": "Get current selfie signed URL",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       },
       "put": {
         "operationId": "MobileAppUserProfileController_uploadSelfie_v1",
@@ -6149,7 +6868,9 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": ["en"],
+              "enum": [
+                "en"
+              ],
               "type": "string"
             }
           }
@@ -6166,7 +6887,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["file"],
+                "required": [
+                  "file"
+                ],
                 "type": "object"
               }
             }
@@ -6221,7 +6944,9 @@
           }
         ],
         "summary": "Upload or replace selfie image",
-        "tags": ["Mobile"]
+        "tags": [
+          "Mobile"
+        ]
       }
     }
   },

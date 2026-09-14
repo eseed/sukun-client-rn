@@ -23,6 +23,8 @@ export interface DraftAddon extends CartAddonInput {
   type: AddonType;
   optionLabel: string;
   unitPriceEgp: string | null;
+  /** The option's published occupancy. Local draft metadata, never sent in the payload. */
+  occupancy?: number | null;
 }
 
 export interface DraftGuest {

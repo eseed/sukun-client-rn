@@ -344,6 +344,7 @@ describe('add-on detail · adding to the cart', () => {
         quantity: 1,
         // Occupants are named on the assignment step; the room slots start empty.
         rooms: [],
+        occupancy: 2,
       },
     ]);
     expect(mockRouter.back).toHaveBeenCalled();

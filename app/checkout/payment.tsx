@@ -56,7 +56,6 @@ export default function PaymentScreen() {
   const validOrderId = typeof orderId === 'string' && orderId.length > 0 ? orderId : undefined;
 
   const reset = useCheckoutStore((s) => s.reset);
-  const setOrderId = useCheckoutStore((s) => s.setOrderId);
   const orderQuery = useOrder(validOrderId);
   const { data: order } = orderQuery;
   const initiate = useInitiatePayment();
@@ -172,10 +171,8 @@ export default function PaymentScreen() {
   }
 
   /**
-   * Releases the order and its capacity hold. The basket itself is deliberately left alone:
-   * cancelling is how a buyer gets back to a selection they want to re-price (a promo applied
-   * after the order was created is not in that order), so wiping the draft would make them
-   * assemble it again. Only the reference to the dead order is cleared.
+   * Releases the order and its hold, then clears the checkout: the converted cart cannot be
+   * edited again, so the buyer restarts from the event (Discover if it cannot be resolved).
    */
   async function onCancel() {
     if (!validOrderId) return;
@@ -183,9 +180,9 @@ export default function PaymentScreen() {
     try {
       await cancel.mutateAsync(validOrderId);
       track('order_cancelled', { order_id: validOrderId });
-      setOrderId(null);
-      if (router.canGoBack()) router.back();
-      else router.replace('/(tabs)/discover');
+      const eventId = order?.eventId;
+      reset();
+      router.replace(eventId ? (`/event/${eventId}` as never) : ('/(tabs)/discover' as never));
     } catch (err) {
       setError(messageForError(err));
     }

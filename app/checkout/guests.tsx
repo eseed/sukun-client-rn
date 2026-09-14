@@ -34,6 +34,7 @@ import {
 import { reassignToRefreshedCart } from '../../src/components/checkout/RecipientPicker';
 import { isSendableAddonLine } from '../../src/lib/addons';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
+import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRecovery';
 import { track } from '../../src/lib/analytics';
 import { messageForCode, messageForError } from '../../src/lib/errors';
 import {
@@ -110,6 +111,7 @@ export default function GuestsScreen() {
   const createCart = useCreateCart();
   const replaceTickets = useReplaceCartTickets();
   const replaceAddons = useReplaceCartAddons();
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(validEventId);
   const steps = useCheckoutSteps(validEventId);
 
   const [manual, setManual] = useState('');
@@ -445,6 +447,7 @@ export default function GuestsScreen() {
         }
       }
     } catch (err) {
+      if (recoverFromCartNotEditable(err)) return;
       setError(messageForError(err));
       return;
     }

@@ -1,5 +1,10 @@
 import { ApiError } from '../../api/live/http';
-import { heldOrderIdFromError, HeldOrderError, messageForError } from '../errors';
+import {
+  heldOrderIdFromError,
+  HeldOrderError,
+  isCartNotEditableError,
+  messageForError,
+} from '../errors';
 
 /**
  * The checkout moved onto the cart, and with it the code the backend uses to refuse a second
@@ -27,6 +32,38 @@ describe('messageForError', () => {
     for (const code of ['CART_ACTIVE_ORDER_EXISTS', 'DUPLICATE_ACTIVE_ORDER']) {
       expect(messageForError(apiError(code))).not.toBe('Something went wrong. Try again.');
     }
+  });
+
+  it('speaks neutrally about any cart that is no longer editable', () => {
+    expect(messageForError(apiError('CART_NOT_EDITABLE'))).toBe(
+      'This checkout is no longer available. Start again from the event.',
+    );
+    expect(messageForError(apiError('ROOM_OCCUPANCY_UNFILLED'))).toBe(
+      'Every room has to be full before you can check out.',
+    );
+    expect(messageForError(apiError('ADDON_ASSIGNMENT_COUNT_MISMATCH'))).toBe(
+      'Every extra needs somebody to go to.',
+    );
+
+    for (const code of [
+      'CART_NOT_EDITABLE',
+      'ROOM_OCCUPANCY_UNFILLED',
+      'ADDON_ASSIGNMENT_COUNT_MISMATCH',
+    ]) {
+      expect(messageForError(apiError(code))).not.toBe('Something went wrong. Try again.');
+    }
+  });
+});
+
+describe('isCartNotEditableError', () => {
+  it('reads the refusal off the api error', () => {
+    expect(isCartNotEditableError(apiError('CART_NOT_EDITABLE'))).toBe(true);
+  });
+
+  it('is false for any other refusal, so nothing else is rerouted', () => {
+    expect(isCartNotEditableError(apiError('CART_ACTIVE_ORDER_EXISTS'))).toBe(false);
+    expect(isCartNotEditableError(new Error('boom'))).toBe(false);
+    expect(isCartNotEditableError(null)).toBe(false);
   });
 });
 

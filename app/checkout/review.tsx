@@ -31,6 +31,7 @@ import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
+import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRecovery';
 import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
 import { colors, fontFamily, space } from '../../src/theme/tokens';
 import type { CartPricingLine, OrderDetail } from '../../src/api/types';
@@ -56,11 +57,13 @@ export default function ReviewScreen() {
   const steps = useCheckoutSteps(validEventId);
 
   const cartId = useCheckoutStore((s) => s.cartId);
+  const storedOrderId = useCheckoutStore((s) => s.orderId);
   const promoCode = useCheckoutStore((s) => s.promoCode);
   const setPromoCode = useCheckoutStore((s) => s.setPromoCode);
   const termsAccepted = useCheckoutStore((s) => s.termsAccepted);
   const setTermsAccepted = useCheckoutStore((s) => s.setTermsAccepted);
   const setOrderId = useCheckoutStore((s) => s.setOrderId);
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(validEventId);
   const resetCheckout = useCheckoutStore((s) => s.reset);
 
   const cartQuery = useCart(cartId ?? undefined);
@@ -75,6 +78,12 @@ export default function ReviewScreen() {
   const [promoDraft, setPromoDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [repriced, setRepriced] = useState(false);
+
+  const cart = cartQuery.data;
+  /** Placed state is commercial state, never advisory `canPlaceOrder`. */
+  const placed =
+    Boolean(order) || Boolean(storedOrderId) || (cart != null && cart.status !== 'draft');
+  const recoveryOrderId = order?.id ?? storedOrderId ?? null;
 
   /**
    * The sheet's verdict is a hint, not the truth. Paymob's own SDK reports CANCELLED when the
@@ -101,8 +110,25 @@ export default function ReviewScreen() {
     } else if (sheet.outcome === 'pending') {
       // Still settling on Paymob's side. The payment screen polls until the order resolves.
       router.replace(`/checkout/payment?orderId=${order.id}`);
+    } else if (
+      (sheet.outcome === 'fail' || sheet.outcome === 'cancelled') &&
+      rejectedByServer
+    ) {
+      // The server has resolved it as not paid; the payment screen owns retrying from here.
+      router.replace(`/checkout/payment?orderId=${order.id}`);
     }
-  }, [order, resetCheckout, router, serverSaysPaid, sheet.outcome]);
+  }, [order, rejectedByServer, resetCheckout, router, serverSaysPaid, sheet.outcome]);
+
+  /**
+   * A remount with an order already in the store goes straight to payment, which resolves a paid
+   * order to confirmation. Mount-only: an id appearing later came from a placement made here.
+   */
+  useEffect(() => {
+    const orderId = useCheckoutStore.getState().orderId;
+    if (!orderId) return;
+    router.replace(`/checkout/payment?orderId=${orderId}` as never);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Only claim nothing was charged once the server has actually said so.
   const sheetError =
@@ -118,21 +144,22 @@ export default function ReviewScreen() {
     try {
       await preview.mutateAsync(cartId);
     } catch (err) {
-      setError(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
     }
   };
 
   const { mutateAsync: takePrice } = preview;
 
   useEffect(() => {
-    if (!cartId) return;
     // Prices the cart on arrival. The result is read straight off the mutation rather than
     // copied into state: a second copy meant the screen went on showing the previous total
     // while a new one was being fetched, which is the one moment it must not do that.
-    takePrice(cartId).catch((err: unknown) => setError(messageForError(err)));
-  }, [cartId, takePrice]);
+    if (!cartId || placed || cart?.status !== 'draft') return;
+    takePrice(cartId).catch((err: unknown) => {
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
+    });
+  }, [cart?.status, cartId, placed, recoverFromCartNotEditable, takePrice]);
 
-  const cart = cartQuery.data;
   const priced = preview.data ?? null;
   const pricing = priced?.pricing;
 
@@ -187,6 +214,7 @@ export default function ReviewScreen() {
 
   async function onApplyPromo() {
     setError(null);
+    if (placed) return;
     const code = promoDraft.trim().toUpperCase();
     if (!code || !cartId) return;
 
@@ -198,19 +226,19 @@ export default function ReviewScreen() {
       await refresh();
     } catch (err) {
       track('promo_failed', { event_id: validEventId ?? '', promo_code: code });
-      setError(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
     }
   }
 
   async function onRemovePromo() {
-    if (!cartId) return;
+    if (!cartId || placed) return;
     setError(null);
     try {
       await removePromo.mutateAsync(cartId);
       setPromoCode(null);
       await refresh();
     } catch (err) {
-      setError(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
     }
   }
 
@@ -223,6 +251,17 @@ export default function ReviewScreen() {
   async function onContinue() {
     setError(null);
     setRepriced(false);
+
+    if (placed) {
+      if (recoveryOrderId) {
+        router.replace(`/checkout/payment?orderId=${recoveryOrderId}` as never);
+      } else if (validEventId) {
+        router.replace(`/event/${validEventId}` as never);
+      } else {
+        router.replace('/(tabs)/discover' as never);
+      }
+      return;
+    }
 
     if (!cartId || !token) return;
 
@@ -265,6 +304,8 @@ export default function ReviewScreen() {
         await refresh();
         return;
       }
+
+      if (recoverFromCartNotEditable(err)) return;
 
       /**
        * An order for this event is already holding the capacity, which is what cancelling the
@@ -328,7 +369,23 @@ export default function ReviewScreen() {
   return (
     <Screen scroll contentStyle={styles.content}>
       <FlowerCorner top={52} />
-      <BackButton onPress={() => router.back()} style={styles.back} />
+      <BackButton
+        onPress={() => {
+          // Once placed, Back must not re-enter an editable cart screen.
+          if (placed) {
+            if (recoveryOrderId) {
+              router.replace(`/checkout/payment?orderId=${recoveryOrderId}` as never);
+            } else if (validEventId) {
+              router.replace(`/event/${validEventId}` as never);
+            } else {
+              router.replace('/(tabs)/discover' as never);
+            }
+            return;
+          }
+          router.back();
+        }}
+        style={styles.back}
+      />
 
       <StepLabel>{`Checkout · step ${steps.reviewStep} of ${steps.total}`}</StepLabel>
       <View style={styles.heading}>
@@ -425,35 +482,37 @@ export default function ReviewScreen() {
         <InlineError message="The price changed while you were here. Check the new total, then tap again." />
       ) : null}
 
-      {promoCode ? (
-        <View style={styles.promoApplied}>
-          <Text variant="metaSm">Promo {promoCode} applied</Text>
-          <Pressable accessibilityRole="button" onPress={onRemovePromo}>
-            <Text variant="metaSm" color={colors.sky500}>
-              Remove
-            </Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.promoRow}>
-          <TextInput
-            accessibilityLabel="Promo code"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            onChangeText={setPromoDraft}
-            placeholder="Promo code"
-            placeholderTextColor={colors.textMuted}
-            style={styles.promoInput}
-            value={promoDraft}
-          />
-          <Button
-            label="Apply"
-            variant="secondary"
-            loading={applyPromo.isPending}
-            onPress={onApplyPromo}
-          />
-        </View>
-      )}
+      {!placed ? (
+        promoCode ? (
+          <View style={styles.promoApplied}>
+            <Text variant="metaSm">Promo {promoCode} applied</Text>
+            <Pressable accessibilityRole="button" onPress={onRemovePromo}>
+              <Text variant="metaSm" color={colors.sky500}>
+                Remove
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.promoRow}>
+            <TextInput
+              accessibilityLabel="Promo code"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              onChangeText={setPromoDraft}
+              placeholder="Promo code"
+              placeholderTextColor={colors.textMuted}
+              style={styles.promoInput}
+              value={promoDraft}
+            />
+            <Button
+              label="Apply"
+              variant="secondary"
+              loading={applyPromo.isPending}
+              onPress={onApplyPromo}
+            />
+          </View>
+        )
+      ) : null}
 
       <Checkbox
         checked={termsAccepted}
@@ -472,14 +531,18 @@ export default function ReviewScreen() {
       */}
       <Button
         label={
-          !termsAccepted
-            ? 'Accept the terms to pay'
-            : canPlace
+          placed
+            ? recoveryOrderId
               ? 'Continue to payment'
-              : 'This order cannot be paid yet'
+              : 'Back to the event'
+            : !termsAccepted
+              ? 'Accept the terms to pay'
+              : canPlace
+                ? 'Continue to payment'
+                : 'This order cannot be paid yet'
         }
-        disabled={!canPlace || !termsAccepted}
-        loading={placeOrder.isPending || initiatePayment.isPending || preview.isPending}
+        disabled={placed ? false : !canPlace || !termsAccepted}
+        loading={!placed && (placeOrder.isPending || initiatePayment.isPending || preview.isPending)}
         onPress={onContinue}
       />
     </Screen>

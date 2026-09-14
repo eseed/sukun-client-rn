@@ -52,6 +52,12 @@ const MESSAGES: Record<string, string> = {
   GUEST_ALLOCATION_INVALID: 'Every ticket needs a guest. Go back and pick who each one is for.',
   GUEST_VALIDATION_FAILED: 'Check the guest numbers and try again.',
 
+  // The backend uses this for converted, abandoned, and expired carts; it does not prove an
+  // order exists, so recovery decides whether payment or a fresh event checkout is appropriate.
+  CART_NOT_EDITABLE: 'This checkout is no longer available. Start again from the event.',
+  ROOM_OCCUPANCY_UNFILLED: 'Every room has to be full before you can check out.',
+  ADDON_ASSIGNMENT_COUNT_MISMATCH: 'Every extra needs somebody to go to.',
+
   PROMO_CODE_INVALID: 'That promo code is not valid.',
   // The live backend's own promo vocabulary — `PROMO_CODE_INVALID` above is the mock's.
   PROMO_CODE_NOT_FOUND: 'That promo code is not valid.',
@@ -164,6 +170,11 @@ export function messageForError(error: unknown): string {
     if (typeof error.message === 'string' && error.message.trim()) return error.message;
   }
   return FALLBACK;
+}
+
+/** True when the server refused an edit because the cart is no longer editable. */
+export function isCartNotEditableError(error: unknown): boolean {
+  return isRecord(error) && error.code === 'CART_NOT_EDITABLE';
 }
 
 /**

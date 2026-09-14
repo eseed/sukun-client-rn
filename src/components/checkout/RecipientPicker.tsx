@@ -14,6 +14,7 @@ import {
   useValidateGuests,
 } from '../../hooks/queries';
 import { useContacts, type PickedContact } from '../../hooks/useContacts';
+import { useCartNotEditableRecovery } from '../../hooks/useCartNotEditableRecovery';
 import { isSendableAddonLine } from '../../lib/addons';
 import { messageForCode, messageForError } from '../../lib/errors';
 import { formatPhoneLocal } from '../../lib/phone';
@@ -187,6 +188,7 @@ export function refusalMessage(kind: RefusalKind, name: string, eventTitle: stri
  */
 export function AddRecipient({
   cartId,
+  eventId,
   eventTitle,
   refuseRoomHolders = false,
   canAddTicket,
@@ -196,6 +198,7 @@ export function AddRecipient({
   label = 'Add someone else',
 }: {
   cartId: string;
+  eventId?: string;
   eventTitle: string;
   /** The rooms screen also refuses somebody who already has a room: one room per person. */
   refuseRoomHolders?: boolean;
@@ -209,6 +212,7 @@ export function AddRecipient({
 }) {
   const { pickContact, canPickContact, openSettings } = useContacts();
   const lookup = useLookupRecipients();
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(eventId);
 
   const [numberChoice, setNumberChoice] = useState<PickedContact | null>(null);
   const [refusal, setRefusal] = useState<{
@@ -258,7 +262,7 @@ export function AddRecipient({
         hasAccommodation: result.hasAccommodation,
       });
     } catch (err) {
-      setMessage(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setMessage(messageForError(err));
     } finally {
       setBusy(false);
     }
@@ -449,6 +453,7 @@ export function useAddTicketToCart(eventId: string | undefined) {
   const replaceTickets = useReplaceCartTickets();
   const replaceAddons = useReplaceCartAddons();
   const validateGuests = useValidateGuests();
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(eventId);
 
   return async function addTicketFor(person: {
     name: string;
@@ -501,6 +506,7 @@ export function useAddTicketToCart(eventId: string | undefined) {
         },
       });
     } catch (err) {
+      if (recoverFromCartNotEditable(err)) return { ticketAdded: false, problem: null };
       return { ticketAdded: false, problem: messageForError(err) };
     }
 
@@ -530,6 +536,7 @@ export function useAddTicketToCart(eventId: string | undefined) {
         })),
       });
     } catch (err) {
+      if (recoverFromCartNotEditable(err)) return { ticketAdded: true, problem: null };
       return {
         ticketAdded: true,
         problem: `${person.name} has a ticket now, but your extras did not save: ${messageForError(err)}`,
