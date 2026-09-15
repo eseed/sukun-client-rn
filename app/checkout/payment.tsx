@@ -28,16 +28,27 @@ import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 
 /**
- * Design screen 11 · Payment.
+ * Design screen 17 · Payment.
  *
  * The design draws card number / expiry / CVV fields inline, but the SDK owns card entry
  * entirely: `presentPayVC` opens Paymob's own sheet. Rendering dead look-alike fields here only
  * invited people to type into boxes that do nothing, so the screen goes straight from the
  * amount to the pay button.
  *
+ * Everything else on the artboard is here verbatim: the step label, the bulleted `Pay <total>`,
+ * "Secured by Paymob · charged in EGP", the card artwork, and the gold pay button. The artboard
+ * says nothing about add-ons, so neither does this screen: the buyer confirmed the basket line
+ * by line on review, and the only number that matters at the till is the one being charged.
+ *
+ * The cart flow places an order without opening a Paymob intention, so `payments.initiate`
+ * always runs before the sheet is presented; nothing here assumes an order arrives with one
+ * attached.
+ *
  * The payment outcome comes from `Paymob.setSdkListener`, per the SDK documentation:
- * SUCCESS / FAIL / PENDING / CANCELLED. The order status query still runs so a PENDING
- * transaction can resolve and so the screen reflects orders that settled elsewhere.
+ * SUCCESS / FAIL / PENDING / CANCELLED (see `usePaymobSheet`, which registers every bit of
+ * customisation before `presentPayVC`). The order status query still runs so a PENDING
+ * transaction can resolve and so the screen reflects orders that settled elsewhere. Paid is the
+ * server's word alone: `orderStatus === 'paid'`, never a client redirect.
  */
 export default function PaymentScreen() {
   const router = useRouter();
@@ -45,7 +56,6 @@ export default function PaymentScreen() {
   const validOrderId = typeof orderId === 'string' && orderId.length > 0 ? orderId : undefined;
 
   const reset = useCheckoutStore((s) => s.reset);
-  const setOrderId = useCheckoutStore((s) => s.setOrderId);
   const orderQuery = useOrder(validOrderId);
   const { data: order } = orderQuery;
   const initiate = useInitiatePayment();
@@ -105,6 +115,7 @@ export default function PaymentScreen() {
           currency: order.currency,
           item_count: order.items.reduce((sum, item) => sum + item.quantity, 0),
           guest_count: order.guests.length,
+          addon_count: order.addons.length,
           has_promo: Number(order.discountEgp) > 0,
         });
       }
@@ -160,10 +171,8 @@ export default function PaymentScreen() {
   }
 
   /**
-   * Releases the order and its capacity hold. The basket itself is deliberately left alone:
-   * cancelling is how a buyer gets back to a selection they want to re-price (a promo applied
-   * after the order was created is not in that order), so wiping the draft would make them
-   * assemble it again. Only the reference to the dead order is cleared.
+   * Releases the order and its hold, then clears the checkout: the converted cart cannot be
+   * edited again, so the buyer restarts from the event (Discover if it cannot be resolved).
    */
   async function onCancel() {
     if (!validOrderId) return;
@@ -171,9 +180,9 @@ export default function PaymentScreen() {
     try {
       await cancel.mutateAsync(validOrderId);
       track('order_cancelled', { order_id: validOrderId });
-      setOrderId(null);
-      if (router.canGoBack()) router.back();
-      else router.replace('/(tabs)/discover');
+      const eventId = order?.eventId;
+      reset();
+      router.replace(eventId ? (`/event/${eventId}` as never) : ('/(tabs)/discover' as never));
     } catch (err) {
       setError(messageForError(err));
     }
@@ -218,7 +227,9 @@ export default function PaymentScreen() {
   }
 
   const card = designAsset('cardSukunOrange');
-  const amount = order ? formatEgp(order.totalEgp) : '—';
+  // `order` is non-null past the guards above, and the total is the server's string, formatted
+  // rather than recomputed (CLAUDE.md rule 7).
+  const amount = formatEgp(order.totalEgp);
   /*
    * A sheet is up and has not answered yet. Derived rather than latched: the old boolean was
    * set when the sheet opened and cleared nowhere, so a cancelled or declined payment left the
@@ -344,24 +355,6 @@ const styles = StyleSheet.create({
     height: 858,
     left: -20,
     top: -172,
-  },
-  fields: {
-    gap: 14,
-    marginBottom: 12,
-  },
-  field: {
-    gap: 7,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 14,
-  },
-  rowItem: {
-    flex: 1,
-    gap: 7,
-  },
-  disabledBox: {
-    opacity: 0.6,
   },
   note: {
     marginBottom: 8,

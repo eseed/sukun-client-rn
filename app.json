@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sukun",
     "slug": "sukun-client-rn",
-    "version": "1.0.0",
+    "version": "2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "sukun",
@@ -29,6 +29,9 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_CONTACTS"
+      ],
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS"
       ]
     },
     "web": {
@@ -37,7 +40,18 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "microphonePermission": false
+        }
+      ],
       "expo-font",
       "expo-image",
       [
@@ -53,7 +67,7 @@
       [
         "expo-contacts",
         {
-          "contactsPermission": "Sukun uses your contacts so you can attach guests to tickets by phone number."
+          "contactsPermission": "Sukun shows your contacts so you can pick who a ticket is for. Only the numbers you pick are sent to Sukun, and your contact list stays on your device."
         }
       ],
       "@react-native-community/datetimepicker",

@@ -63,6 +63,13 @@ jest.mock('expo-contacts/legacy', () => ({
   presentContactPickerAsync: jest.fn(async () => null),
 }));
 
+// The native bundle's own version and build number. Null under Jest without this, which would
+// make the profile screen's version line say "unavailable" in every test that renders it.
+jest.mock('expo-application', () => ({
+  nativeApplicationVersion: '2.0.0',
+  nativeBuildVersion: '15',
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchCameraAsync: jest.fn(async () => ({ canceled: true })),
   requestCameraPermissionsAsync: jest.fn(async () => ({ granted: true })),
@@ -143,3 +150,12 @@ jest.mock(
   }),
   { virtual: true },
 );
+
+/**
+ * `waitFor`'s default budget is 1000ms, and a screen test here mounts a QueryClient, resolves
+ * several mock-api queries and re-renders the tree inside that budget. On a busy machine that
+ * is not enough: suites went red at a `waitFor` that then succeeded at ~1.3-4.5s, with nothing
+ * wrong behind it. A generous ceiling makes a loaded machine a slow run rather than a false
+ * failure; a genuinely stuck screen still fails, just later.
+ */
+require('@testing-library/react-native').configure({ asyncUtilTimeout: 10000 });

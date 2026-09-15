@@ -12,7 +12,8 @@ import {
   Text,
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
-import { useClaimTicket, useEntryPass, useTicket } from '../../src/hooks/queries';
+import { useClaimTicket, useEntryPass, useTicket, useTicketAddons } from '../../src/hooks/queries';
+import { describeTicketAddon, ticketAddonStatusLabel } from '../../src/lib/addons';
 import { isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
 import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
@@ -20,7 +21,7 @@ import { colors, fontFamily } from '../../src/theme/tokens';
 const QR_SIZE = 200;
 
 /**
- * Design screen 14 · Entry pass / QR.
+ * Design screen 21 · Entry pass / QR.
  *
  * PENDING BACKEND — there is no entry-pass endpoint on staging; `MobileTicketsController`
  * exposes list / detail / claim only. The mock issues a payload that rotates every 30
@@ -41,6 +42,7 @@ export default function EntryPassScreen() {
   const ticketId = typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id) ? id : undefined;
 
   const ticketQuery = useTicket(ticketId);
+  const addonsQuery = useTicketAddons(ticketId);
   const passQuery = useEntryPass(ticketId, {
     enabled: Boolean(ticketId) && ticketQuery.data?.usageStatus === 'usable',
   });
@@ -87,6 +89,8 @@ export default function EntryPassScreen() {
   }
 
   const ticket = ticketQuery.data;
+  // Extras are supporting detail on the pass, so a build with them switched off simply shows none.
+  const addons = addonsQuery.data ?? [];
   const usageStatus = ticket.usageStatus;
   const needsClaim = usageStatus === 'pending_claim';
   const needsSelfie = usageStatus === 'selfie_required';
@@ -114,6 +118,11 @@ export default function EntryPassScreen() {
 
   const venue = ticket.event.venueName ?? '';
   const progress = Math.max(0, Math.min(1, secondsLeft / rotation));
+
+  const details = [
+    { label: 'Holder', value: ticket.holderName },
+    { label: 'Venue', value: venue },
+  ].filter((detail) => detail.value.length > 0);
 
   async function onClaim() {
     setActionError(null);
@@ -232,14 +241,34 @@ export default function EntryPassScreen() {
           </View>
         ) : null}
 
-        <View style={styles.detailRowFirst}>
-          <Text style={styles.detailLabel}>Holder</Text>
-          <Text style={styles.detailValue}>{ticket.holderName || '—'}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailLabel}>Venue</Text>
-          <Text style={styles.detailValue}>{venue}</Text>
-        </View>
+        {/* A row with nothing in it is dropped rather than filled with a placeholder: gate staff
+            read this block, and a punctuation mark where a name should be tells them nothing. */}
+        {details.map((detail, index) => (
+          <View
+            key={detail.label}
+            style={[styles.detailRow, index === details.length - 1 && styles.detailRowLast]}
+          >
+            <Text style={styles.detailLabel}>{detail.label}</Text>
+            <Text style={styles.detailValue}>{detail.value}</Text>
+          </View>
+        ))}
+
+        {addons.length > 0 ? (
+          <View style={styles.addons}>
+            <Text style={styles.detailLabel}>Attached add-ons</Text>
+            {addons.map((addon, index) => (
+              <View key={`${addon.addonOptionId}-${index}`} style={styles.addonRow}>
+                <Text style={styles.detailValue}>
+                  {addon.label}
+                  {addon.quantity > 1 ? ` × ${addon.quantity}` : ''}
+                </Text>
+                <Text style={styles.addonMeta}>
+                  {ticketAddonStatusLabel(addon) ?? describeTicketAddon(addon)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {hasPass ? (
           <Text style={styles.footnote}>
@@ -253,6 +282,19 @@ export default function EntryPassScreen() {
 }
 
 const styles = StyleSheet.create({
+  addons: {
+    borderTopColor: colors.borderInverse,
+    borderTopWidth: 1,
+    gap: 10,
+    marginTop: 20,
+    paddingTop: 20,
+  },
+  addonRow: { gap: 2 },
+  addonMeta: {
+    color: colors.textInverseMuted,
+    fontFamily: fontFamily.body,
+    fontSize: 12,
+  },
   root: {
     flex: 1,
     backgroundColor: colors.black,
@@ -346,23 +388,17 @@ const styles = StyleSheet.create({
   refreshFill: {
     backgroundColor: colors.sage500,
   },
-  detailRowFirst: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(247,240,224,0.18)',
-  },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
     paddingVertical: 14,
     borderTopWidth: 1,
+    borderTopColor: colors.borderInverse,
+  },
+  detailRowLast: {
     borderBottomWidth: 1,
-    borderTopColor: 'rgba(247,240,224,0.18)',
-    borderBottomColor: 'rgba(247,240,224,0.18)',
+    borderBottomColor: colors.borderInverse,
   },
   detailLabel: {
     flexShrink: 0,

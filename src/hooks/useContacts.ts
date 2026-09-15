@@ -97,6 +97,8 @@ export type PickResult =
   | { status: 'picked'; contact: PickedContact }
   | { status: 'no-number'; name: string }
   | { status: 'cancelled' }
+  /** Android only: the picker cannot run without contacts permission and it was refused. */
+  | { status: 'no-permission'; canAskAgain: boolean }
   | { status: 'failed' };
 
 /**
@@ -133,14 +135,27 @@ export function pickedName(contact: {
 }
 
 /**
- * Whether the OS will show its own contact picker.
+ * Whether the OS will show its own contact picker. Both platforms do.
  *
- * iOS only, and not for want of trying on Android: `ACTION_PICK` hands back an id that
- * expo-contacts reads through the content resolver, so it still needs READ_CONTACTS. Android
- * contacts permission is all or nothing anyway, so once it is granted the in-app list already
- * holds everyone and the picker has nothing left to offer.
+ * They arrive at it differently. iOS runs `CNContactPickerViewController` out of process and
+ * needs no permission at all. Android's `ACTION_PICK` hands back an id that expo-contacts then
+ * reads through the content resolver, so it does need READ_CONTACTS: the system's temporary
+ * grant covers the one URI the picker returned, and expo queries a different one. `pickContact`
+ * asks for that permission first on Android and nowhere else.
  */
-const CAN_PICK_CONTACT = Platform.OS === 'ios' && typeof presentContactPickerAsync === 'function';
+const CAN_PICK_CONTACT = typeof presentContactPickerAsync === 'function';
+
+/**
+ * Android's picker cannot read back the number it was handed without READ_CONTACTS, so the
+ * permission is asked for before the picker opens rather than after it has already been used.
+ *
+ * Only ever called from a tap, which is what makes raising the sheet here acceptable.
+ */
+async function grantedForAndroidPicker(): Promise<ContactsAccess> {
+  const current = accessFrom(await checkPermissions());
+  if (canReadContacts(current) || !canAskAgain(current)) return current;
+  return accessFrom(await Contacts.requestPermissionsAsync());
+}
 
 interface RawPhone {
   number?: string | null;
@@ -340,11 +355,32 @@ export function useContacts() {
    * resolves with an id and nothing else, and reading a number off that id goes back through
    * `CNContactStore`, which is the very permission this picker exists to do without.
    *
-   * Nothing here touches the query: picking somebody grants no access, so the address book
-   * this hook holds is exactly as wide afterwards as it was before.
+   * On iOS nothing here touches the query: picking somebody grants no access, so the address
+   * book this hook holds is exactly as wide afterwards as it was before. Android is the one
+   * place a pick can widen it, and that is handled below.
    */
   const pickContact = useCallback(async (): Promise<PickResult> => {
     if (!CAN_PICK_CONTACT) return { status: 'failed' };
+
+    // Android is the exception described above: opening the picker without the permission it
+    // needs to read the choice back would spend the buyer's tap on an empty answer.
+    if (Platform.OS === 'android') {
+      let access: ContactsAccess;
+      try {
+        access = await grantedForAndroidPicker();
+      } catch (error) {
+        console.warn('[contacts] picker permission check failed', error);
+        return { status: 'failed' };
+      }
+      if (!canReadContacts(access)) {
+        return { status: 'no-permission', canAskAgain: canAskAgain(access) };
+      }
+      // A grant given here is a grant the in-app list can use too. Nothing else would notice
+      // it: an OS permission sheet does not reliably background the app, so the foreground
+      // re-read cannot be counted on. A no-op until something has actually asked for the list,
+      // and never a sheet of its own.
+      refresh();
+    }
 
     let picked: Awaited<ReturnType<typeof presentContactPickerAsync>>;
     try {
@@ -368,7 +404,7 @@ export function useContacts() {
     // an email address arrives here empty. A ticket needs a number that can be texted.
     if (numbers.length === 0) return { status: 'no-number', name };
     return { status: 'picked', contact: { name, numbers } };
-  }, []);
+  }, [refresh]);
 
   const openSettings = useCallback(() => {
     void Linking.openSettings().catch((error: unknown) =>

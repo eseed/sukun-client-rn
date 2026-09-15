@@ -6,8 +6,8 @@ import { colors, fontFamily, shadow } from '../../theme/tokens';
 import { Badge, type BadgeTone, ImageSlot, Text } from '../ui';
 
 /**
- * The ticket card from design screen 13: a 130px image with a status badge, a dashed
- * perforation with two punched notches, then the event/tier/order block.
+ * The ticket card from design screen 20 · My tickets: a 130px image with a status badge, a
+ * dashed perforation with two punched notches, then the event/tier/order block.
  */
 
 function statusBadge(ticket: Ticket): { label: string; tone: BadgeTone } {
@@ -33,11 +33,21 @@ function statusBadge(ticket: Ticket): { label: string; tone: BadgeTone } {
 export function TicketCard({
   ticket,
   ticketCount = 1,
+  addonCount = 0,
   onPress,
+  onAddExtras,
 }: {
   ticket: Ticket;
   ticketCount?: number;
+  /** Live extras across the tickets this card stands for. Zero hides the line entirely. */
+  addonCount?: number;
   onPress: () => void;
+  /**
+   * Omitted when this event sells no extras, which is how a flag-off or empty catalogue reaches
+   * the card: no row, no error, nothing to tap (decision 11). The caller decides that, since the
+   * ticket itself carries no signal for it.
+   */
+  onAddExtras?: () => void;
 }) {
   const badge = statusBadge(ticket);
   const first = ticket.days[0]?.date ?? '';
@@ -70,15 +80,39 @@ export function TicketCard({
           {ticket.orderNumber ? `Order ${ticket.orderNumber} · ` : ''}
           {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
         </Text>
+        {addonCount > 0 ? (
+          <Text variant="meta">
+            {addonCount} {addonCount === 1 ? 'add-on' : 'add-ons'} attached
+          </Text>
+        ) : null}
         <Text style={[styles.cta, !usable && styles.ctaMuted]}>
           {usable ? 'View entry pass →' : 'Waiting to bind to their number'}
         </Text>
+        {/* Only a usable ticket can take extras: they attach to a ticket, and one that has not
+            bound to its holder yet has nothing to attach them to. */}
+        {usable && onAddExtras ? (
+          <Pressable accessibilityRole="button" onPress={onAddExtras} style={styles.extrasRow}>
+            <Text style={styles.extrasLabel}>Add extras to this ticket</Text>
+            <Text style={styles.extrasChevron}>›</Text>
+          </Pressable>
+        ) : null}
       </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  extrasRow: {
+    alignItems: 'center',
+    borderTopColor: colors.borderDefault,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+  },
+  extrasLabel: { color: colors.textPrimary, fontFamily: fontFamily.body, fontSize: 14 },
+  extrasChevron: { color: colors.textMuted, fontSize: 20 },
   card: {
     backgroundColor: colors.bgSurface,
     borderWidth: 1,

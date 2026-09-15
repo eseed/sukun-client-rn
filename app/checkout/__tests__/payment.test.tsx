@@ -2,6 +2,7 @@ import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../../s
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src/api/mock';
 import { TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
 import { useAuthStore } from '../../../src/stores/auth';
+import { useCheckoutStore } from '../../../src/stores/checkout';
 
 import PaymentScreen from '../payment';
 
@@ -68,11 +69,32 @@ beforeEach(() => {
   useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
 });
 
+/**
+ * Places an order through the cart, the way the app does: cart, tickets, preview, place. Tests
+ * that only care about what happens *after* an order exists use this rather than restating the
+ * whole checkout.
+ */
+async function placeOrderViaCart(input: {
+  eventId: string;
+  buyerTierId: string | null;
+  items: { tierId: string; quantity: number }[];
+  guests: { phoneNumber: string; name: string; tierId: string }[];
+}) {
+  const cart = await mockApi.carts.create(input.eventId);
+  await mockApi.carts.replaceTickets(cart.id, {
+    buyerTierId: input.buyerTierId,
+    items: input.items,
+    guests: input.guests,
+  });
+  const preview = await mockApi.carts.preview(cart.id);
+  return mockApi.carts.placeOrder(cart.id, preview.pricing.pricingConfirmationToken!);
+}
+
 async function openPaymentSheet() {
   await signInAndComplete();
   // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
   // Two tickets cost the same either way, so the totals asserted below are unchanged.
-  const order = await mockApi.orders.create({
+  const order = await placeOrderViaCart({
     eventId: TULUA_ID,
     buyerTierId: null,
     items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
@@ -98,7 +120,7 @@ it('opens Paymob native checkout while waiting for the payment to complete', asy
   await signInAndComplete();
   // signInAndComplete seeds this user a Tulua ticket, so the order is entirely for guests.
   // Two tickets cost the same either way, so the totals asserted below are unchanged.
-  const order = await mockApi.orders.create({
+  const order = await placeOrderViaCart({
     eventId: TULUA_ID,
     buyerTierId: null,
     items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
@@ -164,6 +186,37 @@ it('keeps waiting when the SDK reports PENDING', async () => {
     ).toBeTruthy(),
   );
   expect(mockRouter.replace).not.toHaveBeenCalled();
+});
+
+/** Cancelling clears the stale checkout and returns to the event, never back a screen. */
+it('cancels the order, clears the stale checkout and returns to the event', async () => {
+  await signInAndComplete();
+  const order = await placeOrderViaCart({
+    eventId: TULUA_ID,
+    buyerTierId: null,
+    items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
+    guests: [
+      { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+      { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+    ],
+  });
+  mockParams.orderId = order.id;
+  useCheckoutStore.setState({
+    cartId: 'cart-stale',
+    orderId: order.id,
+    addons: [],
+  });
+
+  renderWithProviders(<PaymentScreen />);
+
+  await waitFor(() => expect(screen.getByText('Cancel this order')).toBeTruthy());
+  fireEvent.press(screen.getByText('Cancel this order'));
+
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/event/${TULUA_ID}`));
+  expect(mockRouter.back).not.toHaveBeenCalled();
+  const state = useCheckoutStore.getState();
+  expect(state.cartId).toBeNull();
+  expect(state.orderId).toBeNull();
 });
 
 it('still reads the outcome if a release switches to the documented bare string', async () => {

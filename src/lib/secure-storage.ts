@@ -47,4 +47,6 @@ export const SECURE_KEYS = {
   accessToken: 'sukun.accessToken',
   refreshToken: 'sukun.refreshToken',
   analyticsConsent: 'sukun.analyticsConsent',
+  setupDeferred: 'sukun.setupDeferred',
+  guestBrowsing: 'sukun.guestBrowsing',
 } as const;

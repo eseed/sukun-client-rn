@@ -156,9 +156,17 @@ export default function DeleteAccountScreen() {
 
           {preview && !blocked ? (
             <Text variant="metaSm" style={styles.retentionNote}>
-              This cannot be undone. Your record is kept for {preview.dataRetainedDays} days and
-              then anonymised. You can sign up again with this number at any time, as a new
-              account, starting from an empty profile.
+              {/*
+                The scrub is immediate today, so the server sends 0 and the sentence that names
+                a number reads as an unpopulated variable: "kept for 0 days and then anonymised".
+                That is on the one screen App Review opens deliberately to check that deletion is
+                real. The number is truthful, the sentence was written assuming a non-zero one,
+                so the zero case gets its own wording. Kept as a branch rather than hardcoded,
+                because a retention period is a server decision and may stop being zero.
+              */}
+              {preview.dataRetainedDays === 0
+                ? 'This cannot be undone. Your profile is anonymised straight away. You can sign up again with this number at any time, as a new account, starting from an empty profile.'
+                : `This cannot be undone. Your record is kept for ${preview.dataRetainedDays} days and then anonymised. You can sign up again with this number at any time, as a new account, starting from an empty profile.`}
             </Text>
           ) : null}
 

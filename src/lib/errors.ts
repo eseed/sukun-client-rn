@@ -52,6 +52,12 @@ const MESSAGES: Record<string, string> = {
   GUEST_ALLOCATION_INVALID: 'Every ticket needs a guest. Go back and pick who each one is for.',
   GUEST_VALIDATION_FAILED: 'Check the guest numbers and try again.',
 
+  // The backend uses this for converted, abandoned, and expired carts; it does not prove an
+  // order exists, so recovery decides whether payment or a fresh event checkout is appropriate.
+  CART_NOT_EDITABLE: 'This checkout is no longer available. Start again from the event.',
+  ROOM_OCCUPANCY_UNFILLED: 'Every room has to be full before you can check out.',
+  ADDON_ASSIGNMENT_COUNT_MISMATCH: 'Every extra needs somebody to go to.',
+
   PROMO_CODE_INVALID: 'That promo code is not valid.',
   // The live backend's own promo vocabulary — `PROMO_CODE_INVALID` above is the mock's.
   PROMO_CODE_NOT_FOUND: 'That promo code is not valid.',
@@ -68,10 +74,16 @@ const MESSAGES: Record<string, string> = {
   PAYMENT_CONFIRMATION_PENDING:
     "We're still confirming your last payment attempt. Give it a moment, then try again.",
   // The backend blocks only on an order still awaiting payment, and answers 200 when that order
-  // already matches the request — so this code always means a *different* order is holding the
-  // capacity. `useCreateOrder` turns it into a `HeldOrderError` so the screen can offer that
-  // order instead of quietly swapping the buyer's basket for it.
+  // already matches the request — so these always mean a *different* order is holding the
+  // capacity. `heldOrderIdFromError` reads the order out so the screen can offer to finish it
+  // instead of quietly swapping the buyer's basket for it.
+  //
+  // Two codes because the checkout moved onto the cart: the cart endpoint refuses with
+  // `CART_ACTIVE_ORDER_EXISTS` and the older order endpoint with `DUPLICATE_ACTIVE_ORDER`. Only
+  // the second was ever mapped, so the live refusal fell through to "Something went wrong. Try
+  // again." — which is what a tester saw after cancelling the card sheet and trying once more.
   DUPLICATE_ACTIVE_ORDER: 'You already have an order in progress for this event.',
+  CART_ACTIVE_ORDER_EXISTS: 'You already have an order in progress for this event.',
   PAYMENT_ALREADY_COMPLETED: 'This order is already paid. Check your tickets.',
   PAYMENT_PROVIDER_ERROR: "The payment provider couldn't be reached. Nothing was charged.",
   ORDER_HOLD_EXPIRED: 'Your reservation expired before payment. Start the order again.',
@@ -160,6 +172,11 @@ export function messageForError(error: unknown): string {
   return FALLBACK;
 }
 
+/** True when the server refused an edit because the cart is no longer editable. */
+export function isCartNotEditableError(error: unknown): boolean {
+  return isRecord(error) && error.code === 'CART_NOT_EDITABLE';
+}
+
 /**
  * Thrown when order creation is refused because an earlier order for the same event is still
  * holding capacity. Carries that order's id when it could be located, so the screen can offer
@@ -176,4 +193,27 @@ export class HeldOrderError extends Error {
 
 export function isHeldOrderError(error: unknown): error is HeldOrderError {
   return error instanceof HeldOrderError;
+}
+
+/** The two refusals that mean "an order is already holding this event's capacity". */
+const HELD_ORDER_CODES = new Set(['CART_ACTIVE_ORDER_EXISTS', 'DUPLICATE_ACTIVE_ORDER']);
+
+/**
+ * The id of the order already holding capacity, or `null` when this is not that refusal, or is
+ * that refusal without an id attached.
+ *
+ * The backend names the order in the error body, which is what makes the refusal actionable:
+ * the buyer's way out is to finish paying the order they already have, not to place a second
+ * one. Without an id there is nothing to offer and the screen falls back to the copy above,
+ * which the second of the backend's two throw sites does not carry.
+ */
+export function heldOrderIdFromError(error: unknown): string | null {
+  if (isHeldOrderError(error)) return error.heldOrderId;
+  if (!isRecord(error)) return null;
+  if (typeof error.code !== 'string' || !HELD_ORDER_CODES.has(error.code)) return null;
+
+  const extra = error.extra;
+  if (!isRecord(extra)) return null;
+
+  return typeof extra.orderId === 'string' && extra.orderId ? extra.orderId : null;
 }

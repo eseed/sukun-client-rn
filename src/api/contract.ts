@@ -1,8 +1,13 @@
 import type {
   AccountDeletionPreview,
+  AddonDetail,
+  AddonSummary,
   Area,
   Authenticated,
-  CreateOrderInput,
+  Cart,
+  CartAddonInput,
+  CartPreview,
+  CartRecipientLookup,
   CurrentUser,
   CursorPage,
   EmailVerificationResult,
@@ -19,11 +24,12 @@ import type {
   OtpRequested,
   PaymentIntent,
   PaymentStatus,
-  PricePreview,
-  PromoValidationResult,
+  ReplaceCartTicketsInput,
   SessionTokens,
   SelfieResponse,
   Ticket,
+  TicketAddon,
+  TicketAddonContext,
   TicketStatus,
   UpdateProfileInput,
 } from './types';
@@ -74,22 +80,58 @@ export interface SukunApi {
     meta(identifier: string): Promise<EventMeta>;
   };
 
+  /**
+   * Public addon catalogue for an event. No auth: the browse screen is reachable before sign-in,
+   * and nothing here reserves anything.
+   */
+  addons: {
+    list(eventIdentifier: string): Promise<AddonSummary[]>;
+    detail(eventIdentifier: string, addonId: string): Promise<AddonDetail>;
+  };
+
+  /**
+   * The P0.1 checkout. A cart is editable intent; the preview is advisory pricing the buyer must
+   * confirm; Place Order is the one call that creates immutable commerce.
+   *
+   * Order matters: tickets first, then addons, then preview. Replacing tickets deletes the cart's
+   * draft addon rows, so a ticket change means re-sending addons before previewing again.
+   */
+  carts: {
+    /** Creates or reuses the buyer's current draft cart for this event. */
+    create(eventId: string): Promise<Cart>;
+    get(cartId: string): Promise<Cart>;
+    /** Full replacement. Wipes the cart's draft addons, so re-send those afterwards. */
+    replaceTickets(cartId: string, input: ReplaceCartTicketsInput): Promise<Cart>;
+    /** Full replacement of every addon line. */
+    replaceAddons(cartId: string, addons: CartAddonInput[]): Promise<Cart>;
+    /**
+     * Which of these numbers hold a ticket to this cart's event, so someone who bought their own
+     * ticket can still be put in a room. Never says whether a number is registered, and never
+     * returns a name (CLAUDE.md rule 4) — the app labels people from device contacts.
+     */
+    lookupRecipients(cartId: string, phoneNumbers: string[]): Promise<CartRecipientLookup[]>;
+    applyPromo(cartId: string, code: string): Promise<Cart>;
+    removePromo(cartId: string): Promise<Cart>;
+    /**
+     * Server-authoritative pricing. Reserves nothing, and its
+     * `pricing.pricingConfirmationToken` expires in about five minutes.
+     */
+    preview(cartId: string): Promise<CartPreview>;
+    /**
+     * The authoritative call: revalidates everything, claims the promo, takes holds and creates
+     * the order. Send the token from the preview the buyer actually confirmed.
+     */
+    placeOrder(cartId: string, pricingConfirmationToken: string): Promise<OrderDetail>;
+    abandon(cartId: string): Promise<Cart>;
+  };
+
   orders: {
     /**
-     * Server-authoritative price preview for the review screen. Never compute a total in a
-     * screen — see CLAUDE.md rule 7.
+     * Advisory guest check used while picking contacts, so a blocked number is flagged before the
+     * cart is touched. Reserves nothing and creates nothing. The authoritative check is the
+     * cart's own — `replaceTickets` rejects, and `preview` reports the same issues.
      */
-    previewPrice(input: {
-      eventId: string;
-      items: { tierId: string; quantity: number }[];
-      promoCode?: string;
-    }): Promise<PricePreview>;
     validateGuests(eventId: string, guests: GuestValidationInput[]): Promise<GuestValidationResult>;
-    validatePromoCode(
-      items: { tierId: string; quantity: number }[],
-      promoCode: string,
-    ): Promise<PromoValidationResult>;
-    create(input: CreateOrderInput): Promise<OrderDetail>;
     detail(orderId: string): Promise<OrderDetail>;
     list(cursor?: string | null, limit?: number): Promise<CursorPage<OrderSummary>>;
     cancel(orderId: string): Promise<OrderDetail>;
@@ -115,6 +157,13 @@ export interface SukunApi {
     claim(ticketId: string): Promise<Ticket>;
     /** PENDING BACKEND — no entry-pass endpoint on staging yet. See `EntryPass`. */
     entryPass(ticketId: string): Promise<EntryPass>;
+    /** Addons attached to a ticket after fulfilment. */
+    addons(ticketId: string, includeRefunded?: boolean): Promise<TicketAddon[]>;
+    /**
+     * Starting point for buying extras against a ticket the buyer already holds: the eligible
+     * ticket, what it already has, and the event's current catalogue.
+     */
+    addonContext(ticketId: string): Promise<TicketAddonContext>;
   };
 
   account: {

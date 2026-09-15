@@ -121,3 +121,74 @@ describe('live HTTP auth resilience', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+/**
+ * The backend's exception filter spreads a domain exception's own fields into the error body
+ * next to the envelope, and some refusals are only actionable because of them. Dropping the
+ * leftovers turned `CART_ACTIVE_ORDER_EXISTS` into a dead end: the id of the order already
+ * holding the event's capacity is the one thing the buyer can act on, and it never reached the
+ * screen.
+ */
+describe('error envelope extras', () => {
+  let http: HttpModule;
+  const originalFetch = global.fetch;
+
+  beforeAll(() => {
+    process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test';
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      http = require('../http') as HttpModule;
+    });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('keeps whatever the refusal carried beyond the envelope', async () => {
+    global.fetch = jest.fn(async () =>
+      response(
+        409,
+        JSON.stringify({
+          statusCode: 409,
+          error: 'CART_ACTIVE_ORDER_EXISTS',
+          message: 'An order already exists',
+          details: [],
+          requestId: 'req-1',
+          orderId: 'ord-42',
+        }),
+      ),
+    ) as unknown as typeof global.fetch;
+
+    await expect(
+      http.request('mobile/carts/c1/place-order', { auth: false }),
+    ).rejects.toMatchObject({
+      code: 'CART_ACTIVE_ORDER_EXISTS',
+      status: 409,
+      extra: { orderId: 'ord-42' },
+    });
+  });
+
+  it('leaves the envelope fields out of the extras', async () => {
+    global.fetch = jest.fn(async () =>
+      response(
+        400,
+        JSON.stringify({
+          statusCode: 400,
+          error: 'VALIDATION_ERROR',
+          message: 'nope',
+          details: [],
+          requestId: 'req-2',
+          timestamp: 'now',
+        }),
+      ),
+    ) as unknown as typeof global.fetch;
+
+    try {
+      await http.request('mobile/carts', { auth: false });
+      throw new Error('expected a refusal');
+    } catch (error) {
+      expect((error as { extra: Record<string, unknown> }).extra).toEqual({});
+    }
+  });
+});

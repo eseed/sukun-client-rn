@@ -5,12 +5,12 @@ import { api } from '../../api';
 import type { CursorPage, PaymentStatus, Ticket } from '../../api/types';
 import {
   queryKeys,
-  useCreateOrder,
+  useApplyCartPromo,
+  useCartPreview,
   usePaymentStatus,
-  usePromoDiscount,
+  usePlaceCartOrder,
   useTickets,
 } from '../queries';
-import { isHeldOrderError } from '../../lib/errors';
 import { useAuthStore } from '../../stores/auth';
 import {
   deleteSecureItem,
@@ -28,18 +28,30 @@ jest.mock('../../api', () => ({
       create: jest.fn(),
       list: jest.fn(),
       detail: jest.fn(),
-      validatePromoCode: jest.fn(),
+    },
+    carts: {
+      create: jest.fn(),
+      get: jest.fn(),
+      replaceTickets: jest.fn(),
+      replaceAddons: jest.fn(),
+      lookupRecipients: jest.fn(),
+      applyPromo: jest.fn(),
+      removePromo: jest.fn(),
+      preview: jest.fn(),
+      placeOrder: jest.fn(),
+      abandon: jest.fn(),
     },
   },
 }));
 
 const paymentStatusMock = api.payments.status as jest.MockedFunction<typeof api.payments.status>;
 const ticketsListMock = api.tickets.list as jest.MockedFunction<typeof api.tickets.list>;
-const ordersCreateMock = api.orders.create as jest.MockedFunction<typeof api.orders.create>;
-const ordersListMock = api.orders.list as jest.MockedFunction<typeof api.orders.list>;
-const ordersDetailMock = api.orders.detail as jest.MockedFunction<typeof api.orders.detail>;
-const validatePromoMock = api.orders.validatePromoCode as jest.MockedFunction<
-  typeof api.orders.validatePromoCode
+const cartsPreviewMock = api.carts.preview as jest.MockedFunction<typeof api.carts.preview>;
+const cartsPlaceOrderMock = api.carts.placeOrder as jest.MockedFunction<
+  typeof api.carts.placeOrder
+>;
+const cartsApplyPromoMock = api.carts.applyPromo as jest.MockedFunction<
+  typeof api.carts.applyPromo
 >;
 
 function wrapper(client: QueryClient) {
@@ -168,87 +180,6 @@ describe('tickets hook', () => {
   });
 });
 
-/**
- * Staging prices an order only at `POST /orders`, so this validation response is the only
- * discount figure the review screen has before the buyer commits. It showed nothing at all
- * until this hook existed: an applied code, no discount row, and the full undiscounted total.
- */
-describe('promo discount hook', () => {
-  beforeEach(() => {
-    useAuthStore.setState({ status: 'signed-in', user: null, pendingPhone: null });
-    validatePromoMock.mockImplementation((items, promoCode) =>
-      Promise.resolve({
-        valid: true,
-        code: promoCode,
-        discountAmountEgp: '100.00',
-        discountAppliedEgp: '100.00',
-        fullyApplied: true,
-        items: items.map((item) => ({ tierId: item.tierId, discountAmountEgp: '100.00' })),
-      }),
-    );
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('asks the server for the discount on an applied code', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const items = [{ tierId: 'tier-weekend', quantity: 1 }];
-
-    const rendered = renderHook(() => usePromoDiscount({ items, promoCode: 'TULUA10' }), {
-      wrapper: wrapper(client),
-    });
-
-    await waitFor(() => expect(rendered.result.current.data?.discountAppliedEgp).toBe('100.00'));
-    expect(validatePromoMock).toHaveBeenCalledWith(items, 'TULUA10');
-    rendered.unmount();
-    client.clear();
-  });
-
-  it('stays idle with no code applied', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-
-    const rendered = renderHook(
-      () => usePromoDiscount({ items: [{ tierId: 'tier-weekend', quantity: 1 }], promoCode: null }),
-      { wrapper: wrapper(client) },
-    );
-
-    await waitFor(() => expect(rendered.result.current.fetchStatus).toBe('idle'));
-    expect(validatePromoMock).not.toHaveBeenCalled();
-    rendered.unmount();
-    client.clear();
-  });
-
-  /**
-   * The discount is clamped to the subtotal, so a basket the buyer changed after applying the
-   * code has to be re-priced by the server rather than carrying the old figure forward.
-   */
-  it('re-asks when the basket changes under an applied code', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-
-    const rendered = renderHook(
-      ({ quantity }: { quantity: number }) =>
-        usePromoDiscount({
-          items: [{ tierId: 'tier-weekend', quantity }],
-          promoCode: 'TULUA10',
-        }),
-      { wrapper: wrapper(client), initialProps: { quantity: 1 } },
-    );
-
-    await waitFor(() => expect(validatePromoMock).toHaveBeenCalledTimes(1));
-    rendered.rerender({ quantity: 3 });
-
-    await waitFor(() => expect(validatePromoMock).toHaveBeenCalledTimes(2));
-    expect(validatePromoMock).toHaveBeenLastCalledWith(
-      [{ tierId: 'tier-weekend', quantity: 3 }],
-      'TULUA10',
-    );
-    rendered.unmount();
-    client.clear();
-  });
-});
-
 describe('auth session transition', () => {
   beforeEach(async () => {
     await deleteSecureItem(SECURE_KEYS.accessToken);
@@ -271,33 +202,19 @@ describe('auth session transition', () => {
   });
 });
 
-describe('order creation hook', () => {
+describe('cart checkout hooks', () => {
   const clients: QueryClient[] = [];
-
-  function makeClient() {
+  const makeClient = () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
     clients.push(client);
     return client;
-  }
+  };
 
-  function orderSummary(id: string, eventId: string, status: string) {
-    return { id, eventId, status } as unknown as Awaited<
-      ReturnType<typeof api.orders.list>
-    >['data'][number];
-  }
-
-  function duplicateActiveOrder() {
-    return Object.assign(new Error('conflict'), { code: 'DUPLICATE_ACTIVE_ORDER' });
-  }
-
-  const input = {
-    eventId: 'evt-1',
-    buyerTierId: 'tier-1',
-    items: [{ tierId: 'tier-1', quantity: 3 }],
-    guests: [],
-  } as unknown as Parameters<typeof api.orders.create>[0];
+  beforeEach(() => {
+    useAuthStore.setState({ status: 'signed-in', user: null, pendingPhone: null });
+  });
 
   afterEach(() => {
     clients.forEach((client) => client.clear());
@@ -305,74 +222,44 @@ describe('order creation hook', () => {
     jest.clearAllMocks();
   });
 
-  it('passes a created order straight through', async () => {
-    const created = { id: 'order-new' } as Awaited<ReturnType<typeof api.orders.create>>;
-    ordersCreateMock.mockResolvedValue(created);
+  it('takes a preview on demand rather than refreshing it underneath the buyer', async () => {
+    const preview = { cartId: 'cart-1', pricing: { pricingConfirmationToken: 'tok-1' } };
+    cartsPreviewMock.mockResolvedValue(preview as never);
 
-    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
+    const { result } = renderHook(() => useCartPreview(), { wrapper: wrapper(makeClient()) });
 
-    await expect(result.current.mutateAsync(input)).resolves.toBe(created);
-    expect(ordersListMock).not.toHaveBeenCalled();
+    // Nothing is fetched until the screen asks: the token is short-lived and tied to the exact
+    // total shown, so it must not be refreshed while the buyer is reading it.
+    expect(cartsPreviewMock).not.toHaveBeenCalled();
+
+    await expect(result.current.mutateAsync('cart-1')).resolves.toBe(preview);
+    expect(cartsPreviewMock).toHaveBeenCalledWith('cart-1');
   });
 
-  /*
-   * A 409 means the held order is *different* from what was asked for — the backend returns 200
-   * when it matches. Substituting it silently sent the buyer to the payment sheet for a basket
-   * they never chose, so it has to surface instead.
-   */
-  it('reports the held order rather than substituting it', async () => {
-    ordersCreateMock.mockRejectedValue(duplicateActiveOrder());
-    ordersListMock.mockResolvedValue({
-      data: [orderSummary('order-held', 'evt-1', 'awaiting_payment')],
-      meta: { limit: 50, hasNextPage: false, nextCursor: null },
-    } as unknown as Awaited<ReturnType<typeof api.orders.list>>);
+  it('sends the confirmed token to place order and never retries a price change', async () => {
+    const changed = Object.assign(new Error('changed'), { code: 'CART_PRICING_CHANGED' });
+    cartsPlaceOrderMock.mockRejectedValue(changed);
 
-    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
+    const { result } = renderHook(() => usePlaceCartOrder(), { wrapper: wrapper(makeClient()) });
 
-    const error = await result.current.mutateAsync(input).catch((e: unknown) => e);
+    await expect(
+      result.current.mutateAsync({ cartId: 'cart-1', pricingConfirmationToken: 'tok-1' }),
+    ).rejects.toBe(changed);
 
-    expect(isHeldOrderError(error)).toBe(true);
-    expect(isHeldOrderError(error) && error.heldOrderId).toBe('order-held');
-    // Never resolved into an order the caller would then hand to the payment sheet.
-    expect(ordersDetailMock).not.toHaveBeenCalled();
+    // Retrying would place the order at a price the buyer never confirmed.
+    expect(cartsPlaceOrderMock).toHaveBeenCalledTimes(1);
+    expect(cartsPlaceOrderMock).toHaveBeenCalledWith('cart-1', 'tok-1');
   });
 
-  it('never offers an already-paid order as the held one', async () => {
-    ordersCreateMock.mockRejectedValue(duplicateActiveOrder());
-    ordersListMock.mockResolvedValue({
-      data: [orderSummary('order-paid', 'evt-1', 'paid')],
-      meta: { limit: 50, hasNextPage: false, nextCursor: null },
-    } as unknown as Awaited<ReturnType<typeof api.orders.list>>);
+  it('does not retry a promo code the server has rejected', async () => {
+    const rejected = Object.assign(new Error('nope'), { code: 'PROMO_CODE_NOT_FOUND' });
+    cartsApplyPromoMock.mockRejectedValue(rejected);
 
-    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
+    const { result } = renderHook(() => useApplyCartPromo(), { wrapper: wrapper(makeClient()) });
 
-    const error = await result.current.mutateAsync(input).catch((e: unknown) => e);
-
-    expect(isHeldOrderError(error)).toBe(true);
-    expect(isHeldOrderError(error) && error.heldOrderId).toBeNull();
-  });
-
-  it('ignores a held order belonging to another event', async () => {
-    ordersCreateMock.mockRejectedValue(duplicateActiveOrder());
-    ordersListMock.mockResolvedValue({
-      data: [orderSummary('order-other', 'evt-2', 'awaiting_payment')],
-      meta: { limit: 50, hasNextPage: false, nextCursor: null },
-    } as unknown as Awaited<ReturnType<typeof api.orders.list>>);
-
-    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
-
-    const error = await result.current.mutateAsync(input).catch((e: unknown) => e);
-
-    expect(isHeldOrderError(error) && error.heldOrderId).toBeNull();
-  });
-
-  it('lets an unrelated failure through untouched', async () => {
-    const other = Object.assign(new Error('nope'), { code: 'EVENT_NOT_PURCHASABLE' });
-    ordersCreateMock.mockRejectedValue(other);
-
-    const { result } = renderHook(() => useCreateOrder(), { wrapper: wrapper(makeClient()) });
-
-    await expect(result.current.mutateAsync(input)).rejects.toBe(other);
-    expect(ordersListMock).not.toHaveBeenCalled();
+    await expect(
+      result.current.mutateAsync({ cartId: 'cart-1', code: 'NOPE' }),
+    ).rejects.toBe(rejected);
+    expect(cartsApplyPromoMock).toHaveBeenCalledTimes(1);
   });
 });

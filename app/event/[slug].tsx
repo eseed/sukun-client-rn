@@ -24,13 +24,14 @@ import {
   Text,
   YoutubeEmbed,
 } from '../../src/components/ui';
-import { useEvent } from '../../src/hooks/queries';
+import { useAddons, useEvent } from '../../src/hooks/queries';
+import { describeAddonKinds } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
 import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
-import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
+import { nextOnboardingStep, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
@@ -54,6 +55,10 @@ export default function EventDetailScreen() {
     typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
+  // The catalogue is public, so this needs no cart and no sign-in. A failed or still-loading
+  // fetch reads as "no extras", which is the same silent state as a genuinely empty catalogue:
+  // better to under-promise on the event page than to advertise extras that are not there.
+  const addonsQuery = useAddons(eventSlug);
 
   // An admin can attach a video either in the dedicated links field or by pasting one into the
   // description, and the same video often arrives both ways. Collect them into one ordered,
@@ -115,11 +120,15 @@ export default function EventDetailScreen() {
     void openVenueInMaps(event?.venue);
   }
 
+  const addonKinds = describeAddonKinds(addonsQuery.data ?? []);
+
   function onGetTickets() {
     if (!firstPurchasableTier) return;
     // Purchase is app-only and gated on a complete profile (CLAUDE.md rules 5 and 8).
     if (!user) {
-      router.push('/(onboarding)/welcome');
+      // `gate=1` tells Welcome it is standing in front of an event rather than opening the app,
+      // so its escape reads "Not now, browse events" instead of "Skip login". See welcome.tsx.
+      router.push('/(onboarding)/welcome?gate=1');
       return;
     }
     // The backend is authoritative for purchase eligibility. A projection can omit profile
@@ -135,13 +144,7 @@ export default function EventDetailScreen() {
       router.push(`/checkout/pass?eventId=${eventId}`);
       return;
     }
-    const missing = missingProfileFields(user);
-    if (missing.length > 0) {
-      const profileMissing = missing.some((field) => field !== 'selfie');
-      router.push(profileMissing ? '/(onboarding)/profile' : '/(onboarding)/selfie');
-      return;
-    }
-    router.push('/(onboarding)/profile');
+    router.push(nextOnboardingStep(user));
   }
 
   return (
@@ -234,15 +237,38 @@ export default function EventDetailScreen() {
             ) : null}
           </View>
 
+          {/*
+            Design screen 07 · the extras teaser.
+
+            It is the only place the buyer learns extras exist before committing to a ticket, and
+            it disappears entirely when the catalogue is empty. That silence is deliberate: an
+            event with no extras, and an event whose extras are switched off at the backend, are
+            one indistinguishable state with no entry point and no error (P0.1 decision 11), so
+            there is nothing here to explain away.
+
+            It is deliberately not tappable, and so carries no chevron. Extras attach to a
+            ticket, so there is nowhere to send someone from here: they cannot be browsed
+            without a cart and cannot be bought without a ticket in it. A control that only
+            repeated "Get tickets" would be a second CTA pretending to be a third thing.
+          */}
+          {addonKinds ? (
+            <View
+              accessible
+              accessibilityLabel={`Add-ons available: ${addonKinds}`}
+              style={styles.addons}
+            >
+              <Text style={styles.addonsTitle}>Add-ons available</Text>
+              <Text style={styles.addonsBlurb}>{addonKinds}</Text>
+            </View>
+          ) : null}
+
           <Text variant="eyebrow" style={styles.sectionLabel}>
             Venue
           </Text>
           <Pressable
             accessibilityRole={mapUrl ? 'link' : undefined}
             accessibilityLabel={
-              mapUrl
-                ? `Open ${event.venue?.name ?? 'the venue'} in Google Maps`
-                : undefined
+              mapUrl ? `Open ${event.venue?.name ?? 'the venue'} in Google Maps` : undefined
             }
             accessibilityHint={mapUrl ? 'Opens Google Maps outside the app' : undefined}
             disabled={!mapUrl}
@@ -453,6 +479,25 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: 28,
     lineHeight: 30,
+  },
+  addons: {
+    backgroundColor: colors.bgSurface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  addonsTitle: {
+    fontSize: 14,
+    fontFamily: fontFamily.bodyMedium,
+    color: colors.textPrimary,
+  },
+  addonsBlurb: {
+    fontSize: 12.5,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   badges: {
     flexDirection: 'row',

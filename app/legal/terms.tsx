@@ -22,7 +22,15 @@ const CONTACT = 'sukunwellness.co/support';
 const SECTIONS: { title: string; body: string }[] = [
   {
     title: 'Who we are',
-    body: `Sukun is operated by eSEED in Egypt. We decide how the personal data described here is used. For any privacy question, or to ask for a copy of your data, reach us at ${CONTACT}.`,
+    /**
+     * eSEED builds and maintains the app; it does not run the service. Sukun is operated by
+     * Sukun, and Sukun is therefore the one deciding what is collected here and why. This used
+     * to name eSEED as the operator, which was both wrong and the only place in either policy
+     * that said so: the hosted policy App Store Connect links to already names Sukun as the
+     * controller and does not mention eSEED at all. Guideline 5.1.1(i) turns on identifying
+     * who collects the data, so the two have to agree.
+     */
+    body: `The Sukun app is built and maintained by eSEED in Egypt. Sukun is operated by Sukun, which decides what personal data is collected here and how it is used. For any privacy question, or to ask for a copy of your data, reach us at ${CONTACT}.`,
   },
   {
     title: 'Your phone number',
@@ -38,7 +46,17 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Contacts',
-    body: 'If you add a guest to a ticket, the app opens your phone’s own contact picker. Only the single number you choose is sent to Sukun, and only at the moment you choose it. We never read, upload, or store your contact list. You can type a number by hand instead, and the app works normally if you decline the contacts permission.',
+    /**
+     * This section has to say what the binary does, and for a while it did not. It claimed "we
+     * never read, upload, or store your contact list" while the guest screen was reading the
+     * whole address book to build its own searchable list. The reading is the part that was
+     * true and the sentence was the part that was wrong, so the sentence is what changed.
+     *
+     * The distinction that matters to someone reading this, and the one the old wording
+     * collapsed, is between the app reading contacts *on the phone* to show you a list, and
+     * Sukun receiving them. Only the second ever happens, and only for the people picked.
+     */
+    body: 'If you add a guest to a ticket, the app reads your contacts on your phone so it can show you a list to pick from, and asks your permission first. That list is only ever on your device: nothing about it is sent to Sukun, and we do not upload or store your contact list. Only the numbers you actually pick are sent to us, at the moment you pick them. You can type a number by hand instead, and the app works normally if you decline the contacts permission.',
   },
   {
     title: 'Guests and tickets',
@@ -50,7 +68,18 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Analytics and session replay',
-    body: 'We use Mixpanel to count how features are used and Microsoft Clarity to record anonymised replays of screens, so we can find what is broken or confusing. Both identify you only by an internal Sukun account id. We never put your name, email, or phone number into an analytics event. If you are in the EU, the UK, Switzerland, or California, the app asks your permission before either one starts, and answering no stops both the events and the replays.',
+    body: 'We use Mixpanel to count how features are used and Microsoft Clarity to record anonymised replays of screens, so we can find what is broken or confusing. Both identify you only by an internal Sukun account id. We never put your name, email, or phone number into an analytics event. If you are in the EU, the UK, Switzerland, or California, the app asks your permission before either one starts, and answering no stops both the events and the replays. Wherever you are, and whether or not you were asked, you can turn both off at any time under Analytics & session replay on the Profile tab. Turning them off takes effect immediately and clears anything collected on the device that has not been sent.',
+  },
+  {
+    /**
+     * Guideline 5.1.1(i) requires the policy to "Confirm that any third party with whom an app
+     * shares user data ... will provide the same or equal protection of user data as stated in
+     * the app's privacy policy". That confirmation was missing entirely, and it is a named,
+     * mandatory element rather than a nicety, so it gets a section of its own that covers every
+     * processor at once instead of a clause buried in one of them.
+     */
+    title: 'Who else sees your data',
+    body: 'We share only what each of these needs to do its job: Paymob to take a payment, our messaging provider to deliver your one time code and ticket messages on WhatsApp, our email provider to send receipts, Mixpanel and Microsoft Clarity for the analytics described above, and our hosting and file storage providers in the European Union. Each of them is required to protect your data to the same standard this policy sets out, to use it only for the work we ask of them, and not to use it for anything of their own. We do not sell your data, and we do not share it for advertising.',
   },
   {
     title: 'Where your data is held',
@@ -62,7 +91,16 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Children',
-    body: 'Sukun is not intended for anyone under 13, and we do not knowingly collect data from them. Some events set a higher minimum age, which is shown on the event itself.',
+    /**
+     * The app's floor is 18, enforced by `MINIMUM_AGE` on both the profile form and the
+     * backend validator. This used to say 13, which contradicted every one of them, and it
+     * promised a per-event minimum age "shown on the event itself" that no event has ever
+     * carried: there is no such field in the domain types, the mock, or the backend.
+     *
+     * Sukun the company does run events children attend. What is 18-only is the account, so
+     * the distinction is drawn here rather than implying no Sukun event admits a child.
+     */
+    body: 'The Sukun app is for adults: you must be 18 or over to create an account, and we ask for your date of birth to check. Some Sukun events welcome children, and an adult books through the app on their behalf. Anything a child needs for an event is arranged with the event itself. We do not knowingly collect data from anyone under 18 through the app. If you believe we have, contact us and we will remove it.',
   },
   {
     title: 'Changes',

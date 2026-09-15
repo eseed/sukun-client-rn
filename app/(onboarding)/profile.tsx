@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Alert, Image, StyleSheet, View } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
 import { z } from 'zod';
 import {
   BackButton,
@@ -22,6 +22,7 @@ import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { setUserProperties, track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
+import { ALLOW_GUEST_BROWSING } from '../../src/lib/flags';
 import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
@@ -158,6 +159,17 @@ export default function ProfileFormScreen() {
       setSubmitError(messageForError(err));
     }
   });
+
+  /**
+   * Out to the catalogue with the profile unfinished, keeping the verified session. Purchase
+   * stays gated on `profileComplete` (CLAUDE.md rule 8) and Profile carries the row that
+   * resumes this form, so nothing asked for here is waived, only deferred.
+   */
+  async function onBrowseInstead() {
+    track('profile_setup_deferred');
+    await useAuthStore.getState().deferSetup();
+    router.replace('/(tabs)/discover');
+  }
 
   /**
    * Back from here means "that's the wrong number". There is usually nothing to pop: this
@@ -344,11 +356,42 @@ export default function ProfileFormScreen() {
         loading={updateProfile.isPending}
         disabled={formState.isSubmitting}
       />
+
+      {/*
+        The same exit the selfie step carries, for the same reason. The number is verified by
+        the time this screen renders, so without it the only way back to the catalogue is the
+        "wrong number" alert, which signs the account out and lands on the phone field: a
+        registered user four steps and a destructive confirmation away from public content.
+      */}
+      {ALLOW_GUEST_BROWSING ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Browse events without finishing setup"
+          onPress={() => void onBrowseInstead()}
+          disabled={updateProfile.isPending}
+          hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
+          style={({ pressed }) => [styles.defer, pressed && styles.deferPressed]}
+        >
+          <Text variant="meta" color={colors.textPrimary} style={styles.deferLabel}>
+            Not now, browse events
+          </Text>
+        </Pressable>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  defer: {
+    alignSelf: 'center',
+    marginTop: 16,
+  },
+  deferLabel: {
+    textDecorationLine: 'underline',
+  },
+  deferPressed: {
+    opacity: 0.6,
+  },
   content: {
     paddingHorizontal: 28,
     flexGrow: 1,
