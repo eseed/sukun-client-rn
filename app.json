@@ -32,7 +32,8 @@
       ],
       "blockedPermissions": [
         "android.permission.WRITE_CONTACTS"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -64,6 +65,7 @@
       ],
       "./plugins/withPaymobAndroid.js",
       "./plugins/withAndroidBuildTuning.js",
+      "./plugins/withAndroidSigning.js",
       [
         "expo-contacts",
         {
@@ -76,7 +78,10 @@
         "expo-build-properties",
         {
           "android": {
-            "buildArchs": ["arm64-v8a", "armeabi-v7a"],
+            "buildArchs": [
+              "arm64-v8a",
+              "armeabi-v7a"
+            ],
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
             "extraProguardRules": "# Paymob: the RN bridge and the native checkout SDK. The SDK inflates its\n# sheet through data binding and resolves classes reflectively, and it ships\n# from JitPack without consumer rules, so it has to be kept by hand.\n-keep class com.paymobreactnative.** { *; }\n-keep class com.paymob.** { *; }\n-dontwarn com.paymob.**\n\n# Analytics SDKs look classes up by name at runtime.\n-keep class com.mixpanel.** { *; }\n-dontwarn com.mixpanel.**\n-keep class com.microsoft.clarity.** { *; }\n-dontwarn com.microsoft.clarity.**\n\n# Expo resolves modules through a reflective registry.\n-keep class expo.modules.** { *; }\n-keep class * extends expo.modules.core.interfaces.Package { *; }\n-keep class * extends expo.modules.kotlin.modules.Module { *; }\n\n# React Native bridge surfaces reached from JS or JNI.\n-keep class com.facebook.react.** { *; }\n-keep class com.facebook.hermes.** { *; }\n-keep class com.facebook.jni.** { *; }\n-keepclassmembers class * { @com.facebook.react.bridge.ReactMethod <methods>; }\n-keepclassmembers class * { @com.facebook.react.uimanager.annotations.ReactProp <methods>; }\n-keepclasseswithmembernames class * { native <methods>; }\n\n# Kotlin metadata is read reflectively by the Expo and Paymob Kotlin modules.\n-keep class kotlin.Metadata { *; }\n-dontwarn kotlinx.**\n\n-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod\n"
