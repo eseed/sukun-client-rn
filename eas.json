@@ -15,13 +15,21 @@
         "EXPO_PUBLIC_MIXPANEL_TOKEN": "71571cdae3de3136c0c4318927206845",
         "EXPO_PUBLIC_CLARITY_PROJECT_ID": "y6tknxh6u4",
         "EXPO_PUBLIC_ALLOW_GUEST_BROWSING": "true"
+      },
+      "android": {
+        "env": {
+          "EXPO_PUBLIC_ALLOW_GUEST_BROWSING": "false"
+        }
       }
     },
     "staging": {
       "autoIncrement": true,
       "android": {
         "buildType": "apk",
-        "distribution": "internal"
+        "distribution": "internal",
+        "env": {
+          "EXPO_PUBLIC_ALLOW_GUEST_BROWSING": "false"
+        }
       },
       "ios": {
         "distribution": "store"
@@ -44,6 +52,11 @@
         "EXPO_PUBLIC_MIXPANEL_TOKEN": "a13190d158d029d86139e40c769a0ab9",
         "EXPO_PUBLIC_CLARITY_PROJECT_ID": "ybx65otc8o",
         "EXPO_PUBLIC_ALLOW_GUEST_BROWSING": "true"
+      },
+      "android": {
+        "env": {
+          "EXPO_PUBLIC_ALLOW_GUEST_BROWSING": "false"
+        }
       }
     }
   },
