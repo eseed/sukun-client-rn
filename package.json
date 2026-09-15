@@ -18,7 +18,9 @@
     "staging:android": "npm run verify && eas build --platform android --profile staging",
     "staging:ios": "npm run verify && eas build --platform ios --profile staging --auto-submit",
     "release:ios": "npm run verify && eas build --platform ios --profile production --auto-submit",
-    "release:android": "npm run verify && eas build --platform android --profile production --auto-submit"
+    "release:android": "npm run verify && eas build --platform android --profile production --auto-submit",
+    "build:android:local": "node scripts/assert-android-signing.mjs && expo prebuild --platform android --clean && scripts/gradlew-release.sh",
+    "publish:android:local": "node scripts/play-publish.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.14",
