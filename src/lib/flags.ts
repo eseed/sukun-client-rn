@@ -1,12 +1,9 @@
-/**
- * Build-time feature flags.
- *
- * Read as whole `process.env.EXPO_PUBLIC_*` expressions so Expo inlines them at build time
- * (see the note in `analytics.ts`): destructuring `process.env` breaks that inlining, and a
- * binary that carries its own flags cannot be re-pointed at another configuration at runtime.
- */
+import { Platform } from 'react-native';
 
 /**
+ * The build-time fallback for the guest path, used only until the backend answers and
+ * whenever it cannot.
+ *
  * Whether the app offers a way in without an account: the "Skip login" link on Welcome, the
  * exit out of the selfie step, and the signed-out states on the Tickets and Profile tabs.
  *
@@ -16,19 +13,38 @@
  * Play has asked for nothing of the sort, so Android ships without it and the product keeps
  * one funnel per store instead of a second, unreviewed way in nobody asked for.
  *
- * That split is configuration, not code: nothing here or at the call sites tests
- * `Platform.OS`. Every profile in `eas.json` sets this variable, and each one overrides it to
- * "false" under its `android.env` block, which EAS merges key by key over the profile's own
- * `env`. Turning the guest path on for Android, or off for iOS, is a change to `eas.json` and
- * a new build. There is no expo-updates channel in this app, so it is a build either way,
- * never a runtime toggle.
+ * The live value now comes from `public/app-config`, so turning the guest path on or off is
+ * a backend variable rather than a store release: see `src/stores/flags.ts`. This constant is
+ * what the app uses before that first response arrives and if it never does, which makes its
+ * polarity the thing that matters here.
+ *
+ * Read as a whole `process.env.EXPO_PUBLIC_*` expression so Expo inlines it at build time
+ * (see the note in `analytics.ts`): destructuring `process.env` breaks that inlining.
  *
  * The polarity is deliberately the opposite of the analytics ids, which default to off so a
  * misconfigured build sends nothing rather than polluting another project (`analytics.ts`).
- * There, silence is the safe failure. Here it is not: an iOS profile that forgot this
- * variable would ship the exact configuration that was rejected. So an unset or misspelled
- * value means enabled, and only the literal string "false" turns the guest path off. The
- * failure mode that default protects is the one that costs a review; an Android build that
- * somehow missed its override merely offers a link Google never objected to.
+ * There, silence is the safe failure. Here it is not: an iOS build that forgot this variable
+ * would ship the exact configuration that was rejected. So an unset or misspelled value means
+ * enabled, and only the literal string "false" turns the guest path off. The failure mode that
+ * default protects is the one that costs a review; an Android build that somehow missed its
+ * override merely offers a link Google never objected to.
+ *
+ * Every profile in `eas.json` sets this variable and each overrides it to "false" under its
+ * `android.env` block, so the fallback already matches what the backend's own defaults say.
+ * Both ends fail the same way: an app that cannot reach the endpoint behaves exactly as one
+ * that reads it and finds nothing set.
  */
-export const ALLOW_GUEST_BROWSING = process.env.EXPO_PUBLIC_ALLOW_GUEST_BROWSING !== 'false';
+export const ALLOW_GUEST_BROWSING_FALLBACK =
+  process.env.EXPO_PUBLIC_ALLOW_GUEST_BROWSING !== 'false';
+
+/**
+ * Which half of the backend's per-platform answer applies to this device.
+ *
+ * Anything that is not a store build, which in practice means the web target used for design
+ * review, has no store rule to satisfy and takes the build-time fallback instead.
+ */
+export function guestBrowsingFor(flags: { ios: boolean; android: boolean }): boolean {
+  if (Platform.OS === 'ios') return flags.ios;
+  if (Platform.OS === 'android') return flags.android;
+  return ALLOW_GUEST_BROWSING_FALLBACK;
+}

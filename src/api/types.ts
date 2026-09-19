@@ -51,6 +51,20 @@ export interface Area {
   name: string;
 }
 
+/**
+ * `AppConfigResponseDto` from `public/app-config`: what the app is allowed to do, answered
+ * before anyone signs in so the Welcome screen can read it.
+ *
+ * Per platform because the two stores want opposite things, and the app applies the one that
+ * matches the device it is running on. See `src/stores/flags.ts`.
+ */
+export interface AppConfig {
+  allowGuestBrowsing: {
+    ios: boolean;
+    android: boolean;
+  };
+}
+
 /** `AppUserAreaResponseDto` as returned by the mobile API. */
 export interface LiveArea {
   id: number;

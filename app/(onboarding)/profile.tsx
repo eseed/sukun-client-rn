@@ -22,7 +22,7 @@ import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { setUserProperties, track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
-import { ALLOW_GUEST_BROWSING } from '../../src/lib/flags';
+import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
@@ -76,6 +76,7 @@ function buildSchema(areaRequired: boolean) {
 type FormValues = z.infer<ReturnType<typeof buildSchema>>;
 
 export default function ProfileFormScreen() {
+  const allowGuestBrowsing = useAllowGuestBrowsing();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   // Until the profile loads there is no number to read a country from; assume the home
@@ -363,7 +364,7 @@ export default function ProfileFormScreen() {
         "wrong number" alert, which signs the account out and lands on the phone field: a
         registered user four steps and a destructive confirmation away from public content.
       */}
-      {ALLOW_GUEST_BROWSING ? (
+      {allowGuestBrowsing ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Browse events without finishing setup"

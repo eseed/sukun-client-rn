@@ -9,6 +9,7 @@ import { AnalyticsConsentScreen } from '../src/components/AnalyticsConsentScreen
 import { QueryProvider } from '../src/providers/QueryProvider';
 import { useAuthStore } from '../src/stores/auth';
 import { useConsentStore } from '../src/stores/consent';
+import { useFlagsStore } from '../src/stores/flags';
 import { colors } from '../src/theme/tokens';
 
 export const unstable_settings = {
@@ -24,6 +25,11 @@ export default function RootLayout() {
   const consentStatus = useConsentStore((s) => s.status);
   const loadConsent = useConsentStore((s) => s.load);
   const answerConsent = useConsentStore((s) => s.answer);
+  // Whether the guest path is offered is a backend answer now, and it decides what the very
+  // first screen looks like, so it is resolved here rather than inside the screen that reads
+  // it. The store guarantees this settles quickly even offline. See `src/stores/flags.ts`.
+  const flagsStatus = useFlagsStore((s) => s.status);
+  const loadFlags = useFlagsStore((s) => s.load);
   // TrueType, not the licensed OpenType masters beside them: Android's typeface loader does not
   // parse PostScript (CFF) outlines and falls back to the system face without raising, so the
   // .otf files rendered correctly on iOS and as Roboto on Android. See assets/fonts/README.md.
@@ -45,8 +51,15 @@ export default function RootLayout() {
   }, [loadConsent]);
 
   useEffect(() => {
-    if (fontsLoaded || fontError) void SplashScreen.hideAsync();
-  }, [fontsLoaded, fontError]);
+    void loadFlags();
+  }, [loadFlags]);
+
+  useEffect(() => {
+    // Every gate below returns null until it resolves, so hiding the splash on fonts alone
+    // would trade the splash for a blank screen. Wait for all three.
+    const ready = (fontsLoaded || fontError) && consentStatus !== 'loading' && flagsStatus !== 'loading';
+    if (ready) void SplashScreen.hideAsync();
+  }, [fontsLoaded, fontError, consentStatus, flagsStatus]);
 
   const onConsentAnswer = (granted: boolean) => {
     void answerConsent(granted);
@@ -54,6 +67,7 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) return null;
   if (consentStatus === 'loading') return null;
+  if (flagsStatus === 'loading') return null;
 
   if (consentStatus === 'unknown') {
     return (

@@ -165,9 +165,23 @@ track. `scripts/assert-bundle-env.mjs` now reads the finished `.aab` and fails t
 the bundle does not carry the profile's url and analytics ids, or carries another profile's.
 `src/__tests__/release-env.test.ts` guards the scripts themselves.
 
-Guest browsing is a **build-time** variable, not a remote flag. There is no expo-updates
-channel and nothing reads `Platform.OS`: iOS-on / Android-off lives only in `eas.json`, and
-changing it means a new build. Nothing on Railway can turn it on or off.
+### Guest browsing
+
+The live value comes from the **backend**, so turning the guest path on or off is a Railway
+variable and a restart, not a store release. `GET public/app-config` answers with both
+platforms' flags; the app reads it at launch through `src/stores/flags.ts` and screens call
+`useAllowGuestBrowsing()`. The two variables are `ALLOW_GUEST_BROWSING_IOS` and
+`ALLOW_GUEST_BROWSING_ANDROID`, set per Railway environment.
+
+Three sources, in this order: the last answer cached on the device, then the endpoint, then
+`ALLOW_GUEST_BROWSING_FALLBACK` compiled in from `eas.json`. The compiled fallback and the
+backend's own defaults agree by construction (iOS open, Android closed), so an app that cannot
+reach the endpoint behaves exactly like one that reaches it and finds nothing set.
+
+**The polarity is not symmetrical and must not be made so.** iOS fails towards open: anything
+but an explicit "false" leaves the guest path on, because shipping without it is what App
+Review rejected under guideline 5.1.1(v). Android fails towards closed: only an explicit
+"true" opens it. Nothing reads `Platform.OS` at a call site; the split lives in the two flags.
 
 ### Build numbers
 

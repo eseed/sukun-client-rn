@@ -4,6 +4,7 @@ import type {
   AccountDeletionPreview,
   AddonDetail,
   AddonSummary,
+  AppConfig,
   Area,
   Authenticated,
   Cart,
@@ -841,6 +842,18 @@ export const mockApi: SukunApi = {
   reference: {
     async areas(): Promise<Area[]> {
       return delay(areas, 0.4);
+    },
+  },
+
+  config: {
+    /**
+     * The same answer the deployed backend gives with neither variable set, which is also the
+     * app's own build-time fallback. Mock mode is for building screens, so the guest path is
+     * whatever the platform's safe default is rather than something a developer has to know
+     * to turn on.
+     */
+    async get(): Promise<AppConfig> {
+      return delay({ allowGuestBrowsing: { ios: true, android: false } }, 0.3);
     },
   },
 

@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { ALLOW_GUEST_BROWSING } from '../src/lib/flags';
+import { useAllowGuestBrowsing } from '../src/stores/flags';
 import { nextOnboardingStep, useAuthStore } from '../src/stores/auth';
 import { colors } from '../src/theme/tokens';
 
@@ -23,6 +23,7 @@ import { colors } from '../src/theme/tokens';
  * nothing anyone skipped is waived.
  */
 export default function Index() {
+  const allowGuestBrowsing = useAllowGuestBrowsing();
   const status = useAuthStore((s) => s.status);
   const user = useAuthStore((s) => s.user);
   const setupDeferred = useAuthStore((s) => s.setupDeferred);
@@ -42,7 +43,7 @@ export default function Index() {
     // start turned it into a permanent registration wall for anyone without an account, which
     // is what guideline 5.1.1(v) forbids and what build 18 was rejected for. Sign-in stays one
     // tap away on the Profile tab. See `guestBrowsing` in `src/stores/auth.ts`.
-    if (ALLOW_GUEST_BROWSING && guestBrowsing) {
+    if (allowGuestBrowsing && guestBrowsing) {
       return <Redirect href="/(tabs)/discover" />;
     }
     return <Redirect href="/(onboarding)/welcome" />;
@@ -53,7 +54,7 @@ export default function Index() {
     return <Redirect href="/(tabs)/discover" />;
   }
 
-  if (ALLOW_GUEST_BROWSING && setupDeferred) {
+  if (allowGuestBrowsing && setupDeferred) {
     return <Redirect href="/(tabs)/discover" />;
   }
 

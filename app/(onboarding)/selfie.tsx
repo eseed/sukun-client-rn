@@ -14,7 +14,7 @@ import { ConicRing } from '../../src/components/ui/ConicRing';
 import { useUploadSelfie } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
-import { ALLOW_GUEST_BROWSING } from '../../src/lib/flags';
+import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/stores/auth';
 
@@ -27,6 +27,7 @@ const RING_SIZE = 236;
  * registration, and a ticket is not usable without it.
  */
 export default function SelfieScreen() {
+  const allowGuestBrowsing = useAllowGuestBrowsing();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const uploadSelfie = useUploadSelfie();
@@ -222,7 +223,7 @@ export default function SelfieScreen() {
         />
       ) : null}
 
-      {ALLOW_GUEST_BROWSING ? (
+      {allowGuestBrowsing ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Browse events without finishing setup"

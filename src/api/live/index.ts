@@ -5,6 +5,7 @@ import type {
   AccountDeletionPreview,
   AddonDetail,
   AddonSummary,
+  AppConfig,
   Authenticated,
   Cart,
   CartAddonInput,
@@ -187,6 +188,11 @@ export const liveApi: SukunApi = {
       const result = await request<LiveArea[]>('mobile/reference/areas', { auth: false });
       return result.map((area) => ({ ...area, id: String(area.id) }));
     },
+  },
+
+  config: {
+    // PublicAppConfigController — GET public/app-config
+    get: async () => request<AppConfig>('public/app-config', { auth: false }),
   },
 
   events: {
