@@ -9,6 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
+      "buildNumber": "26",
       "bundleIdentifier": "co.sukunwellness",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -33,7 +34,7 @@
       "blockedPermissions": [
         "android.permission.WRITE_CONTACTS"
       ],
-      "versionCode": 2
+      "versionCode": 6
     },
     "web": {
       "favicon": "./assets/favicon.png",

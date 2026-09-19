@@ -92,16 +92,91 @@ npm run verify     all three (run this before every commit)
 
 ### Releasing to iOS
 
-When the user says to release on iOS (e.g. "release this on iOS", "ship an iOS build"), run:
+The default is the local path: it builds on this Mac and uploads to TestFlight without EAS.
+
+```
+npm run release:ios:local
+```
+
+That runs `verify`, takes the next build number, archives, and uploads. The pieces are also
+separately runnable: `npm run version:ios` to see or take the next build number,
+`npm run build:ios:local` to produce `build/ios/Sukun.ipa`, `npm run publish:ios:local` to
+upload one that already exists (`--validate` to check it without uploading).
+
+EAS stays available as the fallback, for when this machine cannot build (no Xcode, a signing
+problem, someone else releasing):
 
 ```
 npm run release:ios
 ```
 
-This builds in the cloud and auto-submits to TestFlight (App Store Connect handles
-managed credentials; `eas.json`'s `production` profile has `autoIncrement: true` so the
-build number bumps itself). Only run this when explicitly asked to release; never do it
-as a side effect of another task.
+Both paths sign with the **same** certificate and profile and both take their build number
+from what App Store Connect already has, so they can alternate freely. Never let Xcode or EAS
+mint a second distribution certificate: Apple allows two per team, and the prompt to fix that
+offers to revoke, which would break the other path.
+
+What the local path needs, none of it in the repo:
+
+- An **Apple Distribution certificate** in the login keychain, and the matching **App Store
+  provisioning profile** for `co.sukunwellness` at `../secrets/sukun-appstore.mobileprovision`.
+  Take both from EAS rather than making new ones: `eas credentials`, iOS, production, then
+  download to `credentials.json`, import the `.p12` into the keychain and move the
+  `.mobileprovision` into place.
+- An **App Store Connect API key** (App Manager role) saved as
+  `../secrets/AuthKey_<key id>.p8`, with its ids filled into `../secrets/ios-release.env`.
+
+`scripts/assert-ios-signing.mjs` checks every one of those before Xcode starts and names
+whichever is missing.
+
+Only release when explicitly asked; never as a side effect of another task.
+
+### Releasing to Android
+
+Android also releases locally, from this Mac, and not from EAS:
+
+```
+npm run release:android:local
+```
+
+That runs `verify`, builds the signed `.aab`, and uploads it. The pieces are separately
+runnable: `npm run build:android:local` produces
+`android/app/build/outputs/bundle/release/app-release.aab`, and `npm run
+publish:android:local` uploads one that already exists. The publisher takes
+`--track internal|production`, `--status draft|completed`, and `--notes "<what's new>"`.
+**Always pass `--notes`**: Play carries the previous release's notes forward when a release
+omits them, so a silent changelog is the last release's, not an empty one.
+
+Signing comes from four `SUKUN_*` properties in `~/.gradle/gradle.properties`, never the
+repo; `scripts/assert-android-signing.mjs` checks them before Gradle starts, because
+`withAndroidSigning.js` falls back to the debug keystore and Play rejects what that produces.
+
+### What a release build compiles in
+
+Both local scripts export the build profile's `EXPO_PUBLIC_*` variables from `eas.json`
+(`scripts/eas-profile-env.mjs`) **before** they prebuild and bundle. This is not a nicety.
+`.env.local` points the app at staging, the bundler loads it for a release build exactly as
+it does for a simulator, and `@expo/env` defers to the environment only when the variable is
+already set there. Skip the export and a "production" build ships staging's backend, staging's
+analytics env (which is what shows the **Staging** badge on Profile), and no guest flag at
+all, which defaults the skip-login link back on.
+
+That is not hypothetical: it is what Android `versionCode 2` shipped to Play's production
+track. `scripts/assert-bundle-env.mjs` now reads the finished `.aab` and fails the build if
+the bundle does not carry the profile's url and analytics ids, or carries another profile's.
+`src/__tests__/release-env.test.ts` guards the scripts themselves.
+
+Guest browsing is a **build-time** variable, not a remote flag. There is no expo-updates
+channel and nothing reads `Platform.OS`: iOS-on / Android-off lives only in `eas.json`, and
+changing it means a new build. Nothing on Railway can turn it on or off.
+
+### Build numbers
+
+`eas.json` sets `appVersionSource: "local"`, so the build number is `ios.buildNumber` in
+`app.json` and the version code is `android.versionCode`, tracked in git and read by both
+paths. Before a local build, `scripts/ios-build-number.mjs` asks App Store Connect for the
+highest build it holds and writes one past it, so the number is derived from the store rather
+than from a counter either path could get ahead of. **Commit the bump**, or the next EAS build
+starts from a stale number.
 
 ## Conventions
 
