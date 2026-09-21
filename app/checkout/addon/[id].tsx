@@ -446,8 +446,24 @@ const styles = StyleSheet.create({
   window: { marginTop: space.s2, marginBottom: space.s3 },
   groupLabel: { marginTop: space.s4, marginBottom: space.s2 },
   rowBody: { flex: 1, gap: space.s1, marginLeft: space.s3 },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  rowName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  /*
+   * The price drops to its own line when it will not fit beside the name.
+   *
+   * These names are catalogue text and can be as long as "Double Cabin with 1 King Bed",
+   * which left no room for "10,400.00 EGP": with no gap and nothing allowed to give, the two
+   * ran together as "…King Bed10,400.00 EGP" and the price bled off the right edge. `wrap`
+   * moves the price under the name instead, `columnGap` keeps them apart on the line they do
+   * share, and `flexShrink` lets a name longer than the whole card wrap rather than overflow.
+   */
+  rowTop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    columnGap: space.s3,
+    rowGap: space.s1,
+  },
+  rowName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary, flexShrink: 1 },
   rowPrice: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
   schedule: { marginTop: space.s3, gap: space.s1 },
   quantityRow: { flexDirection: 'row', alignItems: 'center', gap: space.s3 },
