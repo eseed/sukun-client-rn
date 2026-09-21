@@ -5,7 +5,18 @@ module.exports = [
   ...expoConfig,
   prettier,
   {
-    ignores: ['node_modules/**', '.expo/**', 'dist/**', 'coverage/**', 'android/**', 'ios/**'],
+    // `build/**` is the local release output: `scripts/xcodebuild-release.sh` leaves an
+    // .xcarchive and an .ipa there, and the archive contains a JS bundle that eslint will
+    // happily try to lint. It is generated, like ios/ and android/ above it.
+    ignores: [
+      'node_modules/**',
+      '.expo/**',
+      'dist/**',
+      'coverage/**',
+      'android/**',
+      'ios/**',
+      'build/**',
+    ],
   },
   {
     rules: {
