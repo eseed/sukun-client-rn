@@ -1276,6 +1276,58 @@ describe('12 Confirmation', () => {
     await waitFor(() => expect(screen.getByText(new RegExp(`2 tickets to Tulua`))).toBeTruthy());
     expect(screen.getByText(/WhatsApp message/)).toBeTruthy();
     expect(screen.getByText('See my ticket')).toBeTruthy();
+    // Nothing to be admitted with, so nothing to ask for.
+    expect(screen.queryByText('We need your selfie to admit you to the event.')).toBeNull();
+  });
+
+  /**
+   * The second place the selfie is asked for, and the only one that is not a ticket: a buyer
+   * who kept a ticket for themselves is prompted while the purchase is still in front of
+   * them. It is a prompt and not a gate, so the way past it is in the open.
+   */
+  it('asks a buyer who kept a ticket for a selfie, and lets them skip', async () => {
+    await signInWithoutSelfie();
+    const order = await placeOrderViaCart({
+      eventId: SOUND_BATH_ID,
+      buyerTierId: TIER_SOUND_GA,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
+      guests: [],
+    });
+    mockParams.orderId = order.id;
+
+    renderWithProviders(<ConfirmationScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText('We need your selfie to admit you to the event.')).toBeTruthy(),
+    );
+    expect(screen.getByText('Take a selfie')).toBeTruthy();
+
+    fireEvent.press(screen.getByText('Take a selfie'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');
+
+    // Skipping goes where "See my ticket" goes: the ticket itself, or the tickets tab when
+    // the list has not named it yet. Either is the screen's contract, neither is onboarding.
+    fireEvent.press(screen.getByText('Not now, see my ticket'));
+    expect(mockRouter.replace).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/ticket\/|^\/\(tabs\)\/tickets$/),
+    );
+  });
+
+  it('says nothing about a selfie to a buyer who already has one', async () => {
+    await signInAndComplete();
+    const order = await placeOrderViaCart({
+      eventId: SOUND_BATH_ID,
+      buyerTierId: TIER_SOUND_GA,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
+      guests: [],
+    });
+    mockParams.orderId = order.id;
+
+    renderWithProviders(<ConfirmationScreen />);
+
+    await waitFor(() => expect(screen.getByText('See my ticket')).toBeTruthy());
+    expect(screen.queryByText('We need your selfie to admit you to the event.')).toBeNull();
+    expect(screen.queryByText('Not now, see my ticket')).toBeNull();
   });
 });
 
@@ -1376,9 +1428,13 @@ describe('14 Entry pass', () => {
 
     renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() => expect(screen.getByText('A selfie opens your pass')).toBeTruthy());
+    // The demand sits inside the QR panel, where the code would be, rather than replacing it.
+    await waitFor(() =>
+      expect(screen.getByText('Take a selfie to activate your QR Code')).toBeTruthy(),
+    );
     expect(screen.getByText('Tulua · ticket status')).toBeTruthy();
     expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
+    expect(screen.queryByText('QR Code will show here.')).toBeNull();
 
     fireEvent.press(screen.getByText('Take selfie'));
     expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');

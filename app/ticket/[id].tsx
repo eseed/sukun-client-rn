@@ -162,42 +162,48 @@ export default function EntryPassScreen() {
           <BulletHeading title={ticket.tier.name} size="sm" tone="inverse" />
         </View>
 
-        {needsClaim || needsSelfie || needsProfile || unusable ? (
+        {needsClaim || needsProfile || unusable ? (
           <View style={styles.statusPanel}>
             <Text variant="titleSm" style={styles.statusTitle}>
               {needsClaim
                 ? 'This ticket is waiting to bind'
-                : needsSelfie
-                  ? 'A selfie opens your pass'
-                  : needsProfile
-                    ? 'Finish your profile to use this ticket'
-                    : 'This ticket cannot be used'}
+                : needsProfile
+                  ? 'Finish your profile to use this ticket'
+                  : 'This ticket cannot be used'}
             </Text>
             <Text variant="bodyMuted" style={styles.statusCopy}>
               {needsClaim
                 ? 'Claim it to attach the ticket to your phone number.'
-                : needsSelfie
-                  ? 'Gate staff check it against your face at entry, so your QR is only yours. It takes a moment and you only do it once.'
-                  : needsProfile
-                    ? 'Add the required profile details before opening the entry pass.'
-                    : 'This ticket has been voided or refunded.'}
+                : needsProfile
+                  ? 'Add the required profile details before opening the entry pass.'
+                  : 'This ticket has been voided or refunded.'}
             </Text>
             {actionError ? <InlineError message={actionError} style={styles.actionError} /> : null}
             {needsClaim ? (
               <Button label="Claim ticket" onPress={onClaim} loading={claimTicket.isPending} />
             ) : null}
-            {needsSelfie || needsProfile ? (
-              <Button
-                label={needsSelfie ? 'Take selfie' : 'Complete profile'}
-                onPress={onRemediate}
-              />
-            ) : null}
+            {needsProfile ? <Button label="Complete profile" onPress={onRemediate} /> : null}
           </View>
         ) : null}
 
-        {!needsClaim && !needsSelfie && !needsProfile && !unusable ? (
+        {/*
+          A missing selfie keeps the QR panel rather than replacing it, because the panel is
+          what the holder came here for and the demand belongs where the code would be. The
+          pass query stays disabled until the ticket is usable, so this branch is checked
+          before the query's own states: a disabled query reports `pending` forever.
+        */}
+        {!needsClaim && !needsProfile && !unusable ? (
           <View style={styles.qrPanel}>
-            {passQuery.isPending ? (
+            {needsSelfie ? (
+              <View style={styles.passPending}>
+                <ResourceState
+                  status="empty"
+                  emptyTitle="Take a selfie to activate your QR Code"
+                  emptyMessage="Gate staff check it against your face at entry, so your code is only yours."
+                  style={styles.compactState}
+                />
+              </View>
+            ) : passQuery.isPending ? (
               <View style={styles.qrPlaceholder}>
                 <ResourceState
                   status="loading"
@@ -231,6 +237,10 @@ export default function EntryPassScreen() {
                 backgroundColor={colors.creme}
               />
             )}
+
+            {needsSelfie ? (
+              <Button label="Take selfie" onPress={onRemediate} style={styles.qrAction} />
+            ) : null}
 
             {/* Nothing is rotating until there is a code, so neither is the countdown. */}
             {hasPass ? (
@@ -353,6 +363,9 @@ const styles = StyleSheet.create({
     minHeight: QR_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  qrAction: {
+    alignSelf: 'stretch',
   },
   qrError: {
     textAlign: 'center',
