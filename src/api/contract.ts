@@ -2,6 +2,7 @@ import type {
   AccountDeletionPreview,
   AddonDetail,
   AddonSummary,
+  AppConfig,
   Area,
   Authenticated,
   Cart,
@@ -72,6 +73,17 @@ export interface SukunApi {
 
   reference: {
     areas(): Promise<Area[]>;
+  };
+
+  /**
+   * Flags the app reads at launch. No auth, and deliberately so: the first of them governs
+   * the Welcome screen, which is what someone sees before they have an account.
+   *
+   * Every caller gets the same answer, so this carries nothing about who is asking and stays
+   * clear of the rule that no screen may reveal whether a number is registered.
+   */
+  config: {
+    get(): Promise<AppConfig>;
   };
 
   events: {

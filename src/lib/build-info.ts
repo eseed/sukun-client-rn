@@ -13,9 +13,9 @@ import * as Application from 'expo-application';
 export const APP_VERSION = Application.nativeApplicationVersion ?? '';
 
 /**
- * The build number: iOS `CFBundleVersion`, Android `versionCode`. EAS owns these remotely
- * (`appVersionSource: "remote"`), so the app config on disk does not know them and this has to
- * come from the built binary.
+ * The build number: iOS `CFBundleVersion`, Android `versionCode`. Read from the built binary
+ * rather than from `app.json`, which holds them now (`appVersionSource: "local"`) but is not
+ * what a shipped build was necessarily made from.
  */
 export const APP_BUILD = Application.nativeBuildVersion ?? '';
 

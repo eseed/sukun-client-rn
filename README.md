@@ -42,7 +42,7 @@ does not draw:
 | 02  | Phone number      | `/(onboarding)/phone`    |
 | 03  | Verify code       | `/(onboarding)/otp`      |
 | 04  | About you         | `/(onboarding)/profile`  |
-| 05  | Selfie capture    | `/(onboarding)/selfie`   |
+| 05  | Selfie capture    | `/account/selfie`        |
 | 06  | Discover          | `/(tabs)/discover`       |
 | 07  | Event detail      | `/event/[slug]`          |
 | 08  | Checkout · pass   | `/checkout/pass`         |

@@ -7,10 +7,14 @@
  *
  * Usage:
  *   node scripts/play-publish.mjs --track internal
- *   node scripts/play-publish.mjs --track production --status completed
+ *   node scripts/play-publish.mjs --track production --status completed --notes "..."
  *
  * --status draft      uploaded, not released, finish the rollout in the console (default)
  *          completed  released to 100% of the track immediately
+ *
+ * --notes  the "What's new" text. Play carries the previous release's notes forward when a
+ *          release omits them, so leaving this off does not mean an empty changelog: it means
+ *          the last one's, describing features this build may not be about. Pass it.
  *
  * Play rejects a bundle whose versionCode is not higher than every versionCode the app has
  * already received, and rejects one signed with the wrong upload key. Both are hard refusals
@@ -34,6 +38,10 @@ const arg = (name, fallback) => {
 };
 const track = arg('track', 'internal');
 const status = arg('status', 'draft');
+const notes = arg('notes', undefined);
+
+// The store listing is en-GB, which is the only language the existing releases carry notes in.
+const NOTES_LANGUAGE = 'en-GB';
 
 if (!['draft', 'completed', 'halted', 'inProgress'].includes(status)) {
   console.error(`Unknown --status "${status}"`);
@@ -91,12 +99,15 @@ try {
   );
   console.log(`uploaded versionCode ${uploaded.versionCode}`);
 
+  const release = { status, versionCodes: [String(uploaded.versionCode)] };
+  if (notes) release.releaseNotes = [{ language: NOTES_LANGUAGE, text: notes }];
   await call(`${edits}/${edit.id}/tracks/${track}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ track, releases: [{ status, versionCodes: [String(uploaded.versionCode)] }] }),
+    body: JSON.stringify({ track, releases: [release] }),
   });
   console.log(`assigned to "${track}" with status "${status}"`);
+  console.log(notes ? `notes (${NOTES_LANGUAGE}): ${notes}` : 'no notes given: Play keeps the previous release\'s');
 
   await call(`${edits}/${edit.id}:commit`, { method: 'POST' });
   console.log(`committed. versionCode ${uploaded.versionCode} is now on "${track}".`);

@@ -1,8 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Redirect, useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
 import {
+  BackButton,
   BulletHeading,
   Button,
   CameraIcon,
@@ -14,32 +15,32 @@ import { ConicRing } from '../../src/components/ui/ConicRing';
 import { useUploadSelfie } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
-import { ALLOW_GUEST_BROWSING } from '../../src/lib/flags';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useAuthStore } from '../../src/stores/auth';
 
 const RING_SIZE = 236;
 
 /**
- * Design screen 05 · Selfie capture.
+ * Design screen 05 · Selfie capture, in the one place that needs it.
  *
- * The selfie is the anti-fraud control (CLAUDE.md rule 3): it is captured here, at
- * registration, and a ticket is not usable without it.
+ * The selfie is the anti-fraud control (CLAUDE.md rule 3), and it is asked for at the moment
+ * it is about to be used: when the holder opens the entry pass whose QR it protects. It is no
+ * longer part of registration and no longer gates purchase. Nobody is sent to a camera to
+ * browse, to sign up, or to pay; they are sent here by their own ticket, which says on its
+ * face why it cannot open yet.
+ *
+ * Reached from `app/ticket/[id].tsx` when the ticket reports `selfie_required`. On success the
+ * upload invalidates that ticket and its pass, so going back lands on a QR rather than on the
+ * same demand.
  */
 export default function SelfieScreen() {
   const router = useRouter();
+  const authStatus = useAuthStore((state) => state.status);
   const user = useAuthStore((state) => state.user);
   const uploadSelfie = useUploadSelfie();
 
   const [uri, setUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (user?.profileComplete) router.replace('/(tabs)/discover');
-    else if (user?.selfieUploaded) router.replace('/(onboarding)/profile');
-  }, [router, user]);
-
-  if (user?.profileComplete || user?.selfieUploaded) return null;
 
   /**
    * Development builds only. The iOS Simulator presents a camera but its shutter cannot
@@ -106,21 +107,10 @@ export default function SelfieScreen() {
     }
   }
 
-  /**
-   * Out of the last step without giving up the account.
-   *
-   * Registration stays unfinished and the app does not pretend otherwise: `profileComplete`
-   * remains false, so purchase is still gated (CLAUDE.md rule 8) and the selfie is still
-   * collected before any ticket can be bought. The session is kept because the number is
-   * already verified, and the deferral is stored so the next cold start does not put this
-   * same demand back in front of someone who has declined it once. What it removes is a
-   * registered user with no way back to a catalogue they could browse freely a minute
-   * earlier, which is the dead end guideline 5.1.1(v) objects to.
-   */
-  async function onBrowseInstead() {
-    track('selfie_deferred');
-    await useAuthStore.getState().deferSetup();
-    router.replace('/(tabs)/discover');
+  /** Back to whatever asked for the selfie, which is the ticket in every case today. */
+  function leave() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/tickets');
   }
 
   async function onContinue() {
@@ -133,26 +123,26 @@ export default function SelfieScreen() {
     try {
       await uploadSelfie.mutateAsync(uri);
       track('selfie_completed');
-      if (useAuthStore.getState().isNewUser) {
-        track('signup_completed');
-        useAuthStore.getState().setIsNewUser(false);
-      }
-      router.replace('/(tabs)/discover');
+      leave();
     } catch (err) {
       setError(messageForError(err));
     }
   }
 
+  if (authStatus === 'signed-out' || !user) return <Redirect href="/(onboarding)/welcome" />;
+
   return (
     <Screen contentStyle={styles.content}>
-      <StepLabel>Step 3 of 3</StepLabel>
+      <BackButton onPress={leave} style={styles.back} />
+
+      <StepLabel>Entry pass</StepLabel>
       <View style={styles.heading}>
-        <BulletHeading title="One last thing, a selfie" size="lg" />
+        <BulletHeading title="One thing before your QR" size="lg" />
       </View>
 
       <Text variant="bodyMuted" style={styles.blurb}>
         Gate staff compare this to your face at entry, so a screenshotted ticket can&apos;t get
-        anyone else in. It&apos;s private, and only shown at admission.
+        anyone else in. It&apos;s private, only shown at admission, and you only do this once.
       </Text>
 
       <View style={styles.ringWrap}>
@@ -207,7 +197,7 @@ export default function SelfieScreen() {
       ) : null}
 
       <Button
-        label={uri ? 'Use this photo' : 'Take selfie & continue'}
+        label={uri ? 'Use this photo' : 'Take selfie & open pass'}
         onPress={onContinue}
         loading={uploadSelfie.isPending}
       />
@@ -221,21 +211,6 @@ export default function SelfieScreen() {
           style={styles.retakeButton}
         />
       ) : null}
-
-      {ALLOW_GUEST_BROWSING ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Browse events without finishing setup"
-          onPress={() => void onBrowseInstead()}
-          disabled={uploadSelfie.isPending}
-          hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
-          style={({ pressed }) => [styles.defer, pressed && styles.deferPressed]}
-        >
-          <Text variant="meta" color={colors.textPrimary} style={styles.deferLabel}>
-            Not now, browse events
-          </Text>
-        </Pressable>
-      ) : null}
     </Screen>
   );
 }
@@ -244,15 +219,8 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 28,
   },
-  defer: {
-    alignSelf: 'center',
-    marginTop: 16,
-  },
-  deferLabel: {
-    textDecorationLine: 'underline',
-  },
-  deferPressed: {
-    opacity: 0.6,
+  back: {
+    marginBottom: 10,
   },
   heading: {
     marginTop: 8,

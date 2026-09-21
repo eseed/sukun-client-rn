@@ -39,7 +39,9 @@ export const queryKeys = {
   selfie: ['selfie'] as const,
   ticketsRoot: ['tickets'] as const,
   tickets: (statuses?: TicketStatus[]) => ['tickets', statuses ?? null] as const,
+  ticketRoot: ['ticket'] as const,
   ticket: (ticketId: string) => ['ticket', ticketId] as const,
+  entryPassRoot: ['entry-pass'] as const,
   entryPass: (ticketId: string) => ['entry-pass', ticketId] as const,
   addons: (eventIdentifier: string) => ['addons', eventIdentifier] as const,
   addon: (eventIdentifier: string, addonId: string) =>
@@ -145,7 +147,14 @@ export function useUploadSelfie() {
       setUser(user);
       client.setQueryData(queryKeys.me, user);
       void client.invalidateQueries({ queryKey: queryKeys.selfie });
+      // Every surface whose answer was "you need a selfie" changes on this one response: the
+      // ticket list's badge, the ticket that sent the holder to the camera, and the pass
+      // itself, which is not fetched at all until that ticket reports `usable`. The detail
+      // and the pass are separate key roots from the list, so all three are named here —
+      // without them the holder comes back from the camera to the same demand.
       void client.invalidateQueries({ queryKey: queryKeys.ticketsRoot });
+      void client.invalidateQueries({ queryKey: queryKeys.ticketRoot });
+      void client.invalidateQueries({ queryKey: queryKeys.entryPassRoot });
     },
   });
 }

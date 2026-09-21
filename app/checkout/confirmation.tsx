@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, ImageSlot, ResourceState, Text } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
@@ -9,6 +9,7 @@ import { messageForError } from '../../src/lib/errors';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily, fontSize } from '../../src/theme/tokens';
 import type { AddonType, OrderAddon } from '../../src/api/types';
+import { useAuthStore } from '../../src/stores/auth';
 
 /**
  * Design screen 18 · Confirmation.
@@ -72,6 +73,9 @@ function describeAttachedAddons(addons: OrderAddon[]): string | null {
 export default function ConfirmationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Buying no longer requires a selfie, so say which of the two things happens next rather
+  // than promising a pass that is about to ask for one (CLAUDE.md rule 3).
+  const hasSelfie = useAuthStore((s) => Boolean(s.user?.selfieUploaded));
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const validOrderId = typeof orderId === 'string' && orderId.length > 0 ? orderId : undefined;
 
@@ -143,6 +147,21 @@ export default function ConfirmationScreen() {
   const addonCount = order.addons.length;
   const attachedLine = describeAttachedAddons(order.addons);
   const firstTicket = ticketsQuery.data?.data.find((t) => t.orderNumber === order.orderNumber);
+  /*
+   * A buyer who kept a ticket for themselves is asked for the selfie here, once, while the
+   * purchase is still in front of them. `buyerTierId` is the order's own answer to "did they
+   * take one", so it does not wait on the tickets list to arrive. Someone who only bought for
+   * guests is never asked: they have nothing to be admitted with.
+   *
+   * It is a prompt, not a gate. Skipping costs nothing, and the ticket carries the same demand
+   * in the QR panel for as long as it goes unanswered (CLAUDE.md rule 3).
+   */
+  const promptForSelfie = order.buyerTierId !== null && !hasSelfie;
+
+  function openTicket() {
+    if (firstTicket) router.replace(`/ticket/${firstTicket.id}`);
+    else router.replace('/(tabs)/tickets');
+  }
 
   return (
     <View style={styles.root}>
@@ -152,7 +171,15 @@ export default function ConfirmationScreen() {
         style={styles.background}
       />
 
-      <View style={[styles.panel, { paddingBottom: insets.bottom }]}>
+      <View
+        style={[
+          styles.panel,
+          // The prompt adds three rows to a panel that is pinned partway down the artwork, and
+          // on a short screen that ran into the bottom nav. It starts higher when it is there.
+          promptForSelfie ? styles.panelWithPrompt : null,
+          { paddingBottom: insets.bottom },
+        ]}
+      >
         <Text style={styles.headline}>
           {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
           {addonCount > 0
@@ -170,21 +197,48 @@ export default function ConfirmationScreen() {
           </Text>
         ) : (
           <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
-            Your entry pass is ready. Bring your face: gate staff check it against your selfie.
+            {/* "One thing left" only when the thing is actually below it. */}
+            {promptForSelfie
+              ? 'Your ticket is ready. One thing left before the gate.'
+              : hasSelfie
+                ? 'Your entry pass is ready. Bring your face: gate staff check it against your selfie.'
+                : 'Your ticket is ready.'}
           </Text>
         )}
 
         {attachedLine ? <Text style={styles.attached}>{attachedLine}</Text> : null}
 
-        <Button
-          label="See my ticket"
-          size="inline"
-          onPress={() =>
-            firstTicket
-              ? router.replace(`/ticket/${firstTicket.id}`)
-              : router.replace('/(tabs)/tickets')
-          }
-        />
+        {promptForSelfie ? (
+          <>
+            <View style={styles.selfieNotice}>
+              <Text style={styles.selfieNoticeText}>
+                We need your selfie to admit you to the event.
+              </Text>
+            </View>
+
+            <Button
+              label="Take a selfie"
+              size="inline"
+              onPress={() => router.push('/account/selfie')}
+            />
+
+            {/*
+              Quiet, but still a control: medium face at full opacity, underlined, with a target
+              a thumb can find. It says where it goes, because a bare "Skip" would not.
+            */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Skip the selfie for now and see my ticket"
+              onPress={openTicket}
+              hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
+              style={({ pressed }) => [styles.skip, pressed && styles.skipPressed]}
+            >
+              <Text style={styles.skipLabel}>Not now, see my ticket</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Button label="See my ticket" size="inline" onPress={openTicket} />
+        )}
       </View>
 
       <BottomNav style={styles.nav} />
@@ -219,6 +273,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 34,
   },
+  panelWithPrompt: {
+    top: '46%',
+  },
   headline: {
     fontSize: 14,
     fontFamily: fontFamily.bodyMedium,
@@ -244,5 +301,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.textMuted,
     marginBottom: 20,
+  },
+  /*
+   * The gold tonal pair the design system already spends on "this ticket needs something":
+   * `Badge` tone `gold` draws the "Selfie needed" chip on the ticket card in exactly these two
+   * colours, so the same state reads the same way wherever it appears.
+   */
+  selfieNotice: {
+    alignSelf: 'stretch',
+    backgroundColor: colors.gold100,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  selfieNoticeText: {
+    fontSize: 13,
+    lineHeight: 13 * 1.5,
+    fontFamily: fontFamily.bodyMedium,
+    textAlign: 'center',
+    color: colors.gold700,
+  },
+  skip: {
+    marginTop: 14,
+  },
+  skipPressed: {
+    opacity: 0.6,
+  },
+  skipLabel: {
+    fontSize: 13,
+    fontFamily: fontFamily.bodyMedium,
+    color: colors.textPrimary,
+    textDecorationLine: 'underline',
   },
 });

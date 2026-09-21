@@ -14,8 +14,10 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    `EXCLUDED_COUNTRIES` in `src/lib/phone.ts` and in the backend's phone normalizer.
 2. **A ticket can exist before its owner.** Guests are attached _by phone_ from contacts;
    their ticket binds when they register that number. There are no claim codes.
-3. **The selfie is the anti-fraud control.** Captured at registration; required for a usable
-   ticket.
+3. **The selfie is the anti-fraud control, and it is asked for once, at the QR.** A holder
+   meets the camera when they open an entry pass, on the ticket that needs it, and never
+   before: not to browse, not to register, not to pay. It is required for a *usable ticket*
+   (`usageStatus: selfie_required` until it exists), never for an account or an order.
 4. **The system acts, it never confirms.** No screen may reveal whether a phone number is
    registered. Registered and unregistered guests get identical UI, identical copy, identical
    timing. Never branch UI on "user exists".
@@ -23,10 +25,12 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
 6. **Non-users are reached over WhatsApp by the backend**, never by the app.
 7. **Never compute prices client-side.** The server is authoritative. Mock prices live in
    `src/api/mock/`, never in a screen or component.
-8. **Profile completeness gates purchase** — full name, email, date of birth, gender, area,
-   and selfie. Email _verification_ gates nothing. The living area is only asked of, and only
-   required of, an Egyptian number: `areas` are Egyptian governorates, so there is no answer
-   to give from abroad. Use `requiresLivingArea` rather than testing the country by hand.
+8. **Profile completeness gates purchase** — full name, email, date of birth, gender, area.
+   Email _verification_ gates nothing, and neither does the selfie (rule 3). The living area
+   is only asked of, and only required of, an Egyptian number: `areas` are Egyptian
+   governorates, so there is no answer to give from abroad. Use `requiresLivingArea` rather
+   than testing the country by hand. Registration is therefore two steps: number, then the
+   form.
 9. **Payments (P1):** follow the Paymob React Native SDK documentation exactly. Customize the
    sheet (`setAppName`, `setButtonBackgroundColor`, `setButtonTextColor`, …) _before_ calling
    `Paymob.presentPayVC(clientSecret, publicKey)`, and drive the payment outcome from
@@ -92,16 +96,105 @@ npm run verify     all three (run this before every commit)
 
 ### Releasing to iOS
 
-When the user says to release on iOS (e.g. "release this on iOS", "ship an iOS build"), run:
+The default is the local path: it builds on this Mac and uploads to TestFlight without EAS.
+
+```
+npm run release:ios:local
+```
+
+That runs `verify`, takes the next build number, archives, and uploads. The pieces are also
+separately runnable: `npm run version:ios` to see or take the next build number,
+`npm run build:ios:local` to produce `build/ios/Sukun.ipa`, `npm run publish:ios:local` to
+upload one that already exists (`--validate` to check it without uploading).
+
+EAS stays available as the fallback, for when this machine cannot build (no Xcode, a signing
+problem, someone else releasing):
 
 ```
 npm run release:ios
 ```
 
-This builds in the cloud and auto-submits to TestFlight (App Store Connect handles
-managed credentials; `eas.json`'s `production` profile has `autoIncrement: true` so the
-build number bumps itself). Only run this when explicitly asked to release; never do it
-as a side effect of another task.
+Both paths sign with the **same** certificate and profile and both take their build number
+from what App Store Connect already has, so they can alternate freely. Never let Xcode or EAS
+mint a second distribution certificate: Apple allows two per team, and the prompt to fix that
+offers to revoke, which would break the other path.
+
+What the local path needs, none of it in the repo:
+
+- An **Apple Distribution certificate** in the login keychain, and the matching **App Store
+  provisioning profile** for `co.sukunwellness` at `../secrets/sukun-appstore.mobileprovision`.
+  Take both from EAS rather than making new ones: `eas credentials`, iOS, production, then
+  download to `credentials.json`, import the `.p12` into the keychain and move the
+  `.mobileprovision` into place.
+- An **App Store Connect API key** (App Manager role) saved as
+  `../secrets/AuthKey_<key id>.p8`, with its ids filled into `../secrets/ios-release.env`.
+
+`scripts/assert-ios-signing.mjs` checks every one of those before Xcode starts and names
+whichever is missing.
+
+Only release when explicitly asked; never as a side effect of another task.
+
+### Releasing to Android
+
+Android also releases locally, from this Mac, and not from EAS:
+
+```
+npm run release:android:local
+```
+
+That runs `verify`, builds the signed `.aab`, and uploads it. The pieces are separately
+runnable: `npm run build:android:local` produces
+`android/app/build/outputs/bundle/release/app-release.aab`, and `npm run
+publish:android:local` uploads one that already exists. The publisher takes
+`--track internal|production`, `--status draft|completed`, and `--notes "<what's new>"`.
+**Always pass `--notes`**: Play carries the previous release's notes forward when a release
+omits them, so a silent changelog is the last release's, not an empty one.
+
+Signing comes from four `SUKUN_*` properties in `~/.gradle/gradle.properties`, never the
+repo; `scripts/assert-android-signing.mjs` checks them before Gradle starts, because
+`withAndroidSigning.js` falls back to the debug keystore and Play rejects what that produces.
+
+### What a release build compiles in
+
+Both local scripts export the build profile's `EXPO_PUBLIC_*` variables from `eas.json`
+(`scripts/eas-profile-env.mjs`) **before** they prebuild and bundle. This is not a nicety.
+`.env.local` points the app at staging, the bundler loads it for a release build exactly as
+it does for a simulator, and `@expo/env` defers to the environment only when the variable is
+already set there. Skip the export and a "production" build ships staging's backend, staging's
+analytics env (which is what shows the **Staging** badge on Profile), and no guest flag at
+all, which defaults the skip-login link back on.
+
+That is not hypothetical: it is what Android `versionCode 2` shipped to Play's production
+track. `scripts/assert-bundle-env.mjs` now reads the finished `.aab` and fails the build if
+the bundle does not carry the profile's url and analytics ids, or carries another profile's.
+`src/__tests__/release-env.test.ts` guards the scripts themselves.
+
+### Guest browsing
+
+The live value comes from the **backend**, so turning the guest path on or off is a Railway
+variable and a restart, not a store release. `GET public/app-config` answers with both
+platforms' flags; the app reads it at launch through `src/stores/flags.ts` and screens call
+`useAllowGuestBrowsing()`. The two variables are `ALLOW_GUEST_BROWSING_IOS` and
+`ALLOW_GUEST_BROWSING_ANDROID`, set per Railway environment.
+
+Three sources, in this order: the last answer cached on the device, then the endpoint, then
+`ALLOW_GUEST_BROWSING_FALLBACK` compiled in from `eas.json`. The compiled fallback and the
+backend's own defaults agree by construction (iOS open, Android closed), so an app that cannot
+reach the endpoint behaves exactly like one that reaches it and finds nothing set.
+
+**The polarity is not symmetrical and must not be made so.** iOS fails towards open: anything
+but an explicit "false" leaves the guest path on, because shipping without it is what App
+Review rejected under guideline 5.1.1(v). Android fails towards closed: only an explicit
+"true" opens it. Nothing reads `Platform.OS` at a call site; the split lives in the two flags.
+
+### Build numbers
+
+`eas.json` sets `appVersionSource: "local"`, so the build number is `ios.buildNumber` in
+`app.json` and the version code is `android.versionCode`, tracked in git and read by both
+paths. Before a local build, `scripts/ios-build-number.mjs` asks App Store Connect for the
+highest build it holds and writes one past it, so the number is derived from the store rather
+than from a counter either path could get ahead of. **Commit the bump**, or the next EAS build
+starts from a stale number.
 
 ## Conventions
 

@@ -3,13 +3,14 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, ImageSlot, Text } from '../../src/components/ui';
 import { track } from '../../src/lib/analytics';
-import { ALLOW_GUEST_BROWSING } from '../../src/lib/flags';
+import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
 /** Design screen 01 · Welcome. */
 export default function WelcomeScreen() {
+  const allowGuestBrowsing = useAllowGuestBrowsing();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const dancers = designAsset('welcomeDancers');
@@ -66,7 +67,7 @@ export default function WelcomeScreen() {
             router.push('/(onboarding)/phone');
           }}
         />
-        {ALLOW_GUEST_BROWSING ? (
+        {allowGuestBrowsing ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={

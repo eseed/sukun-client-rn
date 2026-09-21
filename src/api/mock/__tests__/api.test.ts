@@ -130,7 +130,12 @@ describe('auth', () => {
 });
 
 describe('profile completeness gates purchase', () => {
-  it('needs all six fields, and the selfie is one of them', async () => {
+  /**
+   * Five fields, and the selfie is not one of them. It gates the entry pass instead, which
+   * is what the `entry pass` suite below asserts: buying without one is allowed, walking in
+   * with one is not (CLAUDE.md rules 3 and 8).
+   */
+  it('needs the five profile fields, and not the selfie', async () => {
     await signIn();
     const withoutSelfie = await mockApi.profile.update({
       fullName: 'Yasmin El Sayed',
@@ -139,11 +144,21 @@ describe('profile completeness gates purchase', () => {
       gender: 'female',
       areaId: 'ar-maadi',
     });
-    expect(withoutSelfie.profileComplete).toBe(false);
+    expect(withoutSelfie.selfieUploaded).toBe(false);
+    expect(withoutSelfie.profileComplete).toBe(true);
+    expect(withoutSelfie.status).toBe('active');
+  });
 
-    const withSelfie = await mockApi.profile.uploadSelfie('file:///selfie.jpg');
-    expect(withSelfie.profileComplete).toBe(true);
-    expect(withSelfie.status).toBe('active');
+  it('is not complete while a field is still missing', async () => {
+    await signIn();
+    const partial = await mockApi.profile.update({
+      fullName: 'Yasmin El Sayed',
+      dateOfBirth: '1994-03-12',
+      gender: 'female',
+      areaId: 'ar-maadi',
+    });
+    expect(partial.profileComplete).toBe(false);
+    expect(partial.status).toBe('pending_profile');
   });
 
   it('does not require email verification', async () => {
@@ -405,7 +420,7 @@ describe('order and ticket lifecycle', () => {
 });
 
 describe('entry pass', () => {
-  it('requires a selfie', async () => {
+  it('requires a selfie, which is the only thing that does', async () => {
     await signIn();
     await mockApi.profile.update({
       fullName: 'Yasmin El Sayed',
@@ -417,9 +432,18 @@ describe('entry pass', () => {
     const { data } = await mockApi.tickets.list();
     const ticket = data[0];
     expect(ticket).toBeDefined();
-    // Rule 3: the selfie is what makes a ticket usable.
+    // Rule 3: the selfie is what makes a ticket usable, and the ticket says so itself.
+    expect(ticket!.usageStatus).toBe('selfie_required');
     await expect(mockApi.tickets.entryPass(ticket!.id)).rejects.toMatchObject({
       code: 'SELFIE_REQUIRED',
+    });
+
+    // And taking it there is what opens the pass, with nothing else asked for.
+    await mockApi.profile.uploadSelfie('file:///selfie.jpg');
+    const reread = await mockApi.tickets.detail(ticket!.id);
+    expect(reread.usageStatus).toBe('usable');
+    await expect(mockApi.tickets.entryPass(ticket!.id)).resolves.toMatchObject({
+      ticketId: ticket!.id,
     });
   });
 

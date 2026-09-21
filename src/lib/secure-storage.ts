@@ -49,4 +49,10 @@ export const SECURE_KEYS = {
   analyticsConsent: 'sukun.analyticsConsent',
   setupDeferred: 'sukun.setupDeferred',
   guestBrowsing: 'sukun.guestBrowsing',
+  /**
+   * The last value `public/app-config` gave for this platform's guest path. Distinct from
+   * `guestBrowsing` above, which records that this visitor took "Skip login": one is the
+   * feature's availability, the other is a person's choice within it. See `src/stores/flags.ts`.
+   */
+  allowGuestBrowsing: 'sukun.allowGuestBrowsing',
 } as const;

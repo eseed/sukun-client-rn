@@ -27,7 +27,7 @@ describe('Phone number screen', () => {
   it('renders the design copy and the home-country prefix', () => {
     renderWithProviders(<PhoneScreen />);
 
-    expect(screen.getByText('Step 1 of 3')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 2')).toBeTruthy();
     expect(screen.getByText("Hello! What's your number?")).toBeTruthy();
     expect(screen.getByText(/🇪🇬 \+20/)).toBeTruthy();
     expect(screen.getByText('Send me a code')).toBeTruthy();

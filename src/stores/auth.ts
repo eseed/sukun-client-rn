@@ -49,17 +49,17 @@ interface AuthState {
   /**
    * Transient, in-memory only — whether the OTP verification that produced the current
    * session was for a brand-new account. Set by `otp.tsx` right after verifying, read (and
-   * cleared) by `selfie.tsx` to fire the `signup_completed` analytics event exactly once, and
+   * cleared) by `profile.tsx` to fire the `signup_completed` analytics event exactly once, and
    * never persisted or shown in the UI (CLAUDE.md rule 4 is about UI copy, not analytics).
    */
   isNewUser: boolean;
   /**
    * Whether this user asked to browse before finishing registration, by taking the exit out
-   * of the selfie step.
+   * of the profile step.
    *
    * Persisted, unlike `isNewUser`. The launch redirect in `app/index.tsx` reads it to decide
    * whether an unfinished account lands on its next step or on Discover, and without a stored
-   * answer the next cold start would put the selfie demand back in front of someone who has
+   * answer the next cold start would put the same demand back in front of someone who has
    * already declined it once, which is the wall guideline 5.1.1(v) objects to. Cleared by
    * signing in, signing out, and finishing the profile, so it can only ever describe the
    * account currently in hand.
@@ -158,8 +158,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   /**
    * Record that this user is browsing with an unfinished profile. The session is kept: the
    * number is already verified, and throwing it away would cost the signup this exit exists
-   * to preserve. Purchase stays gated on `profileComplete` (CLAUDE.md rule 8), so the selfie
-   * is still collected before a ticket can be bought.
+   * to preserve. Purchase stays gated on `profileComplete` (CLAUDE.md rule 8), so the
+   * details an order needs are still collected before a ticket can be bought.
    */
   async deferSetup() {
     set({ setupDeferred: true });
@@ -232,12 +232,13 @@ setAuthFailureHandler(() => {
 });
 
 /**
- * The six fields that gate purchase (CLAUDE.md rule 8). Email *verification* is not one of
- * them. The server is authoritative via `profileComplete`; this mirrors it so a screen can
- * say which step is missing.
+ * The fields that gate purchase (CLAUDE.md rule 8). Email *verification* is not one of them,
+ * and neither is the selfie: that is the gate control, asked for when the holder opens their
+ * entry pass, and it keeps the *ticket* unusable rather than the checkout closed. The server
+ * is authoritative via `profileComplete`; this mirrors it so a screen can say what is missing.
  */
 export function missingProfileFields(user: CurrentUser | null): string[] {
-  if (!user) return ['full name', 'email', 'date of birth', 'gender', 'area', 'selfie'];
+  if (!user) return ['full name', 'email', 'date of birth', 'gender', 'area'];
   const missing: string[] = [];
   if (!user.fullName) missing.push('full name');
   if (!user.email) missing.push('email');
@@ -245,21 +246,12 @@ export function missingProfileFields(user: CurrentUser | null): string[] {
   if (!user.gender) missing.push('gender');
   // Only Egyptian numbers are asked for a living area, so only they can be missing one.
   if (requiresLivingArea(user.phoneNumber) && !user.area) missing.push('area');
-  if (!user.selfieUploaded) missing.push('selfie');
   return missing;
 }
 
-/** Where an unfinished account resumes: the profile form while any field but the selfie is
- * outstanding, and the selfie step once the rest are in hand.
- *
- * Kept beside `missingProfileFields` so the launch redirect and the resume row on Profile
- * cannot disagree with the purchase gate about how far through the flow someone is.
+/**
+ * Where an unfinished account resumes. Registration is one form now that the selfie has moved
+ * to the entry pass, so there is only ever one answer, but the launch redirect, the resume row
+ * on Profile and the event CTA all ask the question and this keeps them asking it in one place.
  */
-export function nextOnboardingStep(
-  user: CurrentUser | null,
-): '/(onboarding)/profile' | '/(onboarding)/selfie' {
-  const missing = missingProfileFields(user);
-  return missing.some((field) => field !== 'selfie')
-    ? '/(onboarding)/profile'
-    : '/(onboarding)/selfie';
-}
+export const ONBOARDING_RESUME_ROUTE = '/(onboarding)/profile' as const;
