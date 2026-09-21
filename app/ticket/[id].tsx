@@ -15,7 +15,7 @@ import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useClaimTicket, useEntryPass, useTicket, useTicketAddons } from '../../src/hooks/queries';
 import { describeTicketAddon, ticketAddonStatusLabel } from '../../src/lib/addons';
 import { isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
-import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
 const QR_SIZE = 200;
@@ -34,7 +34,9 @@ const QR_SIZE = 200;
  * starts answering: no rebuild, no release.
  *
  * The rotation is what makes a screenshot useless; the selfie is what stops someone else
- * walking in with a shared code (CLAUDE.md rule 3).
+ * walking in with a shared code (CLAUDE.md rule 3). This screen is where that selfie is
+ * asked for: nothing earlier in the app demands one, so a holder meets the camera once, on
+ * the ticket that needs it, with the reason in front of them.
  */
 export default function EntryPassScreen() {
   const router = useRouter();
@@ -134,9 +136,11 @@ export default function EntryPassScreen() {
   }
 
   function onRemediate() {
-    if (needsSelfie) router.push('/(onboarding)/selfie');
+    // The selfie is asked for here and nowhere earlier (CLAUDE.md rule 3): this screen is the
+    // first and only place it is needed, so this is the first and only place it is demanded.
+    if (needsSelfie) router.push('/account/selfie');
     else if (needsProfile || missingProfileFields(user).length > 0)
-      router.push('/(onboarding)/profile');
+      router.push(ONBOARDING_RESUME_ROUTE);
   }
 
   return (
@@ -164,7 +168,7 @@ export default function EntryPassScreen() {
               {needsClaim
                 ? 'This ticket is waiting to bind'
                 : needsSelfie
-                  ? 'Add your selfie to use this ticket'
+                  ? 'A selfie opens your pass'
                   : needsProfile
                     ? 'Finish your profile to use this ticket'
                     : 'This ticket cannot be used'}
@@ -173,7 +177,7 @@ export default function EntryPassScreen() {
               {needsClaim
                 ? 'Claim it to attach the ticket to your phone number.'
                 : needsSelfie
-                  ? 'Gate staff use your selfie to verify you at entry.'
+                  ? 'Gate staff check it against your face at entry, so your QR is only yours. It takes a moment and you only do it once.'
                   : needsProfile
                     ? 'Add the required profile details before opening the entry pass.'
                     : 'This ticket has been voided or refunded.'}
@@ -184,7 +188,7 @@ export default function EntryPassScreen() {
             ) : null}
             {needsSelfie || needsProfile ? (
               <Button
-                label={needsSelfie ? 'Add selfie' : 'Complete profile'}
+                label={needsSelfie ? 'Take selfie' : 'Complete profile'}
                 onPress={onRemediate}
               />
             ) : null}

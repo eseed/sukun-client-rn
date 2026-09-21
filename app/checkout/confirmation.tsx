@@ -9,6 +9,7 @@ import { messageForError } from '../../src/lib/errors';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily, fontSize } from '../../src/theme/tokens';
 import type { AddonType, OrderAddon } from '../../src/api/types';
+import { useAuthStore } from '../../src/stores/auth';
 
 /**
  * Design screen 18 · Confirmation.
@@ -72,6 +73,9 @@ function describeAttachedAddons(addons: OrderAddon[]): string | null {
 export default function ConfirmationScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Buying no longer requires a selfie, so say which of the two things happens next rather
+  // than promising a pass that is about to ask for one (CLAUDE.md rule 3).
+  const hasSelfie = useAuthStore((s) => Boolean(s.user?.selfieUploaded));
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
   const validOrderId = typeof orderId === 'string' && orderId.length > 0 ? orderId : undefined;
 
@@ -170,7 +174,9 @@ export default function ConfirmationScreen() {
           </Text>
         ) : (
           <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
-            Your entry pass is ready. Bring your face: gate staff check it against your selfie.
+            {hasSelfie
+              ? 'Your entry pass is ready. Bring your face: gate staff check it against your selfie.'
+              : 'Your ticket is ready. Open it to take the selfie gate staff check you against at entry.'}
           </Text>
         )}
 

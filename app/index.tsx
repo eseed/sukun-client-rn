@@ -1,7 +1,7 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAllowGuestBrowsing } from '../src/stores/flags';
-import { nextOnboardingStep, useAuthStore } from '../src/stores/auth';
+import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../src/stores/auth';
 import { colors } from '../src/theme/tokens';
 
 /**
@@ -58,9 +58,7 @@ export default function Index() {
     return <Redirect href="/(tabs)/discover" />;
   }
 
-  // The backend is authoritative for completeness, but it does not say which step is
-  // outstanding, so the local mirror picks the screen.
-  return <Redirect href={nextOnboardingStep(user)} />;
+  return <Redirect href={ONBOARDING_RESUME_ROUTE} />;
 }
 
 const styles = StyleSheet.create({

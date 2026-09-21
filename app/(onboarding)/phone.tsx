@@ -84,7 +84,7 @@ export default function PhoneScreen() {
     <Screen scroll contentStyle={styles.content}>
       <BackButton onPress={goBack} style={styles.back} />
 
-      <StepLabel>Step 1 of 3</StepLabel>
+      <StepLabel>Step 1 of 2</StepLabel>
       <View style={styles.heading}>
         <BulletHeading title="Hello! What's your number?" size="lg" />
       </View>

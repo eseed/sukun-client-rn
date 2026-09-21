@@ -36,8 +36,9 @@ import {
 /**
  * Design screen 04 · About you.
  *
- * These five fields plus the selfie are what gate purchase (CLAUDE.md rule 8). Email
- * verification is deliberately not required here.
+ * These five fields are what gate purchase (CLAUDE.md rule 8), and they are the last thing
+ * registration asks for: the selfie has moved to the entry pass, where it is about to be
+ * used. Email verification is deliberately not required here either.
  */
 
 /** Meta requires the consent wording to name the sender and what is being sent. */
@@ -99,11 +100,8 @@ export default function ProfileFormScreen() {
       router.replace('/(tabs)/discover');
       return;
     }
-    const missing = missingProfileFields(user);
-    if (missing.length === 0) {
+    if (missingProfileFields(user).length === 0) {
       router.replace('/(tabs)/discover');
-    } else if (missing.length === 1 && missing[0] === 'selfie') {
-      router.replace('/(onboarding)/selfie');
     }
   }, [router, user]);
 
@@ -155,7 +153,12 @@ export default function ProfileFormScreen() {
         marketing_opt_in: values.marketingOptIn,
         ...(area ? { area_code: area.code } : {}),
       });
-      router.push('/(onboarding)/selfie');
+      // This is the end of registration now, so the signup event belongs here.
+      if (useAuthStore.getState().isNewUser) {
+        track('signup_completed');
+        useAuthStore.getState().setIsNewUser(false);
+      }
+      router.replace('/(tabs)/discover');
     } catch (err) {
       setSubmitError(messageForError(err));
     }
@@ -226,7 +229,7 @@ export default function ProfileFormScreen() {
 
       <BackButton onPress={confirmChangeNumber} style={styles.back} />
 
-      <StepLabel>Step 2 of 3</StepLabel>
+      <StepLabel>Step 2 of 2</StepLabel>
       <View style={styles.heading}>
         <BulletHeading title="A little about you" size="lg" />
       </View>
@@ -359,10 +362,11 @@ export default function ProfileFormScreen() {
       />
 
       {/*
-        The same exit the selfie step carries, for the same reason. The number is verified by
-        the time this screen renders, so without it the only way back to the catalogue is the
-        "wrong number" alert, which signs the account out and lands on the phone field: a
-        registered user four steps and a destructive confirmation away from public content.
+        The way out of the last step of registration, without answering it. The number is
+        verified by the time this screen renders, so without this the only way back to the
+        catalogue is the "wrong number" alert, which signs the account out and lands on the
+        phone field: a registered user three steps and a destructive confirmation away from
+        public content.
       */}
       {allowGuestBrowsing ? (
         <Pressable

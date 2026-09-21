@@ -15,7 +15,7 @@ import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatCountdown } from '../../src/lib/format';
 import { formatPhoneForDisplay, isValidPhone } from '../../src/lib/phone';
-import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
 const CODE_LENGTH = 4;
@@ -66,24 +66,18 @@ export default function OtpScreen() {
       // Where they land depends on how much of the profile already exists — a returning
       // user skips straight into the app. Someone signing up again on a number they once
       // deleted is a new user with an empty profile, so they land on the details step like
-      // anyone else, not on the selfie.
+      // anyone else.
       const user = useAuthStore.getState().user;
       useAuthStore.getState().setIsNewUser(result.isNewUser);
       track('otp_verified', {
         is_new_user: result.isNewUser,
         has_complete_profile: Boolean(user?.profileComplete),
       });
-      if (!user?.profileComplete) {
-        const missing = missingProfileFields(user);
-        if (missing.length === 0) {
-          router.replace('/(tabs)/discover');
-        } else {
-          router.replace(
-            missing.length === 1 && missing[0] === 'selfie'
-              ? '/(onboarding)/selfie'
-              : '/(onboarding)/profile',
-          );
-        }
+      // The server is authoritative on completeness, but its projection can arrive partial,
+      // so a user it calls incomplete with nothing locally missing is taken at the server's
+      // word and let through rather than parked on a form with nothing to fill in.
+      if (!user?.profileComplete && missingProfileFields(user).length > 0) {
+        router.replace(ONBOARDING_RESUME_ROUTE);
       } else {
         router.replace('/(tabs)/discover');
       }
@@ -132,7 +126,7 @@ export default function OtpScreen() {
     <Screen scroll contentStyle={styles.content}>
       <BackButton onPress={goBackToPhone} style={styles.back} />
 
-      <StepLabel>Step 1 of 3</StepLabel>
+      <StepLabel>Step 1 of 2</StepLabel>
       <View style={styles.heading}>
         <BulletHeading title="Check WhatsApp" size="lg" />
       </View>

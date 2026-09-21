@@ -246,18 +246,15 @@ function buyerHoldsTicketForEvent(eventId: string): boolean {
 }
 
 /**
- * The fields that gate purchase (CLAUDE.md rule 8). Email verification is NOT one, and the
- * living area only applies to Egyptian numbers.
+ * The fields that gate purchase (CLAUDE.md rule 8). Email verification is NOT one, the living
+ * area only applies to Egyptian numbers, and neither is the selfie: that gates the entry pass
+ * instead, through `ticketUsageStatus` below. Mirrors the backend's
+ * `AppUserProfileCompletenessService`.
  */
 function computeProfileComplete(user: CurrentUser): boolean {
   const areaSatisfied = !requiresLivingArea(user.phoneNumber) || Boolean(user.area);
   return Boolean(
-    user.fullName &&
-    user.email &&
-    user.dateOfBirth &&
-    user.gender &&
-    areaSatisfied &&
-    user.selfieUploaded,
+    user.fullName && user.email && user.dateOfBirth && user.gender && areaSatisfied,
   );
 }
 
@@ -591,9 +588,11 @@ function issueTicketsFor(order: OrderDetail): void {
         status: guest ? 'pending_claim' : 'active',
         usageStatus: guest
           ? 'pending_claim'
-          : state.user?.selfieUploaded && state.user.profileComplete
-            ? 'usable'
-            : 'profile_incomplete',
+          : !state.user?.selfieUploaded
+            ? 'selfie_required'
+            : state.user.profileComplete
+              ? 'usable'
+              : 'profile_incomplete',
         source: 'order',
         event: ticketEvent,
         tier: { id: tier.id, name: tier.name },
@@ -785,6 +784,8 @@ export const mockApi: SukunApi = {
         for (const ticket of state.tickets)
           state.ticketOwnerPhones.set(ticket.id, state.user.phoneNumber);
       }
+      // The seed draws a usable ticket, which it is not until the holder has a selfie.
+      refreshTicketUsability(state.user);
       return delay(state.user);
     },
 
@@ -797,6 +798,9 @@ export const mockApi: SukunApi = {
         selfieExpiresAt: iso(15 * 60 * 1000),
       });
       state.accounts.set(state.user.phoneNumber, state.user);
+      // What the selfie unlocks: every ticket this holder owns becomes usable, which is the
+      // whole reason the camera was opened (CLAUDE.md rule 3).
+      refreshTicketUsability(state.user);
       return delay(state.user, 1.9);
     },
 

@@ -12,7 +12,7 @@ import { SignInPrompt } from '../../src/components/SignInPrompt';
 import { useAvatarUri, useTickets } from '../../src/hooks/queries';
 import { APP_VERSION_LINE, IS_STAGING_BUILD } from '../../src/lib/build-info';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
-import { missingProfileFields, nextOnboardingStep, useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
@@ -121,7 +121,7 @@ export default function ProfileScreen() {
               */}
               {!user.profileComplete ? (
                 <Pressable
-                  onPress={() => router.push(nextOnboardingStep(user))}
+                  onPress={() => router.push(ONBOARDING_RESUME_ROUTE)}
                   accessibilityRole="button"
                 >
                   <ListRow

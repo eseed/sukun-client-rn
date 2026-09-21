@@ -8,7 +8,7 @@ import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/
 import WelcomeScreen from '../(onboarding)/welcome';
 import OtpScreen from '../(onboarding)/otp';
 import ProfileFormScreen from '../(onboarding)/profile';
-import SelfieScreen from '../(onboarding)/selfie';
+import SelfieScreen from '../account/selfie';
 import DiscoverScreen from '../(tabs)/discover';
 import TicketsScreen from '../(tabs)/tickets';
 import ProfileTabScreen from '../(tabs)/profile';
@@ -101,16 +101,26 @@ function emptyForeignUser() {
   };
 }
 
-async function signInAndComplete() {
+/**
+ * Registered, and able to buy: the profile form is the last thing registration asks for. No
+ * selfie yet, which is the state every new account is in until it opens an entry pass.
+ */
+async function signInWithoutSelfie() {
   await mockApi.auth.requestOtp('+201012345678');
   const { user } = await mockApi.auth.verifyOtp('+201012345678', MOCK_OTP_CODE);
-  await mockApi.profile.update({
+  const profiled = await mockApi.profile.update({
     fullName: 'Yasmin El Sayed',
     email: 'yasmin@email.com',
     dateOfBirth: '1994-03-12',
     gender: 'female',
     areaId: 'ar-maadi',
   });
+  useAuthStore.setState({ status: 'signed-in', user: profiled, pendingPhone: null });
+  return { user, profiled };
+}
+
+async function signInAndComplete() {
+  const { user } = await signInWithoutSelfie();
   const complete = await mockApi.profile.uploadSelfie('file:///selfie.jpg');
   useAuthStore.setState({ status: 'signed-in', user: complete, pendingPhone: null });
   return { user, complete };
@@ -220,7 +230,7 @@ describe('03 Verify code', () => {
     useAuthStore.setState({ pendingPhone: '+201012345678' });
     renderWithProviders(<OtpScreen />);
 
-    expect(screen.getByText('Step 1 of 3')).toBeTruthy();
+    expect(screen.getByText('Step 1 of 2')).toBeTruthy();
     expect(screen.getByText('Check WhatsApp')).toBeTruthy();
     expect(screen.getByText('+20 10 12345678')).toBeTruthy();
     expect(screen.getByText('Verify')).toBeTruthy();
@@ -233,7 +243,7 @@ describe('04 About you', () => {
     useAuthStore.setState({ status: 'signed-in', user: null });
     renderWithProviders(<ProfileFormScreen />);
 
-    await waitFor(() => expect(screen.getByText('Step 2 of 3')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Step 2 of 2')).toBeTruthy());
     expect(screen.getByText('A little about you')).toBeTruthy();
     for (const label of ['Full name', 'Email', 'Date of birth', 'Gender', 'Living area']) {
       expect(screen.getByText(label)).toBeTruthy();
@@ -257,7 +267,7 @@ describe('04 About you', () => {
     });
     renderWithProviders(<ProfileFormScreen />);
 
-    await waitFor(() => expect(screen.getByText('Step 2 of 3')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Step 2 of 2')).toBeTruthy());
     for (const label of ['Full name', 'Email', 'Date of birth', 'Gender']) {
       expect(screen.getByText(label)).toBeTruthy();
     }
@@ -276,7 +286,7 @@ describe('04 About you', () => {
     useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
     renderWithProviders(<ProfileFormScreen />);
 
-    await waitFor(() => expect(screen.getByText('Step 2 of 3')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Step 2 of 2')).toBeTruthy());
     fireEvent.press(screen.getByText('Not now, browse events'));
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/discover'));
@@ -286,51 +296,42 @@ describe('04 About you', () => {
 });
 
 describe('05 Selfie', () => {
-  it('explains why the selfie exists', () => {
+  it('explains why the selfie exists, and says it belongs to the pass', () => {
+    useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
     renderWithProviders(<SelfieScreen />);
-    expect(screen.getByText('Step 3 of 3')).toBeTruthy();
-    expect(screen.getByText('One last thing, a selfie')).toBeTruthy();
+
+    expect(screen.getByText('Entry pass')).toBeTruthy();
+    expect(screen.getByText('One thing before your QR')).toBeTruthy();
     expect(screen.getByText('Tap to take a selfie')).toBeTruthy();
     expect(screen.getByText(/Gate staff compare this to your face at entry/)).toBeTruthy();
   });
 
   /**
-   * The exit out of the last step, and the reason this screen was a rejection.
-   *
-   * Registration cannot be finished without the selfie, so someone who declines it is left
-   * with an account that owes a step. Before this exit existed the screen had no back, no
-   * skip, and nothing to pop, and the launch redirect put them straight back: a registered
-   * user permanently walled out of a catalogue they had browsed freely a minute earlier,
-   * which is what guideline 5.1.1(v) forbids. The session is kept, because the number is
-   * already verified and the signup is the thing worth saving.
+   * The screen is reached from a ticket, so it leaves the way it came. Nothing here defers,
+   * skips or completes registration: registration finished two screens ago.
    */
-  it('lets an unfinished account out to browse without dropping the session', async () => {
+  it('goes back to whatever asked for it, without touching registration', () => {
     useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
+    mockRouter.canGoBack.mockReturnValue(true);
 
     renderWithProviders(<SelfieScreen />);
-    fireEvent.press(screen.getByText('Not now, browse events'));
+    fireEvent.press(screen.getByLabelText('Go back'));
 
-    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/discover'));
-    const state = useAuthStore.getState();
-    expect(state.status).toBe('signed-in');
-    expect(state.setupDeferred).toBe(true);
+    expect(mockRouter.back).toHaveBeenCalled();
+    expect(screen.queryByText('Not now, browse events')).toBeNull();
+    expect(useAuthStore.getState().setupDeferred).toBe(false);
   });
 
   /**
-   * Purchase is still gated on the selfie (CLAUDE.md rules 3 and 8). The exit buys access to
-   * the catalogue, never a usable ticket, so nothing here may mark the profile complete.
+   * The point of the change: a selfie that has not been taken yet holds up the QR and
+   * nothing else (CLAUDE.md rules 3 and 8). Someone who has filled in the form may buy.
    */
-  it('does not treat the exit as having finished the profile', async () => {
-    useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
+  it('is not one of the fields that gate purchase', async () => {
+    const { profiled } = await signInWithoutSelfie();
 
-    renderWithProviders(<SelfieScreen />);
-    fireEvent.press(screen.getByText('Not now, browse events'));
-
-    await waitFor(() => expect(useAuthStore.getState().setupDeferred).toBe(true));
-    const user = useAuthStore.getState().user!;
-    expect(user.profileComplete).toBe(false);
-    expect(user.selfieUploaded).toBe(false);
-    expect(missingProfileFields(user)).toContain('selfie');
+    expect(profiled.selfieUploaded).toBe(false);
+    expect(profiled.profileComplete).toBe(true);
+    expect(missingProfileFields(profiled)).toEqual([]);
   });
 });
 
@@ -1363,6 +1364,26 @@ describe('14 Entry pass', () => {
     entryPass.mockRestore();
   });
 
+  /**
+   * The one place the selfie is asked for (CLAUDE.md rule 3). The ticket says why its QR is
+   * not showing and hands over the camera; nothing earlier in the app does either.
+   */
+  it('asks for the selfie here, and only here, when the QR needs one', async () => {
+    await signInWithoutSelfie();
+    const { data } = await mockApi.tickets.list();
+    expect(data[0]!.usageStatus).toBe('selfie_required');
+    mockParams.id = data[0]!.id;
+
+    renderWithProviders(<EntryPassScreen />);
+
+    await waitFor(() => expect(screen.getByText('A selfie opens your pass')).toBeTruthy());
+    expect(screen.getByText('Tulua · ticket status')).toBeTruthy();
+    expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
+
+    fireEvent.press(screen.getByText('Take selfie'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');
+  });
+
   // A pass that genuinely failed to load is still an error the holder can retry.
   it('keeps the retry state for a real entry pass failure', async () => {
     await signInAndComplete();
@@ -1439,25 +1460,19 @@ describe('15 Profile', () => {
     expect(mockRouter.push).toHaveBeenCalledWith('/(onboarding)/profile');
   });
 
-  it('resumes at the selfie when it is the only thing outstanding', () => {
+  /**
+   * Profile does not nag about the selfie. It is not an unfinished registration and it does
+   * not gate anything this screen offers: the one ticket that needs it asks for it itself.
+   */
+  it('says nothing about a missing selfie once the form is done', async () => {
+    await signInAndComplete();
     useAuthStore.setState({
-      status: 'signed-in',
-      user: {
-        ...emptyForeignUser(),
-        fullName: 'Yasmin El Sayed',
-        email: 'yasmin@email.com',
-        dateOfBirth: '1996-04-11',
-        gender: 'female',
-        selfieUploaded: false,
-        profileComplete: false,
-      },
-      setupDeferred: true,
+      user: { ...useAuthStore.getState().user!, selfieUploaded: false, selfieUrl: null },
     });
     renderWithProviders(<ProfileTabScreen />);
 
-    expect(screen.getByText('Finish setup: selfie')).toBeTruthy();
-    fireEvent.press(screen.getByText('Finish setup: selfie'));
-    expect(mockRouter.push).toHaveBeenCalledWith('/(onboarding)/selfie');
+    expect(screen.queryByText(/Finish setup/)).toBeNull();
+    expect(screen.queryByText(/selfie/i)).toBeNull();
   });
 
   /**

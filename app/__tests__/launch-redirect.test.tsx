@@ -43,9 +43,9 @@ function user(overrides: Partial<CurrentUser> = {}): CurrentUser {
   } as CurrentUser;
 }
 
-/** Everything but the selfie, which is the state the exit off that screen leaves behind. */
-function owesSelfie(): CurrentUser {
-  return user({ selfieUploaded: false, profileComplete: false, status: 'pending_profile' });
+/** An account that stepped out of the profile form, which is the only step left to owe. */
+function owesProfile(): CurrentUser {
+  return user({ email: null, profileComplete: false, status: 'pending_profile' });
 }
 
 beforeEach(() => {
@@ -103,27 +103,28 @@ describe('Launch redirect', () => {
   });
 
   it('resumes an unfinished account at the step it still owes', () => {
-    useAuthStore.setState({ status: 'signed-in', user: owesSelfie() });
-    renderWithProviders(<Index />);
-    expect(hrefs).toEqual(['/(onboarding)/selfie']);
-  });
-
-  it('resumes at the profile form when more than the selfie is outstanding', () => {
-    useAuthStore.setState({
-      status: 'signed-in',
-      user: user({ email: null, selfieUploaded: false, profileComplete: false }),
-    });
+    useAuthStore.setState({ status: 'signed-in', user: owesProfile() });
     renderWithProviders(<Index />);
     expect(hrefs).toEqual(['/(onboarding)/profile']);
   });
 
   /**
-   * The rejection, in its second form. Someone who declined the selfie is registered, so
-   * Welcome and its "Skip login" link are out of reach: putting the same demand back in
+   * A missing selfie is not an unfinished registration any more. It is asked for on the
+   * entry pass that needs it (CLAUDE.md rule 3), so launch must not route anyone to a camera.
+   */
+  it('does not send an account without a selfie into onboarding', () => {
+    useAuthStore.setState({ status: 'signed-in', user: user({ selfieUploaded: false }) });
+    renderWithProviders(<Index />);
+    expect(hrefs).toEqual(['/(tabs)/discover']);
+  });
+
+  /**
+   * The rejection, in its second form. Someone who declined the profile form is registered,
+   * so Welcome and its "Skip login" link are out of reach: putting the same demand back in
    * front of them on every cold start walls a registered user out of a public catalogue.
    */
   it('lets an account that already declined a step go straight to browsing', () => {
-    useAuthStore.setState({ status: 'signed-in', user: owesSelfie(), setupDeferred: true });
+    useAuthStore.setState({ status: 'signed-in', user: owesProfile(), setupDeferred: true });
     renderWithProviders(<Index />);
     expect(hrefs).toEqual(['/(tabs)/discover']);
   });

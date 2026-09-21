@@ -14,8 +14,10 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    `EXCLUDED_COUNTRIES` in `src/lib/phone.ts` and in the backend's phone normalizer.
 2. **A ticket can exist before its owner.** Guests are attached _by phone_ from contacts;
    their ticket binds when they register that number. There are no claim codes.
-3. **The selfie is the anti-fraud control.** Captured at registration; required for a usable
-   ticket.
+3. **The selfie is the anti-fraud control, and it is asked for once, at the QR.** A holder
+   meets the camera when they open an entry pass, on the ticket that needs it, and never
+   before: not to browse, not to register, not to pay. It is required for a *usable ticket*
+   (`usageStatus: selfie_required` until it exists), never for an account or an order.
 4. **The system acts, it never confirms.** No screen may reveal whether a phone number is
    registered. Registered and unregistered guests get identical UI, identical copy, identical
    timing. Never branch UI on "user exists".
@@ -23,10 +25,12 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
 6. **Non-users are reached over WhatsApp by the backend**, never by the app.
 7. **Never compute prices client-side.** The server is authoritative. Mock prices live in
    `src/api/mock/`, never in a screen or component.
-8. **Profile completeness gates purchase** — full name, email, date of birth, gender, area,
-   and selfie. Email _verification_ gates nothing. The living area is only asked of, and only
-   required of, an Egyptian number: `areas` are Egyptian governorates, so there is no answer
-   to give from abroad. Use `requiresLivingArea` rather than testing the country by hand.
+8. **Profile completeness gates purchase** — full name, email, date of birth, gender, area.
+   Email _verification_ gates nothing, and neither does the selfie (rule 3). The living area
+   is only asked of, and only required of, an Egyptian number: `areas` are Egyptian
+   governorates, so there is no answer to give from abroad. Use `requiresLivingArea` rather
+   than testing the country by hand. Registration is therefore two steps: number, then the
+   form.
 9. **Payments (P1):** follow the Paymob React Native SDK documentation exactly. Customize the
    sheet (`setAppName`, `setButtonBackgroundColor`, `setButtonTextColor`, …) _before_ calling
    `Paymob.presentPayVC(clientSecret, publicKey)`, and drive the payment outcome from
