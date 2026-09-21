@@ -20,6 +20,8 @@ import type {
   UpdateProfileInput,
 } from '../api/types';
 import { getAuthSessionGeneration, isCurrentSignedInSession, useAuthStore } from '../stores/auth';
+import { useConsentStore } from '../stores/consent';
+import { prepareAcquisitionDeviceForOtp } from '../services/attribution/acquisition-attribution';
 
 /**
  * The only data surface screens are allowed to touch. Each hook wraps one api method, so
@@ -77,8 +79,14 @@ export function useVerifyOtp() {
   const setUser = useAuthStore((s) => s.setUser);
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (input: { phoneNumber: string; code: string; deviceId?: string }) =>
-      api.auth.verifyOtp(input.phoneNumber, input.code, input.deviceId),
+    mutationFn: async (input: { phoneNumber: string; code: string; deviceId?: string }) => {
+      const deviceId =
+        input.deviceId ??
+        (useConsentStore.getState().status === 'granted'
+          ? await prepareAcquisitionDeviceForOtp()
+          : undefined);
+      return api.auth.verifyOtp(input.phoneNumber, input.code, deviceId);
+    },
     onSuccess: async (result) => {
       // OTP verification returns a minimal UserProjectionDto. Fetch the full profile projection
       // after persisting the new tokens so onboarding receives all required fields.

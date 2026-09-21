@@ -55,4 +55,7 @@ export const SECURE_KEYS = {
    * feature's availability, the other is a person's choice within it. See `src/stores/flags.ts`.
    */
   allowGuestBrowsing: 'sukun.allowGuestBrowsing',
+  acquisitionDeviceId: 'sukun.acquisition.deviceId',
+  acquisitionDeviceIdentityInvalid: 'sukun.acquisition.deviceIdentityInvalid',
+  acquisitionAttributionState: 'sukun.acquisition.attributionState',
 } as const;
