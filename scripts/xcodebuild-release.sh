@@ -9,8 +9,11 @@
 #     A new one can push the team over Apple's limit of two and tempt a revoke, which would
 #     take EAS's builds down with it.
 #
-# The identity print at the end is the check that signing took: an App Store upload needs
-# "Apple Distribution", and anything else is a build that will be refused.
+# The signing identity is taken from the profile itself rather than named here. Apple has
+# issued distribution certificates under two common names, "Apple Distribution" and the older
+# "iPhone Distribution", and the one EAS holds for this team is the older kind, so a
+# hardcoded name matched nothing and the archive failed with "no signing certificate found".
+# The profile's own certificate hash cannot be wrong about which key signs this build.
 set -euo pipefail
 
 export LANG="${LANG:-en_US.UTF-8}"
@@ -35,10 +38,17 @@ mkdir -p "$EXPORT_DIR"
 PROFILE_PLIST="$(security cms -D -i "$PROFILE")"
 PROFILE_UUID="$(echo "$PROFILE_PLIST" | plutil -extract UUID raw -o - -)"
 PROFILE_NAME="$(echo "$PROFILE_PLIST" | plutil -extract Name raw -o - -)"
+PROFILE_CERT_SHA1="$(echo "$PROFILE_PLIST" | plutil -extract DeveloperCertificates.0 raw -o - - \
+  | base64 -D | shasum -a 1 | awk '{print toupper($1)}')"
+if ! security find-identity -v -p codesigning | grep -q "$PROFILE_CERT_SHA1"; then
+  echo "The profile's certificate is not in the keychain. Import the .p12 EAS holds for it." >&2
+  exit 1
+fi
 INSTALLED="$HOME/Library/MobileDevice/Provisioning Profiles"
 mkdir -p "$INSTALLED"
 cp "$PROFILE" "$INSTALLED/$PROFILE_UUID.mobileprovision"
 echo "profile: $PROFILE_NAME ($PROFILE_UUID)"
+echo "signing: $(security find-identity -v -p codesigning | grep "$PROFILE_CERT_SHA1" | sed 's/.*"\(.*\)"/\1/')"
 
 # The profile is the same one EAS would build; "production" unless told otherwise.
 EAS_PROFILE="${1:-production}"
@@ -68,7 +78,7 @@ xcodebuild archive \
   CODE_SIGN_STYLE=Manual \
   DEVELOPMENT_TEAM="$SUKUN_TEAM_ID" \
   PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
-  CODE_SIGN_IDENTITY="Apple Distribution"
+  CODE_SIGN_IDENTITY="$PROFILE_CERT_SHA1"
 
 # manageAppVersionAndBuildNumber must stay false: left on, Xcode rewrites the build number
 # during export and the number App Store Connect receives stops being the one we chose.

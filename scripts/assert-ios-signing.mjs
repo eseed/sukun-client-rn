@@ -30,22 +30,44 @@ if (!fs.existsSync(PROFILE)) {
   note(`No provisioning profile at ${PROFILE}`);
 } else {
   const decoded = execFileSync('security', ['cms', '-D', '-i', PROFILE]);
-  const plist = JSON.parse(
-    execFileSync('plutil', ['-convert', 'json', '-o', '-', '-'], { input: decoded }).toString(),
-  );
 
-  const appId = plist.Entitlements?.['application-identifier'] ?? '';
+  /*
+   * Read the profile one key at a time rather than converting it whole.
+   *
+   * `plutil -convert json` cannot represent the `<data>` certificates or the `<date>` expiry
+   * a provisioning profile always carries, so it fails with "Invalid object in plist for JSON
+   * format" on every real profile, taking this script down with it before a single check
+   * runs. `-extract ... raw` has no such trouble: it prints data as base64 and dates as
+   * ISO 8601, and exits non-zero for a key path the profile does not have, which is how an
+   * absent one is told from an empty one.
+   */
+  const extract = (keyPath) => {
+    try {
+      return execFileSync('plutil', ['-extract', keyPath, 'raw', '-o', '-', '-'], {
+        input: decoded,
+        stdio: ['pipe', 'pipe', 'ignore'],
+      })
+        .toString()
+        .trim();
+    } catch {
+      return null;
+    }
+  };
+  /** `-extract` on an array prints its length. */
+  const count = (keyPath) => Number.parseInt(extract(keyPath) ?? '', 10) || 0;
+
+  const appId = extract('Entitlements.application-identifier') ?? '';
   if (!appId.endsWith(`.${BUNDLE_ID}`)) {
     note(`Profile is for "${appId.split('.').slice(1).join('.')}", not ${BUNDLE_ID}`);
   }
 
   // An App Store profile provisions no specific devices. One that lists devices is an ad hoc
   // or development profile, which uploads and is then rejected.
-  if (Array.isArray(plist.ProvisionedDevices)) {
+  if (extract('ProvisionedDevices') !== null) {
     note('Profile lists devices, so it is development or ad hoc, not App Store');
   }
 
-  const expires = new Date(plist.ExpirationDate);
+  const expires = new Date(extract('ExpirationDate') ?? '');
   if (Number.isFinite(expires.valueOf()) && expires < new Date()) {
     note(`Profile expired on ${expires.toISOString().slice(0, 10)}`);
   } else if (Number.isFinite(expires.valueOf())) {
@@ -53,13 +75,20 @@ if (!fs.existsSync(PROFILE)) {
     if (days < 21) console.warn(`Warning: the provisioning profile expires in ${days} days.`);
   }
 
-  if (plist.TeamIdentifier && config.SUKUN_TEAM_ID && !plist.TeamIdentifier.includes(config.SUKUN_TEAM_ID)) {
+  const teams = Array.from({ length: count('TeamIdentifier') }, (_, i) =>
+    extract(`TeamIdentifier.${i}`),
+  );
+  if (teams.length > 0 && config.SUKUN_TEAM_ID && !teams.includes(config.SUKUN_TEAM_ID)) {
     note(`Profile belongs to a different team than SUKUN_TEAM_ID`);
   }
 
-  profileCertHashes = (plist.DeveloperCertificates ?? []).map((der) =>
-    crypto.createHash('sha1').update(Buffer.from(der, 'base64')).digest('hex').toUpperCase(),
-  );
+  profileCertHashes = Array.from({ length: count('DeveloperCertificates') }, (_, i) =>
+    extract(`DeveloperCertificates.${i}`),
+  )
+    .filter(Boolean)
+    .map((der) =>
+      crypto.createHash('sha1').update(Buffer.from(der, 'base64')).digest('hex').toUpperCase(),
+    );
   if (profileCertHashes.length === 0) note('Profile carries no certificate');
 }
 
