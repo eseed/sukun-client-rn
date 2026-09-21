@@ -9,6 +9,11 @@
 #     A new one can push the team over Apple's limit of two and tempt a revoke, which would
 #     take EAS's builds down with it.
 #
+# `-jobs 4` caps the compile parallelism. Left unbounded, xcodebuild fans out across every
+# core, a swift-frontend gets killed under the memory pressure, and the build dies with
+# "the following command failed with exit code 0 but produced no further output" naming a
+# pod that compiles perfectly well on its own. Capping it is what made the archive finish.
+#
 # The signing identity is taken from the profile itself rather than named here. Apple has
 # issued distribution certificates under two common names, "Apple Distribution" and the older
 # "iPhone Distribution", and the one EAS holds for this team is the older kind, so a
@@ -75,6 +80,7 @@ xcodebuild archive \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE" \
   -quiet \
+  -jobs 4 \
   CODE_SIGN_STYLE=Manual \
   DEVELOPMENT_TEAM="$SUKUN_TEAM_ID" \
   PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
