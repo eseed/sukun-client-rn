@@ -27,16 +27,24 @@ const ATTRIBUTION_STATE = {
 type KochavaInstance = InstanceType<typeof KochavaMeasurement>;
 
 let consentEnabled = false;
+let consentGeneration = 0;
 let sdkInstance: KochavaInstance | null = null;
 let sdkLoadPromise: Promise<KochavaInstance | null> | null = null;
+let sdkLoadGeneration: number | null = null;
 let sdkUnavailable = false;
 let registrationPromise: Promise<boolean> | null = null;
 let processingPromise: Promise<void> | null = null;
+let processingGeneration: number | null = null;
+let pendingProcessingGeneration: number | null = null;
 let foregroundSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
 const reportedIssues = new Set<string>();
 
 function isNativePlatform(): boolean {
   return Platform.OS === 'ios' || Platform.OS === 'android';
+}
+
+function isConsentGenerationActive(generation: number): boolean {
+  return consentEnabled && generation === consentGeneration;
 }
 
 function recordIssue(reason: string): void {
@@ -46,42 +54,58 @@ function recordIssue(reason: string): void {
   console.warn(`[attribution] ${reason}`);
 }
 
-async function getKochavaInstance(): Promise<KochavaInstance | null> {
-  if (sdkInstance) return sdkInstance;
-  if (sdkUnavailable || !consentEnabled) return null;
-  if (sdkLoadPromise) return sdkLoadPromise;
+function loadKochavaMeasurement(): typeof import('react-native-kochava-measurement') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('react-native-kochava-measurement') as typeof import('react-native-kochava-measurement');
+}
 
-  sdkLoadPromise = (async () => {
+async function getKochavaInstance(generation: number): Promise<KochavaInstance | null> {
+  if (!isConsentGenerationActive(generation)) return null;
+  if (sdkInstance) return sdkInstance;
+  if (sdkUnavailable) return null;
+  if (sdkLoadPromise && sdkLoadGeneration === generation) return sdkLoadPromise;
+
+  const loadPromise = (async () => {
     // Kochava's JS entrypoint uses getEnforcing at import time. Check the TurboModule registry
     // first so Expo Go or a stale dev client degrades without a fatal module-load error.
     if (!TurboModuleRegistry.get<TurboModule>('KochavaMeasurement')) {
-      sdkUnavailable = true;
-      recordIssue('native module unavailable in this build');
+      if (isConsentGenerationActive(generation)) {
+        sdkUnavailable = true;
+        recordIssue('native module unavailable in this build');
+      }
       return null;
     }
 
-    const { KochavaMeasurement, KochavaMeasurementLogLevel } =
-      await import('react-native-kochava-measurement');
-    if (!consentEnabled) return null;
+    const { KochavaMeasurement, KochavaMeasurementLogLevel } = loadKochavaMeasurement();
+    // Consent may be revoked while loading. Only the current consent generation may start it.
+    if (!isConsentGenerationActive(generation)) return null;
 
     const instance = KochavaMeasurement.instance;
     instance.setLogLevel(KochavaMeasurementLogLevel.None);
     instance.registerAndroidAppGuid(ANDROID_APP_GUID);
     instance.registerAppleAppGuid(APPLE_APP_GUID);
+    if (!isConsentGenerationActive(generation)) return null;
     instance.start();
     sdkInstance = instance;
     return instance;
-  })()
-    .catch(() => {
+  })().catch(() => {
+    if (isConsentGenerationActive(generation)) {
       sdkUnavailable = true;
       recordIssue('SDK initialization failed');
-      return null;
-    })
-    .finally(() => {
-      sdkLoadPromise = null;
-    });
+    }
+    return null;
+  });
 
-  return sdkLoadPromise;
+  let currentLoadPromise: Promise<KochavaInstance | null>;
+  currentLoadPromise = loadPromise.finally(() => {
+    if (sdkLoadPromise === currentLoadPromise) {
+      sdkLoadPromise = null;
+      sdkLoadGeneration = null;
+    }
+  });
+  sdkLoadPromise = currentLoadPromise;
+  sdkLoadGeneration = generation;
+  return currentLoadPromise;
 }
 
 function isTransientRegistrationFailure(error: unknown): boolean {
@@ -186,6 +210,7 @@ async function handleSubmissionFailure(error: unknown): Promise<void> {
 }
 
 async function submitObservation(
+  generation: number,
   deviceId: string,
   payload: object,
   providerInstallationId?: string,
@@ -200,10 +225,9 @@ async function submitObservation(
   };
 
   try {
-    const response = await submitKochavaAttribution(deviceId, input);
-    await rememberAttributionState(
-      response.status === 'attributed' ? ATTRIBUTION_STATE.delivered : ATTRIBUTION_STATE.pending,
-    );
+    if (!isConsentGenerationActive(generation)) return;
+    await submitKochavaAttribution(deviceId, input);
+    await rememberAttributionState(ATTRIBUTION_STATE.delivered);
     return;
   } catch (error) {
     if (!(error instanceof ApiError) || error.status !== 404) {
@@ -213,24 +237,22 @@ async function submitObservation(
   }
 
   // A missing registration can be repaired once; never loop on DEVICE_NOT_FOUND.
-  if (!(await ensureDeviceRegistered()) || !consentEnabled) return;
+  if (!isConsentGenerationActive(generation)) return;
+  if (!(await ensureDeviceRegistered()) || !isConsentGenerationActive(generation)) return;
   try {
-    const response = await submitKochavaAttribution(deviceId, input);
-    await rememberAttributionState(
-      response.status === 'attributed' ? ATTRIBUTION_STATE.delivered : ATTRIBUTION_STATE.pending,
-    );
+    await submitKochavaAttribution(deviceId, input);
+    await rememberAttributionState(ATTRIBUTION_STATE.delivered);
   } catch (error) {
     await handleSubmissionFailure(error);
   }
 }
 
-async function processPendingAttribution(): Promise<void> {
-  if (!consentEnabled || !isNativePlatform()) return;
+async function processPendingAttribution(generation: number): Promise<void> {
+  if (!isConsentGenerationActive(generation) || !isNativePlatform()) return;
   if (API_MODE !== 'live') return;
 
   const deviceId = await withTimeout(getOrCreateSukunDeviceId(), 3_000);
-  if (!deviceId || !consentEnabled) return;
-  if (!(await ensureDeviceRegistered()) || !consentEnabled) return;
+  if (!deviceId || !isConsentGenerationActive(generation)) return;
 
   const attributionState = await getAttributionState();
   if (
@@ -239,12 +261,13 @@ async function processPendingAttribution(): Promise<void> {
   ) {
     return;
   }
+  if (!(await ensureDeviceRegistered()) || !isConsentGenerationActive(generation)) return;
 
   const instance = sdkInstance;
   if (!instance) return;
 
   const result = await withTimeout(instance.retrieveInstallAttribution(), 15_000);
-  if (!result || !result.retrieved || !consentEnabled) return;
+  if (!result || !result.retrieved || !isConsentGenerationActive(generation)) return;
 
   // Pass Kochava's provider object unchanged. The actual native raw shape remains a device-level
   // integration gate; no envelope is synthesized here to match backend examples.
@@ -256,47 +279,72 @@ async function processPendingAttribution(): Promise<void> {
   }
 
   const installId = await withTimeout(instance.retrieveInstallId(), 5_000);
-  if (!consentEnabled) return;
-  await submitObservation(deviceId, payload, installId?.trim() || undefined);
+  if (!isConsentGenerationActive(generation)) return;
+  await submitObservation(generation, deviceId, payload, installId?.trim() || undefined);
 }
 
-function runInBackground(): void {
-  if (!consentEnabled || processingPromise) return;
-  processingPromise = processPendingAttribution()
-    .catch(() => recordIssue('attribution initialization deferred'))
+function runInBackground(generation: number): void {
+  if (!isConsentGenerationActive(generation) || !sdkInstance) return;
+  if (processingPromise) {
+    if (processingGeneration !== generation) pendingProcessingGeneration = generation;
+    return;
+  }
+
+  processingGeneration = generation;
+  const processPromise = processPendingAttribution(generation)
+    .catch(() => {
+      if (isConsentGenerationActive(generation)) recordIssue('attribution initialization deferred');
+    })
     .finally(() => {
+      if (processingGeneration !== generation) return;
       processingPromise = null;
+      processingGeneration = null;
+      const pendingGeneration = pendingProcessingGeneration;
+      pendingProcessingGeneration = null;
+      if (pendingGeneration !== null) runInBackground(pendingGeneration);
     });
+  processingPromise = processPromise;
 }
 
 /** Start on consent grant and retry pending provider/backend work when the app returns active. */
 export function initializeAcquisitionAttribution(): () => void {
   if (API_MODE !== 'live' || !isNativePlatform()) return () => undefined;
 
+  const generation = ++consentGeneration;
   consentEnabled = true;
   void (async () => {
     const deviceId = await withTimeout(getOrCreateSukunDeviceId(), 1_000);
     if (!deviceId) recordIssue('installation identity unavailable');
-    if (!consentEnabled) return;
-    const instance = await getKochavaInstance();
-    if (!instance || !consentEnabled) return;
+    if (!isConsentGenerationActive(generation)) return;
+    const instance = await getKochavaInstance(generation);
+    if (!instance || !isConsentGenerationActive(generation)) return;
     instance.setSleep(false);
-    runInBackground();
-  })().catch(() => recordIssue('SDK startup deferred'));
+    runInBackground(generation);
+  })().catch(() => {
+    if (isConsentGenerationActive(generation)) recordIssue('SDK startup deferred');
+  });
 
   foregroundSubscription?.remove();
   foregroundSubscription = AppState.addEventListener('change', (state) => {
-    if (state === 'active' && consentEnabled) runInBackground();
+    if (state === 'active' && isConsentGenerationActive(generation)) runInBackground(generation);
   });
 
   return () => {
+    if (generation !== consentGeneration) return;
     consentEnabled = false;
+    consentGeneration += 1;
+    pendingProcessingGeneration = null;
     foregroundSubscription?.remove();
     foregroundSubscription = null;
+    const instance = sdkInstance;
+    sdkInstance = null;
+    sdkLoadPromise = null;
+    sdkLoadGeneration = null;
+    sdkUnavailable = false;
     try {
-      sdkInstance?.setSleep(true);
+      instance?.shutdown(true);
     } catch {
-      recordIssue('SDK pause failed');
+      recordIssue('SDK shutdown failed');
     }
   };
 }
@@ -313,11 +361,9 @@ export async function prepareAcquisitionDeviceForOtp(): Promise<string | undefin
       const identityInvalid = await getSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid);
       if (identityInvalid === 'true') return undefined;
 
-      await withTimeout(ensureDeviceRegistered(), OTP_REGISTRATION_WAIT_MS);
-      const invalidAfterRegistration = await getSecureItem(
-        SECURE_KEYS.acquisitionDeviceIdentityInvalid,
-      );
-      return invalidAfterRegistration === 'true' ? undefined : deviceId;
+      const registered = await withTimeout(ensureDeviceRegistered(), OTP_REGISTRATION_WAIT_MS);
+      if (registered !== true) return undefined;
+      return deviceId;
     } catch {
       recordIssue('installation identity unavailable during OTP');
       return undefined;
