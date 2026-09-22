@@ -2,14 +2,14 @@
   "expo": {
     "name": "Sukun",
     "slug": "sukun-client-rn",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "sukun",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "27",
+      "buildNumber": "28",
       "bundleIdentifier": "co.sukunwellness",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
