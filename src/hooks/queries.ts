@@ -21,7 +21,10 @@ import type {
 } from '../api/types';
 import { getAuthSessionGeneration, isCurrentSignedInSession, useAuthStore } from '../stores/auth';
 import { useConsentStore } from '../stores/consent';
-import { prepareAcquisitionDeviceForOtp } from '../services/attribution/acquisition-attribution';
+import {
+  ensureAcquisitionDeviceRegistered,
+  prepareAcquisitionDeviceForOtp,
+} from '../services/attribution/acquisition-attribution';
 
 /**
  * The only data surface screens are allowed to touch. Each hook wraps one api method, so
@@ -70,7 +73,13 @@ export function useAreas() {
 
 export function useRequestOtp() {
   return useMutation({
-    mutationFn: (phoneNumber: string) => api.auth.requestOtp(phoneNumber),
+    mutationFn: (phoneNumber: string) => {
+      // Register the installation while the code is on its way. The bind at verification only
+      // finds a device the backend already knows, and a new account gets one chance at it, so
+      // the OTP delivery window is the room this has to land in.
+      if (useConsentStore.getState().status === 'granted') ensureAcquisitionDeviceRegistered();
+      return api.auth.requestOtp(phoneNumber);
+    },
   });
 }
 

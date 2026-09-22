@@ -26,7 +26,7 @@ import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
-import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, resumeAfterOnboarding, useAuthStore } from '../../src/stores/auth';
 import {
   countryRequiresLivingArea,
   DEFAULT_COUNTRY,
@@ -96,12 +96,8 @@ export default function ProfileFormScreen() {
 
   useEffect(() => {
     if (!user) return;
-    if (user.profileComplete) {
-      router.replace('/(tabs)/discover');
-      return;
-    }
-    if (missingProfileFields(user).length === 0) {
-      router.replace('/(tabs)/discover');
+    if (user.profileComplete || missingProfileFields(user).length === 0) {
+      resumeAfterOnboarding(router);
     }
   }, [router, user]);
 
@@ -158,7 +154,7 @@ export default function ProfileFormScreen() {
         track('signup_completed');
         useAuthStore.getState().setIsNewUser(false);
       }
-      router.replace('/(tabs)/discover');
+      resumeAfterOnboarding(router);
     } catch (err) {
       setSubmitError(messageForError(err));
     }
@@ -171,6 +167,9 @@ export default function ProfileFormScreen() {
    */
   async function onBrowseInstead() {
     track('profile_setup_deferred');
+    // Whatever checkout sent them here is dropped along with the form: purchase is gated on a
+    // complete profile (CLAUDE.md rule 8), so resuming it would only stop them again.
+    useAuthStore.getState().setPendingCheckoutEventId(null);
     await useAuthStore.getState().deferSetup();
     router.replace('/(tabs)/discover');
   }

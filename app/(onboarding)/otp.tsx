@@ -15,7 +15,12 @@ import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatCountdown } from '../../src/lib/format';
 import { formatPhoneForDisplay, isValidPhone } from '../../src/lib/phone';
-import { missingProfileFields, ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
+import {
+  missingProfileFields,
+  ONBOARDING_RESUME_ROUTE,
+  resumeAfterOnboarding,
+  useAuthStore,
+} from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
 const CODE_LENGTH = 4;
@@ -77,9 +82,12 @@ export default function OtpScreen() {
       // so a user it calls incomplete with nothing locally missing is taken at the server's
       // word and let through rather than parked on a form with nothing to fill in.
       if (!user?.profileComplete && missingProfileFields(user).length > 0) {
+        // The profile step still owes something, so it, not this screen, resumes the checkout.
         router.replace(ONBOARDING_RESUME_ROUTE);
       } else {
-        router.replace('/(tabs)/discover');
+        // A sign-in the pass step asked for goes back to the pass step, with the tier and the
+        // quantity they picked still in the draft. See `pendingCheckoutEventId`.
+        resumeAfterOnboarding(router);
       }
     } catch (err) {
       setError(messageForError(err));

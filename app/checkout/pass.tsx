@@ -14,10 +14,12 @@ import {
   Text,
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
+import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { useEvent } from '../../src/hooks/queries';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
 import { formatEgp } from '../../src/lib/format';
+import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
@@ -30,13 +32,19 @@ import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
  * the next screen. Multiplying the tier price here to fill the gap would be exactly the
  * client-side arithmetic CLAUDE.md rule 7 forbids, so the first total the buyer sees is the
  * server's, on the review step.
+ *
+ * Which is also why this is the one checkout screen anybody may read. Everything on it comes
+ * from `public/events/:id` and the local draft, so a visitor with no account can see every tier
+ * and every price. The account is asked for at Continue, because the step after this one creates
+ * the cart, and from there on every call is authenticated. Where they were is remembered, so
+ * signing in returns them to this pass with their tier and quantity still chosen.
  */
 export default function ChoosePassScreen() {
   const router = useRouter();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const validEventId =
     typeof eventId === 'string' && /^[A-Za-z0-9_-]+$/.test(eventId) ? eventId : undefined;
-  const access = useCheckoutAccess();
+  const access = useCheckoutAccess({ browsable: true });
 
   const tierId = useCheckoutStore((s) => s.tierId);
   const quantity = useCheckoutStore((s) => s.quantity);
@@ -111,6 +119,28 @@ export default function ChoosePassScreen() {
     selectedTier?.isPurchasable && quantity <= quantityLimit && !eventUnavailable,
   );
 
+  const onContinue = () => {
+    if (!canContinue) return;
+    if (access.needs === null) {
+      router.push(`/checkout/guests?eventId=${validEventId}`);
+      return;
+    }
+
+    // Come back here afterwards rather than to Discover: they chose a tier and a quantity
+    // before anyone asked who they were, and losing that is the cost that would make asking
+    // late worse than asking early.
+    useAuthStore.getState().setPendingCheckoutEventId(validEventId);
+    track('checkout_account_required', {
+      event_id: validEventId,
+      reason: access.needs,
+    });
+    // `gate=1` tells Welcome it is standing in front of something, so its escape reads
+    // "Not now, browse events" rather than "Skip login". See welcome.tsx.
+    router.push(
+      access.needs === 'sign-in' ? '/(onboarding)/welcome?gate=1' : ONBOARDING_RESUME_ROUTE,
+    );
+  };
+
   return (
     <Screen contentStyle={styles.content}>
       <FlowerCorner top={52} />
@@ -176,13 +206,19 @@ export default function ChoosePassScreen() {
       <View style={styles.spacer} />
 
       <Button
-        label="Continue"
+        label={CONTINUE_LABEL[access.needs ?? 'ready']}
         disabled={!canContinue}
-        onPress={() => router.push(`/checkout/guests?eventId=${validEventId}`)}
+        onPress={onContinue}
       />
     </Screen>
   );
 }
+
+const CONTINUE_LABEL = {
+  ready: 'Continue',
+  'sign-in': 'Sign in to continue',
+  profile: 'Finish your profile to continue',
+} as const;
 
 const styles = StyleSheet.create({
   content: {
