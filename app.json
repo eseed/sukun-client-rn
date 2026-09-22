@@ -65,6 +65,7 @@
         }
       ],
       "./plugins/withPaymobAndroid.js",
+      "./plugins/withKochavaGoogleMeasurement.js",
       "./plugins/withAndroidBuildTuning.js",
       "./plugins/withAndroidSigning.js",
       [

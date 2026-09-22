@@ -9,8 +9,8 @@ export interface AnalyticsConsentScreenProps {
 /**
  * Shown once, before any other screen, to users `requiresPrivacyConsentGate` places in the
  * EU/EEA/UK/Switzerland or California. Everyone else is not asked, so the launch market sees
- * no extra step. The answer gates every analytics SDK at once — events and session replay
- * alike — through `enableAnalytics`/`disableAnalytics`.
+ * no extra step. The answer gates every analytics SDK at once — events, session replay, and
+ * Kochava acquisition attribution — through the consent state.
  *
  * The copy has to name what "Allow" actually starts, and for a while it did not: it asked for
  * "anonymous usage data" while the yes answer began Microsoft Clarity screen recording
@@ -31,9 +31,13 @@ export function AnalyticsConsentScreen({ onAnswer }: AnalyticsConsentScreenProps
         <Text style={styles.copy}>
           We&apos;d like to collect anonymous usage data, like which screens you visit and where you
           drop off, and to record replays of your screen activity, so we can see what is broken or
-          confusing. This is processed for us by Mixpanel and Microsoft Clarity, and never includes
-          your name, email, or phone number. You can turn it off at any time under Analytics &amp;
-          session replay on the Profile tab.
+          confusing. Mixpanel counts usage, Microsoft Clarity records replays, and Kochava measures
+          which Sukun install links lead to an install. With your permission, the app sends
+          Kochava&apos;s install-attribution result and an opaque Sukun installation ID to our
+          backend; after you verify your phone, that installation can be linked to your account. We
+          do not send your name, email, or phone number to Kochava, and this integration does not
+          request IDFA, Google Advertising ID, or Apple&apos;s tracking permission. You can turn it
+          off at any time under Analytics &amp; session replay on the Profile tab.
         </Text>
       </View>
       <View style={styles.footer}>

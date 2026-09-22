@@ -13,7 +13,7 @@ import { useConsentStore } from '../../src/stores/consent';
 import { colors } from '../../src/theme/tokens';
 
 /**
- * Turning analytics and session replay off, and back on.
+ * Turning analytics, session replay, and install attribution off, and back on.
  *
  * Guideline 5.1.1(ii): "Apps must also provide the customer with an easily accessible and
  * understandable way to withdraw consent." The answer was previously taken once, at first
@@ -22,10 +22,10 @@ import { colors } from '../../src/theme/tokens';
  * `requiresPrivacyConsentGate` never prompts and who are therefore opted in by default.
  *
  * Reached from the Profile tab, signed in or not: a visitor with no account is recorded by
- * both SDKs exactly as a signed-in user is, so they need the same control.
+ * every consented SDK exactly as a signed-in user is, so they need the same control.
  *
- * The change takes effect on the tap. `disableAnalytics` pauses Clarity and resets Mixpanel's
- * local identity and queue, so nothing collected before the change is still waiting to go out.
+ * The change takes effect on the tap. It pauses Clarity and Kochava, and resets Mixpanel's local
+ * identity and queue, so nothing collected before the change is still waiting to go out.
  */
 export default function AnalyticsChoicesScreen() {
   const router = useRouter();
@@ -47,24 +47,26 @@ export default function AnalyticsChoicesScreen() {
       </View>
 
       <Text variant="bodyMuted" style={styles.blurb}>
-        We use Mixpanel to count how features are used, and Microsoft Clarity to record replays
-        of the screens you visit, so we can find what is broken or confusing. Both identify you
-        only by an internal Sukun account id. We never put your name, email or phone number into
-        an analytics event.
+        We use Mixpanel to count how features are used and Microsoft Clarity to record replays of
+        the screens you visit. Kochava measures which Sukun install links lead to an install. If you
+        allow it, the app sends Kochava&apos;s attribution result and an opaque Sukun installation
+        ID to our backend, where it can be linked to your account after phone verification. Your
+        name, email, and phone number are not sent to Kochava. This integration does not request
+        IDFA, Google Advertising ID, or Apple&apos;s tracking permission.
       </Text>
 
       <Card radiusSize={14} style={styles.card}>
         <Checkbox
           checked={granted}
           onToggle={() => void answer(!granted)}
-          label="Allow analytics and session replay"
+          label="Allow analytics, session replay and attribution"
         />
       </Card>
 
       <Text variant="bodyMuted" style={styles.note}>
         {granted
-          ? 'Turning this off stops both the events and the screen replays straight away, and clears anything collected on this device that has not been sent yet. You can turn it back on here at any time.'
-          : 'Analytics and session replay are off. Nothing is being collected, and no replays are being recorded. You can turn them back on here at any time.'}
+          ? 'Turning this off stops analytics, session replay and Kochava attribution on this device. Unsent analytics data is cleared. You can turn them back on here at any time.'
+          : 'Analytics, session replay and Kochava attribution are off on this device. You can turn them back on here at any time.'}
       </Text>
 
       <Text variant="metaSm" color={colors.textMuted} style={styles.note}>

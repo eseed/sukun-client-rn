@@ -78,6 +78,8 @@ interface RequestOptions {
   token?: string;
   /** Set false for a request that must not trigger token rotation. */
   retryOnUnauthorized?: boolean;
+  /** Abort a bounded auxiliary request without affecting authentication or other API calls. */
+  signal?: AbortSignal;
 }
 
 function buildQuery(query: RequestOptions['query']): string {
@@ -208,6 +210,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     form,
     token,
     retryOnUnauthorized = true,
+    signal,
   } = options;
 
   // The app is English-only (CLAUDE.md) — every mobile/public endpoint defaults to Arabic
@@ -223,6 +226,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     method,
     headers,
     body: form ?? (body !== undefined ? JSON.stringify(body) : undefined),
+    signal,
   });
 
   if (response.status === 204) return undefined as T;

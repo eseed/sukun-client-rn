@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnalyticsConsentScreen } from '../src/components/AnalyticsConsentScreen';
+import { initializeAcquisitionAttribution } from '../src/services/attribution/acquisition-attribution';
 import { QueryProvider } from '../src/providers/QueryProvider';
 import { useAuthStore } from '../src/stores/auth';
 import { useConsentStore } from '../src/stores/consent';
@@ -49,6 +50,11 @@ export default function RootLayout() {
   useEffect(() => {
     void loadConsent();
   }, [loadConsent]);
+
+  useEffect(() => {
+    if (consentStatus !== 'granted') return;
+    return initializeAcquisitionAttribution();
+  }, [consentStatus]);
 
   useEffect(() => {
     void loadFlags();
