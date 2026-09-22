@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "28",
+      "buildNumber": "29",
       "bundleIdentifier": "co.sukunwellness",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
