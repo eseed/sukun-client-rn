@@ -8,7 +8,12 @@ import {
 } from '../../api/live/acquisition';
 import { ApiError } from '../../api/live/http';
 import { APP_VERSION } from '../../lib/build-info';
-import { getSecureItem, SECURE_KEYS, setSecureItem } from '../../lib/secure-storage';
+import {
+  deleteSecureItem,
+  getSecureItem,
+  SECURE_KEYS,
+  setSecureItem,
+} from '../../lib/secure-storage';
 import type { KochavaMeasurement } from 'react-native-kochava-measurement';
 import { getOrCreateSukunDeviceId } from './device-id';
 
@@ -16,8 +21,17 @@ const ANDROID_APP_GUID = 'kosukun-wellness-android-esks14i46';
 const APPLE_APP_GUID = 'kosukun-wellness-ios-8xxgp1jzs';
 const KOCHAVA_SDK_VERSION = '5.0.0';
 const REGISTRATION_RETRY_DELAY_MS = 750;
-const OTP_REGISTRATION_WAIT_MS = 2_500;
-const OTP_PREPARATION_TIMEOUT_MS = 3_000;
+const ATTRIBUTION_STATE_VERSION = 2;
+const ATTRIBUTION_POLICY_VERSION = 'kochava-raw-v2';
+const CORRECTION_RETRY_DELAYS_MS = [
+  5 * 60_000,
+  30 * 60_000,
+  2 * 60 * 60_000,
+  8 * 60 * 60_000,
+  24 * 60 * 60_000,
+] as const;
+const CONTRACT_RETRY_DELAYS_MS = [60 * 60_000, 6 * 60 * 60_000, 24 * 60 * 60_000] as const;
+const TRANSIENT_RETRY_DELAYS_MS = [60_000, 15 * 60_000, 60 * 60_000, 6 * 60 * 60_000] as const;
 const ATTRIBUTION_STATE = {
   pending: 'pending',
   delivered: 'delivered',
@@ -25,6 +39,17 @@ const ATTRIBUTION_STATE = {
 } as const;
 
 type KochavaInstance = InstanceType<typeof KochavaMeasurement>;
+type AttributionDeliveryState = (typeof ATTRIBUTION_STATE)[keyof typeof ATTRIBUTION_STATE];
+type AttributionRetryKind = 'correction' | 'contract' | 'transient';
+
+interface StoredAttributionState {
+  version: number;
+  delivery: AttributionDeliveryState;
+  retryKind: AttributionRetryKind | null;
+  retryAttempts: number;
+  nextRetryAt: number | null;
+  blockedPolicyVersion: string | null;
+}
 
 let consentEnabled = false;
 let consentGeneration = 0;
@@ -123,14 +148,17 @@ async function registerDeviceOnce(deviceId: string): Promise<boolean> {
       platform,
       ...(APP_VERSION ? { appVersion: APP_VERSION } : {}),
     });
+    await setSecureItem(SECURE_KEYS.acquisitionDeviceRegistered, deviceId);
     return true;
   } catch (error) {
     if (error instanceof ApiError && error.code === 'DEVICE_PLATFORM_MISMATCH') {
+      await deleteSecureItem(SECURE_KEYS.acquisitionDeviceRegistered);
       await setSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid, 'true');
       recordIssue('installation identity platform mismatch');
       return false;
     }
     if (error instanceof ApiError && error.status === 400) {
+      await deleteSecureItem(SECURE_KEYS.acquisitionDeviceRegistered);
       await setSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid, 'true');
       recordIssue('device registration rejected; retry stopped');
       return false;
@@ -181,31 +209,123 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | nul
   });
 }
 
-async function getAttributionState(): Promise<string> {
-  return (
-    (await getSecureItem(SECURE_KEYS.acquisitionAttributionState)) ?? ATTRIBUTION_STATE.pending
-  );
+function createAttributionState(
+  delivery: AttributionDeliveryState = ATTRIBUTION_STATE.pending,
+): StoredAttributionState {
+  return {
+    version: ATTRIBUTION_STATE_VERSION,
+    delivery,
+    retryKind: null,
+    retryAttempts: 0,
+    nextRetryAt: null,
+    blockedPolicyVersion: null,
+  };
+}
+
+async function getAttributionState(): Promise<StoredAttributionState> {
+  const stored = await getSecureItem(SECURE_KEYS.acquisitionAttributionState);
+  if (!stored) return createAttributionState();
+
+  if (stored === ATTRIBUTION_STATE.pending) return createAttributionState();
+  // Older releases stored only a string and could not distinguish an attributed result from an
+  // organic/unavailable result or a retryable contract error. Re-open those states once so the
+  // versioned policy below can classify them safely.
+  if (stored === ATTRIBUTION_STATE.delivered || stored === ATTRIBUTION_STATE.rejected) {
+    return createAttributionState();
+  }
+
+  try {
+    const parsed = JSON.parse(stored) as Partial<StoredAttributionState>;
+    if (
+      parsed.version !== ATTRIBUTION_STATE_VERSION ||
+      !Object.values(ATTRIBUTION_STATE).includes(parsed.delivery as AttributionDeliveryState) ||
+      !['correction', 'contract', 'transient', null].includes(parsed.retryKind as string | null) ||
+      typeof parsed.retryAttempts !== 'number' ||
+      (parsed.nextRetryAt !== null && typeof parsed.nextRetryAt !== 'number') ||
+      (parsed.blockedPolicyVersion !== null && typeof parsed.blockedPolicyVersion !== 'string')
+    ) {
+      return createAttributionState();
+    }
+
+    const state = parsed as StoredAttributionState;
+    if (state.blockedPolicyVersion && state.blockedPolicyVersion !== ATTRIBUTION_POLICY_VERSION) {
+      return createAttributionState();
+    }
+    return state;
+  } catch {
+    return createAttributionState();
+  }
 }
 
 async function rememberAttributionState(
-  state: (typeof ATTRIBUTION_STATE)[keyof typeof ATTRIBUTION_STATE],
+  generation: number,
+  state: StoredAttributionState,
 ): Promise<void> {
-  await setSecureItem(SECURE_KEYS.acquisitionAttributionState, state);
+  if (!isConsentGenerationActive(generation)) return;
+  await setSecureItem(SECURE_KEYS.acquisitionAttributionState, JSON.stringify(state));
 }
 
-async function handleSubmissionFailure(error: unknown): Promise<void> {
-  if (error instanceof ApiError && error.status === 400) {
-    await rememberAttributionState(ATTRIBUTION_STATE.rejected);
-    recordIssue('provider payload rejected; retry stopped');
+function withRetry(
+  state: StoredAttributionState,
+  kind: AttributionRetryKind,
+  delays: readonly number[],
+): StoredAttributionState {
+  const attempts = state.retryKind === kind ? state.retryAttempts : 0;
+  const nextAttempt = attempts + 1;
+  const delay = delays[attempts];
+  if (delay === undefined) {
+    return {
+      ...state,
+      retryKind: kind,
+      retryAttempts: nextAttempt,
+      nextRetryAt: null,
+      blockedPolicyVersion: kind === 'contract' ? ATTRIBUTION_POLICY_VERSION : null,
+    };
+  }
+
+  return {
+    ...state,
+    retryKind: kind,
+    retryAttempts: nextAttempt,
+    nextRetryAt: Date.now() + delay,
+    blockedPolicyVersion: null,
+  };
+}
+
+async function rememberAcceptedObservation(
+  generation: number,
+  status: 'attributed' | 'organic' | 'unavailable',
+): Promise<void> {
+  const state = await getAttributionState();
+  if (status === 'attributed') {
+    await rememberAttributionState(generation, createAttributionState(ATTRIBUTION_STATE.delivered));
     return;
   }
 
+  const nextState = withRetry(
+    { ...state, delivery: ATTRIBUTION_STATE.delivered },
+    'correction',
+    CORRECTION_RETRY_DELAYS_MS,
+  );
+  await rememberAttributionState(generation, nextState);
+}
+
+async function handleSubmissionFailure(generation: number, error: unknown): Promise<void> {
+  if (!isConsentGenerationActive(generation)) return;
+  const state = await getAttributionState();
   if (error instanceof ApiError && error.status > 0 && error.status < 500 && error.status !== 408) {
-    await rememberAttributionState(ATTRIBUTION_STATE.rejected);
-    recordIssue('attribution submission rejected; retry stopped');
+    await rememberAttributionState(
+      generation,
+      withRetry(state, 'contract', CONTRACT_RETRY_DELAYS_MS),
+    );
+    recordIssue('attribution submission rejected; retry bounded');
     return;
   }
 
+  await rememberAttributionState(
+    generation,
+    withRetry(state, 'transient', TRANSIENT_RETRY_DELAYS_MS),
+  );
   recordIssue('attribution submission deferred');
 }
 
@@ -226,12 +346,12 @@ async function submitObservation(
 
   try {
     if (!isConsentGenerationActive(generation)) return;
-    await submitKochavaAttribution(deviceId, input);
-    await rememberAttributionState(ATTRIBUTION_STATE.delivered);
+    const response = await submitKochavaAttribution(deviceId, input);
+    await rememberAcceptedObservation(generation, response.status);
     return;
   } catch (error) {
     if (!(error instanceof ApiError) || error.status !== 404) {
-      await handleSubmissionFailure(error);
+      await handleSubmissionFailure(generation, error);
       return;
     }
   }
@@ -240,10 +360,10 @@ async function submitObservation(
   if (!isConsentGenerationActive(generation)) return;
   if (!(await ensureDeviceRegistered()) || !isConsentGenerationActive(generation)) return;
   try {
-    await submitKochavaAttribution(deviceId, input);
-    await rememberAttributionState(ATTRIBUTION_STATE.delivered);
+    const response = await submitKochavaAttribution(deviceId, input);
+    await rememberAcceptedObservation(generation, response.status);
   } catch (error) {
-    await handleSubmissionFailure(error);
+    await handleSubmissionFailure(generation, error);
   }
 }
 
@@ -255,9 +375,13 @@ async function processPendingAttribution(generation: number): Promise<void> {
   if (!deviceId || !isConsentGenerationActive(generation)) return;
 
   const attributionState = await getAttributionState();
+  if (attributionState.delivery === ATTRIBUTION_STATE.rejected) return;
+  if (attributionState.blockedPolicyVersion === ATTRIBUTION_POLICY_VERSION) return;
+  if (attributionState.retryKind !== null && attributionState.nextRetryAt === null) return;
+  if (attributionState.nextRetryAt !== null && attributionState.nextRetryAt > Date.now()) return;
   if (
-    attributionState === ATTRIBUTION_STATE.delivered ||
-    attributionState === ATTRIBUTION_STATE.rejected
+    attributionState.delivery === ATTRIBUTION_STATE.delivered &&
+    attributionState.retryKind === null
   ) {
     return;
   }
@@ -273,7 +397,7 @@ async function processPendingAttribution(generation: number): Promise<void> {
   // integration gate; no envelope is synthesized here to match backend examples.
   const payload = result.raw;
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    await rememberAttributionState(ATTRIBUTION_STATE.rejected);
+    await rememberAttributionState(generation, createAttributionState(ATTRIBUTION_STATE.rejected));
     recordIssue('provider payload shape rejected; retry stopped');
     return;
   }
@@ -361,14 +485,13 @@ export async function prepareAcquisitionDeviceForOtp(): Promise<string | undefin
       const identityInvalid = await getSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid);
       if (identityInvalid === 'true') return undefined;
 
-      const registered = await withTimeout(ensureDeviceRegistered(), OTP_REGISTRATION_WAIT_MS);
-      if (registered !== true) return undefined;
-      return deviceId;
+      const registered = await getSecureItem(SECURE_KEYS.acquisitionDeviceRegistered);
+      return registered === deviceId ? deviceId : undefined;
     } catch {
       recordIssue('installation identity unavailable during OTP');
       return undefined;
     }
   })();
 
-  return (await withTimeout(preparation, OTP_PREPARATION_TIMEOUT_MS)) ?? undefined;
+  return preparation;
 }

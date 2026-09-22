@@ -56,6 +56,7 @@ export const SECURE_KEYS = {
    */
   allowGuestBrowsing: 'sukun.allowGuestBrowsing',
   acquisitionDeviceId: 'sukun.acquisition.deviceId',
+  acquisitionDeviceRegistered: 'sukun.acquisition.deviceRegistered',
   acquisitionDeviceIdentityInvalid: 'sukun.acquisition.deviceIdentityInvalid',
   acquisitionAttributionState: 'sukun.acquisition.attributionState',
 } as const;

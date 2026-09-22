@@ -48,6 +48,7 @@ jest.mock('../../../lib/secure-storage', () => ({
     mockStore.set(key, value);
   }),
   SECURE_KEYS: {
+    acquisitionDeviceRegistered: 'registered-device',
     acquisitionDeviceIdentityInvalid: 'invalid-device',
     acquisitionAttributionState: 'attribution-state',
   },
@@ -63,13 +64,17 @@ jest.mock('react-native-kochava-measurement', () => {
   };
 });
 
-function loadService(): typeof import('../acquisition-attribution') {
+function loadService(nativeModuleAvailable = true): typeof import('../acquisition-attribution') {
   let service!: typeof import('../acquisition-attribution');
   jest.resetModules();
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const reactNative = require('react-native') as typeof import('react-native');
   (reactNative.Platform as { OS: string }).OS = 'android';
-  reactNative.NativeModules.KochavaMeasurement = {};
+  if (nativeModuleAvailable) {
+    reactNative.NativeModules.KochavaMeasurement = {};
+  } else {
+    delete (reactNative.NativeModules as Record<string, unknown>).KochavaMeasurement;
+  }
   jest.spyOn(reactNative.AppState, 'addEventListener').mockImplementation((_event, listener) => {
     mockAppStateListener = listener;
     return { remove: jest.fn() };
@@ -83,6 +88,10 @@ function loadService(): typeof import('../acquisition-attribution') {
 async function flushPromises(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
+}
+
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 100; i += 1) await Promise.resolve();
 }
 
 beforeEach(() => {
@@ -101,6 +110,11 @@ beforeEach(() => {
   mockOnSdkModuleLoad = null;
   mockAppStateListener = null;
   jest.restoreAllMocks();
+});
+
+afterEach(() => {
+  jest.clearAllTimers();
+  jest.useRealTimers();
 });
 
 describe('Kochava consent and acquisition lifecycle', () => {
@@ -132,6 +146,16 @@ describe('Kochava consent and acquisition lifecycle', () => {
     expect(mockRegisterAndroidGuid).not.toHaveBeenCalled();
   });
 
+  it('degrades safely when the native Kochava module is absent', async () => {
+    const service = loadService(false);
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
+
+    expect(mockStart).not.toHaveBeenCalled();
+    expect(mockRegisterDevice).not.toHaveBeenCalled();
+    revoke();
+  });
+
   it('does not submit an in-flight provider result after consent is revoked', async () => {
     let resolveAttribution: ((value: { retrieved: boolean; raw: object }) => void) | undefined;
     mockRetrieveInstallAttribution.mockImplementation(
@@ -153,27 +177,36 @@ describe('Kochava consent and acquisition lifecycle', () => {
     expect(mockSubmitAttribution).not.toHaveBeenCalled();
   });
 
-  it('only returns the OTP device ID after the backend confirms registration', async () => {
+  it('repairs a missing backend registration and retries attribution once', async () => {
+    mockRetrieveInstallAttribution.mockResolvedValue({
+      retrieved: true,
+      raw: { data: { attribution: true } },
+    });
+    mockSubmitAttribution
+      .mockRejectedValueOnce(new MockApiError(404, 'DEVICE_NOT_FOUND'))
+      .mockResolvedValueOnce({ status: 'attributed' });
     const service = loadService();
-    await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBe(DEVICE_ID);
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
 
-    mockRegisterDevice.mockRejectedValueOnce(new MockApiError(409, 'DEVICE_PLATFORM_MISMATCH'));
-    await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBeUndefined();
+    expect(mockRegisterDevice).toHaveBeenCalledTimes(2);
+    expect(mockSubmitAttribution).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(mockStore.get('attribution-state') ?? '{}')).toMatchObject({
+      delivery: 'delivered',
+      retryKind: null,
+    });
+    revoke();
   });
 
-  it('omits the OTP device ID when device registration times out', async () => {
-    jest.useFakeTimers();
-    try {
-      mockRegisterDevice.mockImplementationOnce(() => new Promise(() => undefined));
-      const service = loadService();
-      const preparation = service.prepareAcquisitionDeviceForOtp();
+  it('only returns the OTP device ID after the backend confirms registration', async () => {
+    const service = loadService();
+    mockStore.set('registered-device', DEVICE_ID);
+    await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBe(DEVICE_ID);
+    expect(mockRegisterDevice).not.toHaveBeenCalled();
 
-      await jest.advanceTimersByTimeAsync(2_500);
-      await expect(preparation).resolves.toBeUndefined();
-    } finally {
-      jest.clearAllTimers();
-      jest.useRealTimers();
-    }
+    mockStore.delete('registered-device');
+    await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBeUndefined();
+    expect(mockRegisterDevice).not.toHaveBeenCalled();
   });
 
   it('marks an accepted organic observation delivered and does not resubmit on foreground', async () => {
@@ -190,12 +223,96 @@ describe('Kochava consent and acquisition lifecycle', () => {
     expect(mockRetrieveInstallAttribution).toHaveBeenCalledTimes(1);
     expect(mockRetrieveInstallId).toHaveBeenCalledTimes(1);
     expect(mockSubmitAttribution).toHaveBeenCalledTimes(1);
-    expect(mockStore.get('attribution-state')).toBe('delivered');
+    const state = JSON.parse(mockStore.get('attribution-state') ?? '{}') as {
+      delivery?: string;
+      retryKind?: string | null;
+      retryAttempts?: number;
+      nextRetryAt?: number | null;
+    };
+    expect(state.delivery).toBe('delivered');
+    expect(state.retryKind).toBe('correction');
+    expect(state.retryAttempts).toBe(1);
+    expect(state.nextRetryAt).toEqual(expect.any(Number));
 
     mockAppStateListener?.('active');
     await flushPromises();
     expect(mockSubmitAttribution).toHaveBeenCalledTimes(1);
     expect(mockRegisterDevice).toHaveBeenCalledTimes(1);
+    revoke();
+  });
+
+  it('polls organic correction only at bounded retry times', async () => {
+    mockRetrieveInstallAttribution.mockResolvedValue({
+      retrieved: true,
+      raw: { data: { attribution: false } },
+    });
+    const service = loadService();
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
+
+    jest.useFakeTimers();
+    const initialState = JSON.parse(mockStore.get('attribution-state') ?? '{}') as {
+      nextRetryAt: number;
+    };
+    jest.setSystemTime(initialState.nextRetryAt + 1);
+    mockAppStateListener?.('active');
+    await flushMicrotasks();
+    expect(mockSubmitAttribution).toHaveBeenCalledTimes(2);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const state = JSON.parse(mockStore.get('attribution-state') ?? '{}') as {
+        nextRetryAt: number;
+      };
+      jest.setSystemTime(state.nextRetryAt + 1);
+      mockAppStateListener?.('active');
+      await flushMicrotasks();
+    }
+    expect(mockSubmitAttribution).toHaveBeenCalledTimes(6);
+
+    mockAppStateListener?.('active');
+    await flushMicrotasks();
+    expect(mockSubmitAttribution).toHaveBeenCalledTimes(6);
+
+    revoke();
+  });
+
+  it('backs off generic contract errors instead of permanently rejecting the installation', async () => {
+    mockRetrieveInstallAttribution.mockResolvedValue({
+      retrieved: true,
+      raw: { data: { attribution: false } },
+    });
+    mockSubmitAttribution.mockRejectedValue(new MockApiError(400, 'INVALID_ATTRIBUTION_PAYLOAD'));
+    const service = loadService();
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
+
+    const state = JSON.parse(mockStore.get('attribution-state') ?? '{}') as {
+      delivery?: string;
+      retryKind?: string | null;
+      retryAttempts?: number;
+      nextRetryAt?: number | null;
+    };
+    expect(state.delivery).toBe('pending');
+    expect(state.retryKind).toBe('contract');
+    expect(state.retryAttempts).toBe(1);
+    expect(state.nextRetryAt).toEqual(expect.any(Number));
+    revoke();
+  });
+
+  it('reopens legacy terminal strings under the versioned attribution policy', async () => {
+    mockStore.set('attribution-state', 'rejected');
+    mockRetrieveInstallAttribution.mockResolvedValue({
+      retrieved: true,
+      raw: { data: { attribution: true } },
+    });
+    const service = loadService();
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
+
+    expect(mockSubmitAttribution).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mockStore.get('attribution-state') ?? '{}')).toMatchObject({
+      delivery: 'delivered',
+    });
     revoke();
   });
 });
