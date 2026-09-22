@@ -122,6 +122,14 @@ IPA="$(find "$EXPORT_DIR" -maxdepth 1 -name '*.ipa' | head -1)"
 [ -n "$IPA" ] || { echo "export produced no .ipa"; exit 1; }
 mv -f "$IPA" "$EXPORT_DIR/Sukun.ipa"
 
+# Two things a build can be wrong about while being signed, versioned and uploadable: the
+# environment it bundled, and whether it adopts the UIScene life cycle. Android has checked
+# the first since versionCode 2 shipped staging's backend to Play production; iOS never did,
+# and 2.0.2 (28) was rejected under Guideline 2.1(a) for the second. Both are checked on the
+# .ipa, because that is the artifact that gets uploaded.
+node "$ROOT/scripts/assert-bundle-env.mjs" "$EAS_PROFILE" ios "$EXPORT_DIR/Sukun.ipa"
+node "$ROOT/scripts/assert-ios-scene-support.mjs" "$EXPORT_DIR/Sukun.ipa"
+
 APP="$ARCHIVE/Products/Applications/Sukun.app"
 echo
 echo "built: $EXPORT_DIR/Sukun.ipa"
