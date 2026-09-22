@@ -16,6 +16,8 @@ const ANDROID_APP_GUID = 'kosukun-wellness-android-esks14i46';
 const APPLE_APP_GUID = 'kosukun-wellness-ios-8xxgp1jzs';
 const KOCHAVA_SDK_VERSION = '5.0.0';
 const REGISTRATION_RETRY_DELAY_MS = 750;
+const IDENTITY_TIMEOUT_MS = 1_000;
+const OTP_REGISTRATION_WAIT_MS = 2_000;
 const ATTRIBUTION_STATE_VERSION = 2;
 const ATTRIBUTION_POLICY_VERSION = 'kochava-raw-v2';
 const CORRECTION_RETRY_DELAYS_MS = [
@@ -53,6 +55,7 @@ let sdkLoadPromise: Promise<KochavaInstance | null> | null = null;
 let sdkLoadGeneration: number | null = null;
 let sdkUnavailable = false;
 let registrationPromise: Promise<boolean> | null = null;
+let deviceRegistered = false;
 let processingPromise: Promise<void> | null = null;
 let processingGeneration: number | null = null;
 let pendingProcessingGeneration: number | null = null;
@@ -132,9 +135,13 @@ function isTransientRegistrationFailure(error: unknown): boolean {
   return !(error instanceof ApiError) || error.status === 408 || error.status >= 500;
 }
 
+/** Set when the backend refused the installation itself, so the ID must never be sent again. */
+async function isDeviceIdentityInvalid(): Promise<boolean> {
+  return (await getSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid)) === 'true';
+}
+
 async function registerDeviceOnce(deviceId: string): Promise<boolean> {
-  const invalidIdentity = await getSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid);
-  if (invalidIdentity === 'true') return false;
+  if (await isDeviceIdentityInvalid()) return false;
 
   const platform = Platform.OS as AcquisitionPlatform;
   try {
@@ -159,7 +166,14 @@ async function registerDeviceOnce(deviceId: string): Promise<boolean> {
   }
 }
 
-function ensureDeviceRegistered(): Promise<boolean> {
+/**
+ * Register the installation once per process. Both the launch path and the OTP path ask for
+ * this, and either may get there first, so the latch is what keeps a normal launch to a single
+ * call. `force` is for the one case that has to go again: a submission refused with
+ * DEVICE_NOT_FOUND means the backend lost the row this latch is remembering.
+ */
+function ensureDeviceRegistered(force = false): Promise<boolean> {
+  if (deviceRegistered && !force) return Promise.resolve(true);
   if (registrationPromise) return registrationPromise;
 
   registrationPromise = (async () => {
@@ -168,7 +182,8 @@ function ensureDeviceRegistered(): Promise<boolean> {
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await registerDeviceOnce(deviceId);
+        deviceRegistered = await registerDeviceOnce(deviceId);
+        return deviceRegistered;
       } catch (error) {
         if (!isTransientRegistrationFailure(error) || attempt === 1) {
           recordIssue('device registration deferred');
@@ -350,7 +365,7 @@ async function submitObservation(
 
   // A missing registration can be repaired once; never loop on DEVICE_NOT_FOUND.
   if (!isConsentGenerationActive(generation)) return;
-  if (!(await ensureDeviceRegistered()) || !isConsentGenerationActive(generation)) return;
+  if (!(await ensureDeviceRegistered(true)) || !isConsentGenerationActive(generation)) return;
   try {
     const response = await submitKochavaAttribution(deviceId, input);
     await rememberAcceptedObservation(generation, response.status);
@@ -438,9 +453,14 @@ export function initializeAcquisitionAttribution(): () => void {
   const generation = ++consentGeneration;
   consentEnabled = true;
   void (async () => {
-    const deviceId = await withTimeout(getOrCreateSukunDeviceId(), 1_000);
+    const deviceId = await withTimeout(getOrCreateSukunDeviceId(), IDENTITY_TIMEOUT_MS);
     if (!deviceId) recordIssue('installation identity unavailable');
     if (!isConsentGenerationActive(generation)) return;
+    // Registration is what the bind at OTP verification looks for, so it cannot wait on the
+    // provider SDK. It used to be reached only through `processPendingAttribution`, which never
+    // runs without a native module, so a build missing one registered nothing at all and every
+    // account created on it lost its acquisition link.
+    void ensureDeviceRegistered().catch(() => undefined);
     const instance = await getKochavaInstance(generation);
     if (!instance || !isConsentGenerationActive(generation)) return;
     instance.setSleep(false);
@@ -474,24 +494,48 @@ export function initializeAcquisitionAttribution(): () => void {
   };
 }
 
-/** Best-effort device registration before OTP; timeout never prevents authentication. */
+/**
+ * Start registering this installation while a code is on its way, so the bind at verification
+ * has something to find. Nothing waits on this, and a failure is silent.
+ */
+export function ensureAcquisitionDeviceRegistered(): void {
+  if (API_MODE !== 'live' || !isNativePlatform()) return;
+  void ensureDeviceRegistered().catch(() => undefined);
+}
+
+/**
+ * Resolve the installation ID that OTP verification sends, giving a registration that is still
+ * in flight a bounded moment to land.
+ *
+ * The backend binds an account to an installation by looking the ID up, and ignores one it has
+ * never seen, so an unregistered ID loses the link in silence. A new account gets exactly one
+ * chance at it: `registrationDeviceId` is written on first verification and never revisited.
+ * Registration is started at launch and again when the code is requested, so by this point it
+ * has almost always finished; the wait here only covers a launch that went straight into
+ * onboarding, or one whose network came back in between.
+ *
+ * The wait is bounded because authentication must never hang behind it, and the ID is returned
+ * whether or not registration succeeded, because it is also what scopes the session's refresh
+ * token to this device. The one ID withheld is the one the backend has refused outright, which
+ * belongs to another installation and would bind the wrong device.
+ */
 export async function prepareAcquisitionDeviceForOtp(): Promise<string | undefined> {
   if (API_MODE !== 'live' || !isNativePlatform()) return undefined;
 
-  const preparation = (async (): Promise<string | undefined> => {
-    try {
-      const deviceId = await getOrCreateSukunDeviceId();
-      if (!deviceId) return undefined;
-
-      const identityInvalid = await getSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid);
-      if (identityInvalid === 'true') return undefined;
-
-      return deviceId;
-    } catch {
+  try {
+    const deviceId = await withTimeout(getOrCreateSukunDeviceId(), IDENTITY_TIMEOUT_MS);
+    if (!deviceId) {
       recordIssue('installation identity unavailable during OTP');
       return undefined;
     }
-  })();
+    if (await isDeviceIdentityInvalid()) return undefined;
 
-  return preparation;
+    await withTimeout(ensureDeviceRegistered(), OTP_REGISTRATION_WAIT_MS);
+
+    // Registration is how the refusal above is learned, so the marker is read again after it.
+    return (await isDeviceIdentityInvalid()) ? undefined : deviceId;
+  } catch {
+    recordIssue('installation identity unavailable during OTP');
+    return undefined;
+  }
 }

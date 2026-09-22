@@ -145,13 +145,14 @@ describe('Kochava consent and acquisition lifecycle', () => {
     expect(mockRegisterAndroidGuid).not.toHaveBeenCalled();
   });
 
-  it('degrades safely when the native Kochava module is absent', async () => {
+  it('still registers the installation when the native Kochava module is absent', async () => {
     const service = loadService(false);
     const revoke = service.initializeAcquisitionAttribution();
     await flushPromises();
 
     expect(mockStart).not.toHaveBeenCalled();
-    expect(mockRegisterDevice).not.toHaveBeenCalled();
+    expect(mockRegisterDevice).toHaveBeenCalledTimes(1);
+    await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBe(DEVICE_ID);
     revoke();
   });
 
@@ -197,14 +198,51 @@ describe('Kochava consent and acquisition lifecycle', () => {
     revoke();
   });
 
-  it('returns the local OTP device ID without waiting for registration', async () => {
+  it('holds the OTP device ID until an in-flight registration lands', async () => {
+    let completeRegistration: (() => void) | undefined;
+    mockRegisterDevice.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          completeRegistration = () => resolve();
+        }),
+    );
     const service = loadService();
-    mockRegisterDevice.mockImplementation(() => new Promise(() => undefined));
     const revoke = service.initializeAcquisitionAttribution();
     await flushPromises();
     expect(mockRegisterDevice).toHaveBeenCalledTimes(1);
 
-    await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBe(DEVICE_ID);
+    let settled: string | undefined | 'pending' = 'pending';
+    const preparation = service.prepareAcquisitionDeviceForOtp().then((value) => {
+      settled = value;
+      return value;
+    });
+    await flushPromises();
+    expect(settled).toBe('pending');
+
+    completeRegistration?.();
+    await expect(preparation).resolves.toBe(DEVICE_ID);
+    revoke();
+  });
+
+  it('hands the OTP device ID over anyway once the registration wait is spent', async () => {
+    mockRegisterDevice.mockImplementation(() => new Promise(() => undefined));
+    const service = loadService();
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
+
+    jest.useFakeTimers();
+    const preparation = service.prepareAcquisitionDeviceForOtp();
+    await flushMicrotasks();
+    jest.advanceTimersByTime(2_000);
+
+    await expect(preparation).resolves.toBe(DEVICE_ID);
+    revoke();
+  });
+
+  it('withholds an installation ID the backend has refused outright', async () => {
+    const service = loadService();
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
 
     mockStore.set('invalid-device', 'true');
     await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBeUndefined();
