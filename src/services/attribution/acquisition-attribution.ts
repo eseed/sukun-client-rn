@@ -8,12 +8,7 @@ import {
 } from '../../api/live/acquisition';
 import { ApiError } from '../../api/live/http';
 import { APP_VERSION } from '../../lib/build-info';
-import {
-  deleteSecureItem,
-  getSecureItem,
-  SECURE_KEYS,
-  setSecureItem,
-} from '../../lib/secure-storage';
+import { getSecureItem, SECURE_KEYS, setSecureItem } from '../../lib/secure-storage';
 import type { KochavaMeasurement } from 'react-native-kochava-measurement';
 import { getOrCreateSukunDeviceId } from './device-id';
 
@@ -148,17 +143,14 @@ async function registerDeviceOnce(deviceId: string): Promise<boolean> {
       platform,
       ...(APP_VERSION ? { appVersion: APP_VERSION } : {}),
     });
-    await setSecureItem(SECURE_KEYS.acquisitionDeviceRegistered, deviceId);
     return true;
   } catch (error) {
     if (error instanceof ApiError && error.code === 'DEVICE_PLATFORM_MISMATCH') {
-      await deleteSecureItem(SECURE_KEYS.acquisitionDeviceRegistered);
       await setSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid, 'true');
       recordIssue('installation identity platform mismatch');
       return false;
     }
     if (error instanceof ApiError && error.status === 400) {
-      await deleteSecureItem(SECURE_KEYS.acquisitionDeviceRegistered);
       await setSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid, 'true');
       recordIssue('device registration rejected; retry stopped');
       return false;
@@ -391,7 +383,16 @@ async function processPendingAttribution(generation: number): Promise<void> {
   if (!instance) return;
 
   const result = await withTimeout(instance.retrieveInstallAttribution(), 15_000);
-  if (!result || !result.retrieved || !isConsentGenerationActive(generation)) return;
+  if (!result || !result.retrieved) {
+    if (isConsentGenerationActive(generation)) {
+      await rememberAttributionState(
+        generation,
+        withRetry(attributionState, 'transient', TRANSIENT_RETRY_DELAYS_MS),
+      );
+    }
+    return;
+  }
+  if (!isConsentGenerationActive(generation)) return;
 
   // Pass Kochava's provider object unchanged. The actual native raw shape remains a device-level
   // integration gate; no envelope is synthesized here to match backend examples.
@@ -485,8 +486,7 @@ export async function prepareAcquisitionDeviceForOtp(): Promise<string | undefin
       const identityInvalid = await getSecureItem(SECURE_KEYS.acquisitionDeviceIdentityInvalid);
       if (identityInvalid === 'true') return undefined;
 
-      const registered = await getSecureItem(SECURE_KEYS.acquisitionDeviceRegistered);
-      return registered === deviceId ? deviceId : undefined;
+      return deviceId;
     } catch {
       recordIssue('installation identity unavailable during OTP');
       return undefined;

@@ -48,7 +48,6 @@ jest.mock('../../../lib/secure-storage', () => ({
     mockStore.set(key, value);
   }),
   SECURE_KEYS: {
-    acquisitionDeviceRegistered: 'registered-device',
     acquisitionDeviceIdentityInvalid: 'invalid-device',
     acquisitionAttributionState: 'attribution-state',
   },
@@ -198,15 +197,18 @@ describe('Kochava consent and acquisition lifecycle', () => {
     revoke();
   });
 
-  it('only returns the OTP device ID after the backend confirms registration', async () => {
+  it('returns the local OTP device ID without waiting for registration', async () => {
     const service = loadService();
-    mockStore.set('registered-device', DEVICE_ID);
-    await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBe(DEVICE_ID);
-    expect(mockRegisterDevice).not.toHaveBeenCalled();
+    mockRegisterDevice.mockImplementation(() => new Promise(() => undefined));
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
+    expect(mockRegisterDevice).toHaveBeenCalledTimes(1);
 
-    mockStore.delete('registered-device');
+    await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBe(DEVICE_ID);
+
+    mockStore.set('invalid-device', 'true');
     await expect(service.prepareAcquisitionDeviceForOtp()).resolves.toBeUndefined();
-    expect(mockRegisterDevice).not.toHaveBeenCalled();
+    revoke();
   });
 
   it('marks an accepted organic observation delivered and does not resubmit on foreground', async () => {
@@ -273,6 +275,29 @@ describe('Kochava consent and acquisition lifecycle', () => {
     await flushMicrotasks();
     expect(mockSubmitAttribution).toHaveBeenCalledTimes(6);
 
+    revoke();
+  });
+
+  it('backs off Kochava retrieval when attribution is not ready', async () => {
+    const service = loadService();
+    const revoke = service.initializeAcquisitionAttribution();
+    await flushPromises();
+
+    const state = JSON.parse(mockStore.get('attribution-state') ?? '{}') as {
+      delivery?: string;
+      retryKind?: string | null;
+      retryAttempts?: number;
+      nextRetryAt?: number | null;
+    };
+    expect(mockRetrieveInstallAttribution).toHaveBeenCalledTimes(1);
+    expect(state.delivery).toBe('pending');
+    expect(state.retryKind).toBe('transient');
+    expect(state.retryAttempts).toBe(1);
+    expect(state.nextRetryAt).toEqual(expect.any(Number));
+
+    mockAppStateListener?.('active');
+    await flushPromises();
+    expect(mockRetrieveInstallAttribution).toHaveBeenCalledTimes(1);
     revoke();
   });
 
