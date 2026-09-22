@@ -31,7 +31,6 @@ import { messageForError } from '../../src/lib/errors';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
 import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
-import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
@@ -43,7 +42,6 @@ export default function EventDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const user = useAuthStore((s) => s.user);
   const startCheckout = useCheckoutStore((s) => s.start);
   const [selectedMediaUrl, setSelectedMediaUrl] = useState<string | null>(null);
   // The hero runs full-bleed under the status bar, so nothing ever separates the clock from the
@@ -122,29 +120,24 @@ export default function EventDetailScreen() {
 
   const addonKinds = describeAddonKinds(addonsQuery.data ?? []);
 
+  /**
+   * Straight to the pass step, whoever is asking.
+   *
+   * This used to send anyone without an account to Welcome, which meant the price of a ticket
+   * was behind a sign-in: a visitor could read the whole event and then be asked to register to
+   * find out what it cost. Purchase is still app-only and still gated on a complete profile
+   * (CLAUDE.md rules 5 and 8), but that gate belongs on the step that creates the cart, not on
+   * the one that lists the tiers, and the pass screen now carries it. See `useCheckoutAccess`.
+   */
   function onGetTickets() {
     if (!firstPurchasableTier) return;
-    // Purchase is app-only and gated on a complete profile (CLAUDE.md rules 5 and 8).
-    if (!user) {
-      // `gate=1` tells Welcome it is standing in front of an event rather than opening the app,
-      // so its escape reads "Not now, browse events" instead of "Skip login". See welcome.tsx.
-      router.push('/(onboarding)/welcome?gate=1');
-      return;
-    }
-    // The backend is authoritative for purchase eligibility. A projection can omit profile
-    // fields while still reporting a complete profile, so do not route a complete user through
-    // onboarding just because the local mirror is partial.
-    if (user.profileComplete) {
-      startCheckout(eventId, firstPurchasableTier.id);
-      track('checkout_started', {
-        event_id: eventId,
-        event_slug: eventSlug ?? '',
-        tier_id: firstPurchasableTier.id,
-      });
-      router.push(`/checkout/pass?eventId=${eventId}`);
-      return;
-    }
-    router.push(ONBOARDING_RESUME_ROUTE);
+    startCheckout(eventId, firstPurchasableTier.id);
+    track('checkout_started', {
+      event_id: eventId,
+      event_slug: eventSlug ?? '',
+      tier_id: firstPurchasableTier.id,
+    });
+    router.push(`/checkout/pass?eventId=${eventId}`);
   }
 
   return (

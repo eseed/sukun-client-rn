@@ -1,7 +1,8 @@
 import { AppState } from 'react-native';
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
 import { SOUND_BATH_ID, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
-import { missingProfileFields, useAuthStore } from '../../src/stores/auth';
+import { missingProfileFields, resumeAfterOnboarding, useAuthStore } from '../../src/stores/auth';
+import { useFlagsStore } from '../../src/stores/flags';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
 
@@ -142,7 +143,9 @@ beforeEach(() => {
     user: null,
     pendingPhone: null,
     setupDeferred: false,
+    pendingCheckoutEventId: null,
   });
+  useFlagsStore.setState({ status: 'ready', allowGuestBrowsing: true });
   useCheckoutStore.getState().reset();
 });
 
@@ -1577,5 +1580,94 @@ describe('Component gallery', () => {
     for (const section of ['Colour', 'Type', 'Spacing', 'Buttons', 'Tags & badges', 'Fields']) {
       expect(screen.getByText(section)).toBeTruthy();
     }
+  });
+});
+
+/**
+ * Where the app stops asking for browsing and starts asking for an account.
+ *
+ * It used to be the Get tickets button, which put the price of a ticket behind a sign-in: a
+ * visitor could read an entire event and then be asked to register to find out what it cost.
+ * The gate now sits on the Continue out of the pass step, which is the first thing that needs
+ * the backend for anything (it creates the cart), and everything before it is public data.
+ */
+describe('08 Choose your pass · the account gate', () => {
+  it('lets a visitor with no account read every tier and price', async () => {
+    mockParams.eventId = TULUA_ID;
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+
+    await waitFor(() => expect(screen.getByText('Choose your pass')).toBeTruthy());
+    expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
+    expect(screen.getByText('Day 1 Pass')).toBeTruthy();
+    expect(screen.getAllByText('1,600.00 EGP').length).toBeGreaterThan(0);
+    // Nothing was redirected away: the old gate replaced this screen with Welcome.
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+  });
+
+  it('names the sign-in on the button rather than pretending to continue', async () => {
+    mockParams.eventId = TULUA_ID;
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+
+    await waitFor(() => expect(screen.getByText('Sign in to continue')).toBeTruthy());
+    expect(screen.queryByText('Continue')).toBeNull();
+  });
+
+  it('remembers the event so signing in comes back to the pass, not Discover', async () => {
+    mockParams.eventId = TULUA_ID;
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+    await waitFor(() => expect(screen.getByText('Sign in to continue')).toBeTruthy());
+    fireEvent.press(screen.getByText('Sign in to continue'));
+
+    expect(mockRouter.push).toHaveBeenCalledWith('/(onboarding)/welcome?gate=1');
+    expect(useAuthStore.getState().pendingCheckoutEventId).toBe(TULUA_ID);
+
+    // What the end of onboarding then does with it.
+    resumeAfterOnboarding(mockRouter as never);
+    expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/pass?eventId=${TULUA_ID}`);
+    // Used once: a later sign-in must not be dragged back into this checkout.
+    expect(useAuthStore.getState().pendingCheckoutEventId).toBeNull();
+  });
+
+  it('asks a signed-in account with an unfinished profile for the profile, not a sign-in', async () => {
+    mockParams.eventId = TULUA_ID;
+    useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+
+    await waitFor(() => expect(screen.getByText('Finish your profile to continue')).toBeTruthy());
+    fireEvent.press(screen.getByText('Finish your profile to continue'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/(onboarding)/profile');
+  });
+
+  it('still sends a visitor to Welcome where the guest path is switched off', async () => {
+    mockParams.eventId = TULUA_ID;
+    useFlagsStore.setState({ status: 'ready', allowGuestBrowsing: false });
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith('/(onboarding)/welcome'),
+    );
+    expect(screen.queryByText('Full Weekend Pass')).toBeNull();
+  });
+
+  it('takes a visitor from the event straight to the passes', async () => {
+    mockParams.slug = 'tulua';
+
+    renderWithProviders(<EventDetailScreen />);
+
+    await waitFor(() => expect(screen.getByText('Get tickets')).toBeTruthy());
+    fireEvent.press(screen.getByText('Get tickets'));
+
+    expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/pass?eventId=${TULUA_ID}`);
+    expect(mockRouter.push).not.toHaveBeenCalledWith('/(onboarding)/welcome?gate=1');
   });
 });

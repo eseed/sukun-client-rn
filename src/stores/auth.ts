@@ -1,3 +1,4 @@
+import type { useRouter } from 'expo-router';
 import { create } from 'zustand';
 import { api } from '../api';
 import { setAuthFailureHandler } from '../api/live/http';
@@ -83,10 +84,27 @@ interface AuthState {
    * problem for anyone who signs out.
    */
   guestBrowsing: boolean;
+  /**
+   * The event whose checkout this sign-in interrupted, if it interrupted one.
+   *
+   * A guest may now walk into checkout and pick a pass before anyone asks who they are, so the
+   * sign-in they meet at the Continue button is an interruption, not a destination. Without
+   * this, finishing it would drop them on Discover having lost the event, the tier and the
+   * quantity they had just chosen, which is a worse trade than being stopped at the door.
+   *
+   * An event id rather than a route, so nothing can put an arbitrary path into the router, and
+   * in memory only, like `isNewUser` and unlike `setupDeferred`: it describes one interrupted
+   * journey, and an intent restored from the keychain days later would drop someone into a
+   * checkout they have long forgotten. Cleared when it is used, and on sign-out.
+   */
+  pendingCheckoutEventId: string | null;
 
   restore: () => Promise<void>;
   setPendingPhone: (phone: string | null) => void;
   setIsNewUser: (value: boolean) => void;
+  setPendingCheckoutEventId: (eventId: string | null) => void;
+  /** The pending event, if any, cleared in the same breath so it is only ever used once. */
+  takePendingCheckoutEventId: () => string | null;
   deferSetup: () => Promise<void>;
   browseAsGuest: () => Promise<void>;
   signIn: (
@@ -97,11 +115,12 @@ interface AuthState {
   signOut: (options?: { remote?: boolean }) => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   status: 'loading',
   isNewUser: false,
   setupDeferred: false,
   guestBrowsing: false,
+  pendingCheckoutEventId: null,
   user: null,
   pendingPhone: null,
 
@@ -155,6 +174,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isNewUser: value });
   },
 
+  setPendingCheckoutEventId(eventId) {
+    set({ pendingCheckoutEventId: eventId });
+  },
+
+  takePendingCheckoutEventId() {
+    const eventId = get().pendingCheckoutEventId;
+    if (eventId) set({ pendingCheckoutEventId: null });
+    return eventId;
+  },
+
   /**
    * Record that this user is browsing with an unfinished profile. The session is kept: the
    * number is already verified, and throwing it away would cost the signup this exit exists
@@ -205,7 +234,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   async signOut(options) {
     const generation = ++sessionGeneration;
     clearQueryCache?.();
-    set({ status: 'signed-out', user: null, pendingPhone: null, setupDeferred: false });
+    set({
+      status: 'signed-out',
+      user: null,
+      pendingPhone: null,
+      setupDeferred: false,
+      pendingCheckoutEventId: null,
+    });
     resetAnalytics();
 
     await queueSecureTransition(async () => {
@@ -255,3 +290,23 @@ export function missingProfileFields(user: CurrentUser | null): string[] {
  * on Profile and the event CTA all ask the question and this keeps them asking it in one place.
  */
 export const ONBOARDING_RESUME_ROUTE = '/(onboarding)/profile' as const;
+
+type Router = ReturnType<typeof useRouter>;
+
+/**
+ * Where onboarding lets someone go once it has what it needs: back to the checkout that sent
+ * them here, or to Discover when nothing did.
+ *
+ * Both exits from registration ask this, the one on the OTP screen for a returning account
+ * whose profile is already complete and the one on the profile form for an account that has
+ * just completed it, and they have to answer it the same way or a guest who signed in at the
+ * pass step would be returned to it on one path and dropped on Discover on the other.
+ *
+ * Deliberately not called when the profile step is *deferred*: purchase needs it finished
+ * (CLAUDE.md rule 8), so resuming a checkout there would only stop them again a screen later.
+ */
+export function resumeAfterOnboarding(router: Router): void {
+  const pendingEventId = useAuthStore.getState().takePendingCheckoutEventId();
+  if (pendingEventId) router.replace(`/checkout/pass?eventId=${pendingEventId}`);
+  else router.replace('/(tabs)/discover');
+}
