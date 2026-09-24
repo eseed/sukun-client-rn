@@ -85,7 +85,11 @@ const MESSAGES: Record<string, string> = {
   DUPLICATE_ACTIVE_ORDER: 'You already have an order in progress for this event.',
   CART_ACTIVE_ORDER_EXISTS: 'You already have an order in progress for this event.',
   PAYMENT_ALREADY_COMPLETED: 'This order is already paid. Check your tickets.',
-  PAYMENT_PROVIDER_ERROR: "The payment provider couldn't be reached. Nothing was charged.",
+  // The backend sends 502 when Paymob answered and refused to start the payment, and 503 when
+  // Paymob could not be reached at all. Both leave nothing charged; only the second is an outage.
+  PAYMENT_PROVIDER_ERROR: 'The payment could not be started. Nothing was charged. Try again.',
+  PAYMENT_PROVIDER_UNAVAILABLE:
+    "The payment provider couldn't be reached. Nothing was charged. Try again in a moment.",
   ORDER_HOLD_EXPIRED: 'Your reservation expired before payment. Start the order again.',
   ORDER_NOT_PAYABLE: 'This order can no longer be paid. Start a new one.',
   ORDER_NOT_RETRYABLE: 'This payment cannot be retried. Start a new order.',

@@ -80,6 +80,17 @@ export default function OrderDetailScreen() {
   const eventTitle = event.data?.title ?? 'Event';
   const canCancel = data?.status === 'awaiting_payment';
   const paid = data?.status === 'paid';
+  /*
+   * An unpaid order needs a way back to paying it. The checkout keeps the order only in memory,
+   * so after the app was closed mid-payment this screen was the only place the order still
+   * showed, and it offered nothing but cancelling. The payment screen decides how to pay it.
+   */
+  const payLabel =
+    data?.status === 'awaiting_payment'
+      ? 'Continue to payment'
+      : data?.status === 'failed' || data?.status === 'expired'
+        ? 'Try payment again'
+        : null;
   // Read back from the order's own rate, exactly as the review screen does, so the buyer sees the
   // same "VAT (14%)" they confirmed one step earlier.
   const vatPercent = data?.vatRate ? Math.round(Number(data.vatRate) * 100) : 0;
@@ -215,6 +226,12 @@ export default function OrderDetailScreen() {
               {/* A paid receipt needs somewhere to go: the tickets are what it bought. */}
               {paid ? (
                 <Button label="See my tickets" onPress={() => router.push('/(tabs)/tickets')} />
+              ) : null}
+              {payLabel ? (
+                <Button
+                  label={payLabel}
+                  onPress={() => router.push(`/checkout/payment?orderId=${data.id}` as never)}
+                />
               ) : null}
               {canCancel ? (
                 <Button

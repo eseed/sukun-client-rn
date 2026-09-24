@@ -97,3 +97,17 @@ describe('heldOrderIdFromError', () => {
     expect(heldOrderIdFromError(new HeldOrderError(null))).toBeNull();
   });
 });
+
+describe('payment provider refusals', () => {
+  it('does not blame the connection when Paymob answered and refused', () => {
+    expect(messageForError(apiError('PAYMENT_PROVIDER_ERROR'))).toBe(
+      'The payment could not be started. Nothing was charged. Try again.',
+    );
+  });
+
+  it('names an outage when Paymob could not be reached', () => {
+    expect(messageForError(apiError('PAYMENT_PROVIDER_UNAVAILABLE'))).toBe(
+      "The payment provider couldn't be reached. Nothing was charged. Try again in a moment.",
+    );
+  });
+});
