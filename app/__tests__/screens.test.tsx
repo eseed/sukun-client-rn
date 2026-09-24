@@ -19,6 +19,7 @@ import GuestsScreen from '../checkout/guests';
 import ReviewScreen from '../checkout/review';
 import PaymentScreen from '../checkout/payment';
 import ConfirmationScreen from '../checkout/confirmation';
+import OrderDetailScreen from '../orders/[id]';
 import EntryPassScreen from '../ticket/[id]';
 import DeleteAccountScreen from '../account/delete';
 import TermsScreen from '../legal/terms';
@@ -1653,9 +1654,7 @@ describe('08 Choose your pass · the account gate', () => {
 
     renderWithProviders(<ChoosePassScreen />);
 
-    await waitFor(() =>
-      expect(mockRouter.replace).toHaveBeenCalledWith('/(onboarding)/welcome'),
-    );
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/(onboarding)/welcome'));
     expect(screen.queryByText('Full Weekend Pass')).toBeNull();
   });
 
@@ -1669,5 +1668,134 @@ describe('08 Choose your pass · the account gate', () => {
 
     expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/pass?eventId=${TULUA_ID}`);
     expect(mockRouter.push).not.toHaveBeenCalledWith('/(onboarding)/welcome?gate=1');
+  });
+});
+
+/**
+ * On 24 Sep 2026 a buyer whose card was declined in the Paymob sheet had nothing that worked
+ * for the rest of the hold. The order was still awaiting payment with a failed attempt, which
+ * this screen counted as finished: Pay was disabled, "Try payment again" was sent to a refusal,
+ * and the cancel that would have freed them was hidden.
+ */
+describe('11 Payment after a declined card', () => {
+  const placeTuluaOrder = async () => {
+    await signInAndComplete();
+    const order = await placeOrderViaCart({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    mockParams.orderId = order.id;
+    return order;
+  };
+  const statusIs = (partial: Record<string, unknown>) =>
+    jest.spyOn(mockApi.payments, 'status').mockResolvedValue({
+      orderStatus: 'awaiting_payment',
+      paymentStatus: 'failed',
+      ticketsIssued: 0,
+      paidAt: null,
+      ...partial,
+    } as never);
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('offers a retry and a cancel for an order still awaiting payment', async () => {
+    await placeTuluaOrder();
+    statusIs({});
+    const retry = jest.spyOn(mockApi.payments, 'retry');
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() => expect(screen.getByText('Try payment again')).toBeTruthy());
+    expect(screen.getByText('Cancel this order')).toBeTruthy();
+    expect(screen.getByText('The payment did not go through. Nothing was charged.')).toBeTruthy();
+
+    fireEvent.press(screen.getByText('Try payment again'));
+    await waitFor(() => expect(retry).toHaveBeenCalled());
+  });
+
+  it('retries a failed order through retry-payment', async () => {
+    const order = await placeTuluaOrder();
+    statusIs({ orderStatus: 'failed' });
+    const retry = jest.spyOn(mockApi.payments, 'retry');
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() => expect(screen.getByText('Try payment again')).toBeTruthy());
+    fireEvent.press(screen.getByText('Try payment again'));
+
+    await waitFor(() => expect(retry).toHaveBeenCalledWith(order.id));
+  });
+
+  it('waits, rather than offering a retry, while the last attempt is still settling', async () => {
+    await placeTuluaOrder();
+    statusIs({ paymentStatus: 'confirming' });
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Your payment is still being processed. This can take a moment…'),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText('Try payment again')).toBeNull();
+    expect(screen.queryByText('Cancel this order')).toBeNull();
+  });
+
+  it('offers nothing for an order that was cancelled', async () => {
+    await placeTuluaOrder();
+    statusIs({ orderStatus: 'cancelled', paymentStatus: 'failed' });
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText('This order was cancelled and cannot be paid.')).toBeTruthy(),
+    );
+    expect(screen.queryByText('Try payment again')).toBeNull();
+    expect(screen.queryByText('Cancel this order')).toBeNull();
+  });
+
+  it('says a refused start charged nothing, and does not blame the connection', async () => {
+    await placeTuluaOrder();
+    statusIs({ orderStatus: 'failed' });
+    jest
+      .spyOn(mockApi.payments, 'retry')
+      .mockRejectedValue(
+        Object.assign(new Error('refused'), { code: 'PAYMENT_PROVIDER_ERROR', status: 502 }),
+      );
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() => expect(screen.getByText('Try payment again')).toBeTruthy());
+    fireEvent.press(screen.getByText('Try payment again'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('The payment could not be started. Nothing was charged. Try again.'),
+      ).toBeTruthy(),
+    );
+  });
+});
+
+describe('19 Order receipt for an unpaid order', () => {
+  it('leads back to paying an order still awaiting payment', async () => {
+    const order = await (async () => {
+      await signInAndComplete();
+      return placeOrderViaCart({
+        eventId: TULUA_ID,
+        buyerTierId: null,
+        items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+        guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+      });
+    })();
+    mockParams.id = order.id;
+
+    renderWithProviders(<OrderDetailScreen />);
+
+    await waitFor(() => expect(screen.getByText('Continue to payment')).toBeTruthy());
+    fireEvent.press(screen.getByText('Continue to payment'));
+    expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/payment?orderId=${order.id}`);
+    expect(screen.getByText('Cancel order')).toBeTruthy();
   });
 });

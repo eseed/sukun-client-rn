@@ -49,8 +49,7 @@ export const queryKeys = {
   entryPassRoot: ['entry-pass'] as const,
   entryPass: (ticketId: string) => ['entry-pass', ticketId] as const,
   addons: (eventIdentifier: string) => ['addons', eventIdentifier] as const,
-  addon: (eventIdentifier: string, addonId: string) =>
-    ['addon', eventIdentifier, addonId] as const,
+  addon: (eventIdentifier: string, addonId: string) => ['addon', eventIdentifier, addonId] as const,
   cartRoot: ['cart'] as const,
   cart: (cartId: string) => ['cart', cartId] as const,
   cartPreview: (cartId: string) => ['cart-preview', cartId] as const,
@@ -474,9 +473,25 @@ export function useCancelOrder() {
 
 /* -------------------------------------------------------------- payments */
 
+/**
+ * Status and order are refetched after every payment call, failed ones included: a refused
+ * retry can move the order (a backend undoes a revival Paymob refused), and a screen still
+ * showing the old state offers the wrong next step.
+ */
+function useRefreshPaymentState() {
+  const client = useQueryClient();
+  return (orderId: string) => {
+    void client.invalidateQueries({ queryKey: queryKeys.paymentStatus(orderId) });
+    void client.invalidateQueries({ queryKey: queryKeys.order(orderId) });
+    void client.invalidateQueries({ queryKey: queryKeys.orders });
+  };
+}
+
 export function useInitiatePayment() {
+  const refresh = useRefreshPaymentState();
   return useMutation({
     mutationFn: (orderId: string) => api.payments.initiate(orderId),
+    onSettled: (_intent, _error, orderId) => refresh(orderId),
   });
 }
 
@@ -484,15 +499,33 @@ export function useInitiatePayment() {
  * Polls order status after the provider sheet closes. An order is `paid` only once the
  * server has seen the webhook — a client redirect proves nothing (CLAUDE.md rule 9).
  */
-export function usePaymentStatus(orderId: string | undefined, options?: { poll?: boolean }) {
+export function usePaymentStatus(
+  orderId: string | undefined,
+  options?: {
+    poll?: boolean;
+    /**
+     * Keep watching a failed or expired order until this time, normally its hold's end. The
+     * Paymob sheet lets a buyer try the same intention again after a decline, so an order the
+     * server failed on the first decline can still be paid while the sheet is open.
+     */
+    watchUntil?: string | null;
+  },
+) {
   const poll = options?.poll ?? false;
+  const watchUntil = options?.watchUntil ?? null;
   const signedIn = useAuthStore((s) => s.status === 'signed-in');
   const client = useQueryClient();
   const query = useQuery({
     queryKey: queryKeys.paymentStatus(orderId ?? ''),
     queryFn: () => api.payments.status(orderId as string),
     enabled: signedIn && Boolean(orderId) && poll,
-    refetchInterval: (currentQuery) => (isPaymentTerminal(currentQuery.state.data) ? false : 2000),
+    refetchInterval: (currentQuery) => {
+      const data = currentQuery.state.data;
+      if (isPaymentTerminal(data)) {
+        return isStillWatched(data, watchUntil) ? 5000 : false;
+      }
+      return 2000;
+    },
   });
 
   useEffect(() => {
@@ -510,6 +543,12 @@ export function usePaymentStatus(orderId: string | undefined, options?: { poll?:
   return query;
 }
 
+function isStillWatched(status: PaymentStatus | undefined, watchUntil: string | null): boolean {
+  if (!status || !watchUntil) return false;
+  if (status.orderStatus !== 'failed' && status.orderStatus !== 'expired') return false;
+  return new Date(watchUntil).getTime() > Date.now();
+}
+
 function isPaymentTerminal(status: PaymentStatus | undefined): boolean {
   if (!status) return false;
   return (
@@ -522,14 +561,10 @@ function isPaymentTerminal(status: PaymentStatus | undefined): boolean {
 }
 
 export function useRetryPayment() {
-  const client = useQueryClient();
+  const refresh = useRefreshPaymentState();
   return useMutation({
     mutationFn: (orderId: string) => api.payments.retry(orderId),
-    onSuccess: (_intent, orderId) => {
-      void client.invalidateQueries({ queryKey: queryKeys.paymentStatus(orderId) });
-      void client.invalidateQueries({ queryKey: queryKeys.order(orderId) });
-      void client.invalidateQueries({ queryKey: queryKeys.orders });
-    },
+    onSettled: (_intent, _error, orderId) => refresh(orderId),
   });
 }
 

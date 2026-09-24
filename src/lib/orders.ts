@@ -17,3 +17,28 @@ export function isOrderCancellable(status: PaymentStatus | undefined): boolean {
   const attempt = status.paymentStatus;
   return attempt === '' || attempt === 'failed' || attempt === 'expired';
 }
+
+/**
+ * Whether `retry-payment` would take this order: any unpaid order that can still be paid.
+ *
+ * An order still awaiting payment after a declined or closed sheet belongs here too. It used to
+ * count as finished, which disabled Pay and left a buyer whose card was declined with nothing
+ * that worked until the hold ran out. The backend accepts it since September 2026.
+ */
+export function isPaymentRetryable(status: PaymentStatus | undefined): boolean {
+  if (!status) return false;
+  return ['awaiting_payment', 'failed', 'expired'].includes(status.orderStatus);
+}
+
+/**
+ * The last attempt has not settled at Paymob yet, so any new one would be refused. The screen
+ * waits for it rather than offering a button that cannot work.
+ */
+export function isPaymentUnsettled(status: PaymentStatus | undefined): boolean {
+  if (!status) return false;
+  return (
+    status.paymentStatus === 'creating' ||
+    status.paymentStatus === 'provider_status_unknown' ||
+    status.paymentStatus === 'confirming'
+  );
+}

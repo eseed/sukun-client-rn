@@ -253,9 +253,7 @@ function buyerHoldsTicketForEvent(eventId: string): boolean {
  */
 function computeProfileComplete(user: CurrentUser): boolean {
   const areaSatisfied = !requiresLivingArea(user.phoneNumber) || Boolean(user.area);
-  return Boolean(
-    user.fullName && user.email && user.dateOfBirth && user.gender && areaSatisfied,
-  );
+  return Boolean(user.fullName && user.email && user.dateOfBirth && user.gender && areaSatisfied);
 }
 
 function refreshUserStatus(user: CurrentUser): CurrentUser {
@@ -1429,10 +1427,22 @@ export const mockApi: SukunApi = {
       );
     },
 
+    /**
+     * The backend's rules, not a retry that takes anything: a mock that accepted every order is
+     * part of why no test ever saw the live refusals. A paid or refunded order is complete, a
+     * cancelled one cannot be paid, a failed or expired one is revived with a fresh hold, and
+     * one still awaiting payment goes straight to initiate.
+     */
     async retry(orderId: string): Promise<PaymentIntent> {
       const order = state.orders.find((item) => item.id === orderId);
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
-      if (order.status === 'expired') {
+      if (order.status === 'paid' || order.status === 'refunded') {
+        throw new MockApiError('PAYMENT_ALREADY_COMPLETED', 'This order is already paid.', 409);
+      }
+      if (order.status === 'cancelled') {
+        throw new MockApiError('ORDER_NOT_RETRYABLE', 'This payment cannot be retried.', 409);
+      }
+      if (order.status === 'expired' || order.status === 'failed') {
         order.status = 'awaiting_payment';
         order.holdExpiresAt = iso(HOLD_MINUTES * 60 * 1000);
       }

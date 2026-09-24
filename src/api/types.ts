@@ -510,6 +510,8 @@ export interface PaymentStatus {
     | 'creating'
     | 'pending'
     | 'provider_status_unknown'
+    /** What the live backend reports for `provider_status_unknown`. */
+    | 'confirming'
     | 'captured'
     | 'failed'
     | 'expired'

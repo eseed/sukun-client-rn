@@ -18,7 +18,7 @@ import {
   useRetryPayment,
 } from '../../src/hooks/queries';
 import { HoldTimer } from '../../src/components/checkout/HoldTimer';
-import { isOrderCancellable } from '../../src/lib/orders';
+import { isOrderCancellable, isPaymentRetryable, isPaymentUnsettled } from '../../src/lib/orders';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
@@ -78,8 +78,13 @@ export default function PaymentScreen() {
 
   // Polls from mount and stops on its own at a terminal state. Gating this on a sheet *this*
   // screen had opened meant arriving here after a PENDING verdict — the one route in — began no
-  // polling at all, so the payment never resolved on the screen built to resolve it.
-  const statusQuery = usePaymentStatus(validOrderId, { poll: true });
+  // polling at all, so the payment never resolved on the screen built to resolve it. A failed
+  // order stays watched until its hold ends: the sheet can still take a successful try after the
+  // decline the server failed it on, and that buyer belongs on the confirmation screen.
+  const statusQuery = usePaymentStatus(validOrderId, {
+    poll: true,
+    watchUntil: order?.holdExpiresAt ?? null,
+  });
   const { data: status } = statusQuery;
 
   const settled = sdkResult === 'success' || status?.orderStatus === 'paid';
@@ -99,6 +104,15 @@ export default function PaymentScreen() {
   );
   /** SDK reported PENDING: the transaction is still being processed on Paymob's side. */
   const pending = sdkResult === 'pending' && !settled && !failed;
+  /** Nothing can pay this order any more. */
+  const closed = status?.orderStatus === 'cancelled' || status?.orderStatus === 'refunded';
+  /**
+   * An order still awaiting payment after a declined or closed sheet is not finished with. It
+   * used to count as terminal here, which disabled Pay, sent "Try payment again" to a refusal,
+   * and hid the cancel that would have freed the buyer.
+   */
+  const retryable = !settled && !closed && isPaymentRetryable(status);
+  const unsettledAttempt = isPaymentUnsettled(status);
 
   const trackedSettledRef = useRef(false);
   const trackedFailedRef = useRef(false);
@@ -152,13 +166,23 @@ export default function PaymentScreen() {
       presentPaymob(intent);
     } catch (err) {
       setSheetPresented(false);
+      track('payment_error', { order_id: validOrderId, step: 'initiate', code: errorCodeOf(err) });
+      if (errorCodeOf(err) === 'PAYMENT_ALREADY_COMPLETED') {
+        void statusQuery.refetch();
+      }
       setError(messageForError(err));
     }
   }
 
   async function onRetry() {
-    if (!validOrderId) return;
+    if (!validOrderId || !retryable) return;
     setError(null);
+
+    if (!sheet.available) {
+      setError('Payment needs the Sukun app. It isn’t available here.');
+      return;
+    }
+
     try {
       const intent = await retry.mutateAsync(validOrderId);
       trackedFailedRef.current = false;
@@ -166,6 +190,11 @@ export default function PaymentScreen() {
       presentPaymob(intent);
     } catch (err) {
       setSheetPresented(false);
+      track('payment_error', { order_id: validOrderId, step: 'retry', code: errorCodeOf(err) });
+      // A try that went through after all: the refetch sends the buyer to confirmation.
+      if (errorCodeOf(err) === 'PAYMENT_ALREADY_COMPLETED') {
+        void statusQuery.refetch();
+      }
       setError(messageForError(err));
     }
   }
@@ -245,7 +274,9 @@ export default function PaymentScreen() {
    * reconciliation sweep fails it, and cancelling before then is refused outright. Showing the
    * button only when it would work is better than handing people a button that 409s.
    */
-  const cancellable = !busy && !terminal && isOrderCancellable(status);
+  const cancellable = !busy && !settled && isOrderCancellable(status);
+  /** A try the buyer can make right now, as opposed to one still settling at Paymob. */
+  const canRetry = failed && retryable && !unsettledAttempt;
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -268,11 +299,13 @@ export default function PaymentScreen() {
         Tapping pay opens Paymob&apos;s secure sheet, where you enter your card.
       </Text>
 
-      {!terminal ? <HoldTimer holdExpiresAt={order.holdExpiresAt} /> : null}
+      {status?.orderStatus === 'awaiting_payment' && !settled ? (
+        <HoldTimer holdExpiresAt={order.holdExpiresAt} />
+      ) : null}
 
-      {(awaitingVerdict || pending) && !failed && !settled ? (
+      {(awaitingVerdict || pending || unsettledAttempt) && !settled && !closed ? (
         <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
-          {pending
+          {pending || unsettledAttempt
             ? 'Your payment is still being processed. This can take a moment…'
             : 'Waiting for the payment to complete…'}
         </Text>
@@ -295,24 +328,23 @@ export default function PaymentScreen() {
 
       <View style={styles.spacer} />
 
-      <Button
-        label={`Pay ${amount}`}
-        variant="accent"
-        onPress={onPay}
-        loading={busy}
-        disabled={terminal}
-      />
-
-      {failed && status?.orderStatus !== 'cancelled' && status?.orderStatus !== 'refunded' ? (
+      {canRetry ? (
         <Button
           label="Try payment again"
-          variant="secondary"
+          variant="accent"
           onPress={() => void onRetry()}
-          loading={retry.isPending}
+          loading={busy}
           disabled={busy}
-          style={styles.retryButton}
         />
-      ) : null}
+      ) : (
+        <Button
+          label={`Pay ${amount}`}
+          variant="accent"
+          onPress={onPay}
+          loading={busy}
+          disabled={terminal || unsettledAttempt}
+        />
+      )}
 
       {cancellable ? (
         <Button
@@ -326,6 +358,16 @@ export default function PaymentScreen() {
       ) : null}
     </Screen>
   );
+}
+
+/** The server's error code, for analytics. Codes only: never the message, which can carry input. */
+function errorCodeOf(error: unknown): string {
+  return typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string'
+    ? (error as { code: string }).code
+    : 'UNKNOWN';
 }
 
 const styles = StyleSheet.create({

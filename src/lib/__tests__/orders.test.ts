@@ -1,4 +1,4 @@
-import { isOrderCancellable } from '../orders';
+import { isOrderCancellable, isPaymentRetryable, isPaymentUnsettled } from '../orders';
 import type { PaymentStatus } from '../../api/types';
 
 function status(partial: Partial<PaymentStatus>): PaymentStatus {
@@ -37,5 +37,34 @@ describe('isOrderCancellable', () => {
       false,
     );
     expect(isOrderCancellable(undefined)).toBe(false);
+  });
+});
+
+describe('isPaymentRetryable', () => {
+  it('takes every unpaid order that can still be paid, awaiting ones included', () => {
+    for (const orderStatus of ['awaiting_payment', 'failed', 'expired'] as const) {
+      expect(isPaymentRetryable(status({ orderStatus, paymentStatus: 'failed' }))).toBe(true);
+    }
+  });
+
+  it('refuses a paid, cancelled or refunded order', () => {
+    for (const orderStatus of ['paid', 'cancelled', 'refunded'] as const) {
+      expect(isPaymentRetryable(status({ orderStatus }))).toBe(false);
+    }
+    expect(isPaymentRetryable(undefined)).toBe(false);
+  });
+});
+
+describe('isPaymentUnsettled', () => {
+  it('waits on an attempt Paymob has not settled, in the live and the mock spelling', () => {
+    for (const paymentStatus of ['creating', 'provider_status_unknown', 'confirming'] as const) {
+      expect(isPaymentUnsettled(status({ paymentStatus }))).toBe(true);
+    }
+  });
+
+  it('does not wait on a settled attempt, or on a pending one a new try reuses', () => {
+    for (const paymentStatus of ['', 'pending', 'failed', 'expired'] as const) {
+      expect(isPaymentUnsettled(status({ paymentStatus }))).toBe(false);
+    }
   });
 });
