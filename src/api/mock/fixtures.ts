@@ -377,7 +377,7 @@ export function seedTickets(holderName: string): Ticket[] {
   return [
     {
       id: 'tk-seed-1',
-      ticketNumber: 'TKT-2026-004821',
+      ticketNumber: 'TKT26-5173-3952',
       status: 'active',
       usageStatus: 'usable',
       source: 'order',

@@ -122,9 +122,11 @@ function nextOrderNumber(): string {
   return `SKN26-${digits.slice(0, 4)}-${digits.slice(4)}`;
 }
 
+/** The backend's ticket shape, `TKT26-4827-1958`, the same as an order number's. */
 function nextTicketNumber(): string {
   ticketSeq += 1;
-  return `TKT-2026-${String(ticketSeq).padStart(6, '0')}`;
+  const digits = String(51_733_952 + ticketSeq * 6_133).slice(-8);
+  return `TKT26-${digits.slice(0, 4)}-${digits.slice(4)}`;
 }
 
 export class MockApiError extends Error {
