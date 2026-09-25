@@ -17,7 +17,7 @@ export const designAssets: Record<DesignAssetKey, ImageSourcePropType> = {
   // deco-flower.png — cropped corner flower on the profile/checkout screens
   decoFlower: require('../../assets/design/deco-flower.png'),
 
-  // deco-youre-in.png — full-bleed confirmation background
+  // deco-youre-in.png — the confirmation burst, cropped from its full-bleed artboard
   decoYoureIn: require('../../assets/design/deco-youre-in.png'),
 
   // bg-profile-dots.png — full-bleed profile tab background
