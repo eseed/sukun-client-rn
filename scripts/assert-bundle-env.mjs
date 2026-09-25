@@ -52,7 +52,10 @@ const expected = envFor(profile, platform);
 
 // Both stores' archives are zips. The bundle entry is named differently per platform, so it
 // is located by name rather than by a hardcoded path.
-const entries = execFileSync('unzip', ['-Z1', archivePath], { encoding: 'utf8', maxBuffer: 1 << 28 })
+const entries = execFileSync('unzip', ['-Z1', archivePath], {
+  encoding: 'utf8',
+  maxBuffer: 1 << 28,
+})
   .split('\n')
   .filter(Boolean);
 const bundleEntry = entries.find(
@@ -96,6 +99,14 @@ for (const [otherName, other] of Object.entries(eas.build)) {
   }
 }
 
+// 3. Nothing dev-only is. The dev sign-in (src/dev/DevSignInLink.tsx) is loaded behind __DEV__
+//    and must be folded out of every release; these are the strings it cannot exist without.
+for (const devOnly of ['mobile/auth/dev-sign-in', 'Dev sign-in (test account)']) {
+  if (bundle.includes(devOnly)) {
+    problems.push(`dev-only code is in the bundle ("${devOnly}")`);
+  }
+}
+
 if (problems.length > 0) {
   console.error(`\nThis bundle does not carry the "${profileName}" environment:\n`);
   for (const problem of problems) console.error(`  ${problem}`);
@@ -104,4 +115,6 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(`bundle env: carries the "${profileName}" ${platform} environment, no other profile's.`);
+console.log(
+  `bundle env: carries the "${profileName}" ${platform} environment, no other profile's.`,
+);

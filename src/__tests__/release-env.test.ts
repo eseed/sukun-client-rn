@@ -13,7 +13,6 @@
  * one of those was correct in eas.json at the time. So configuration being right is not the
  * property worth testing here; the scripts reading it is.
  */
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -73,23 +72,37 @@ describe('local release scripts', () => {
 });
 
 /**
- * The dev-only test-account sign-in reads its number and code from .env.local, which the
- * bundler also loads for a release. The profile export has to blank both, whatever eas.json
- * says, or a store build could carry a working sign-in code.
+ * The dev sign-in must never ship. It is loaded behind __DEV__ so the bundler drops it from a
+ * release, and the finished-bundle check refuses a release that carries it anyway.
  */
-describe('dev sign-in never reaches a release bundle', () => {
-  it.each(['production', 'staging'])(
-    'the %s export blanks both dev sign-in variables',
-    (profile) => {
-      for (const platform of ['ios', 'android']) {
-        const exported = execFileSync(
-          'node',
-          [path.join(ROOT, 'scripts/eas-profile-env.mjs'), profile, platform],
-          { encoding: 'utf8' },
-        );
-        expect(exported).toContain("EXPO_PUBLIC_DEV_SIGN_IN_PHONE=''");
-        expect(exported).toContain("EXPO_PUBLIC_DEV_SIGN_IN_CODE=''");
+describe('dev sign-in never reaches a store build', () => {
+  it('the welcome screen loads it only behind __DEV__', () => {
+    const welcome = fs.readFileSync(path.join(ROOT, 'app/(onboarding)/welcome.tsx'), 'utf8');
+    expect(welcome).toMatch(/__DEV__\s*\?[^:]*require\('\.\.\/\.\.\/src\/dev\/DevSignInLink'\)/);
+    expect(welcome).not.toMatch(/^import .*src\/dev\//m);
+  });
+
+  it('nothing else imports the dev module', () => {
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+        const rel = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (!['node_modules', '__tests__', 'dev'].includes(entry.name)) walk(rel);
+        } else if (/\.(ts|tsx)$/.test(entry.name)) {
+          const text = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+          if (/from ['"][./]*(src\/)?dev\//.test(text)) offenders.push(rel);
+        }
       }
-    },
-  );
+    };
+    walk('app');
+    walk('src');
+    expect(offenders).toEqual([]);
+  });
+
+  it('the finished-bundle check refuses a release that carries it', () => {
+    const check = read('scripts/assert-bundle-env.mjs');
+    expect(check).toContain("'mobile/auth/dev-sign-in'");
+    expect(check).toContain("'Dev sign-in (test account)'");
+  });
 });
