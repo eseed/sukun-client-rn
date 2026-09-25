@@ -164,83 +164,84 @@ export default function ConfirmationScreen() {
   return (
     <View style={styles.root}>
       {/*
-        The artwork has its own block at the top and the text sits under it, pinned to the
-        bottom. Laid over a full-bleed background, the text landed on the orange burst and could
+        The artwork and the text are one group, the text under the artwork, centred on the
+        screen. Laid over a full-bleed background, the text landed on the orange burst and could
         not be read, and the selfie prompt pushed it further up into it. A short screen scrolls
         rather than overlapping the two.
       */}
       <Screen scroll edges={{ bottom: false }} contentStyle={styles.content}>
-        <Image
-          source={designAsset('decoYoureIn')}
-          style={styles.art}
-          resizeMode="contain"
-          accessible
-          accessibilityRole="image"
-          accessibilityLabel="You're in"
-        />
+        <View style={styles.group}>
+          <Image
+            source={designAsset('decoYoureIn')}
+            style={styles.art}
+            resizeMode="contain"
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel="You're in"
+          />
 
-        <View style={styles.spacer} />
-
-        <View style={styles.panel}>
-          <Text style={styles.headline}>
-            {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
-            {addonCount > 0
-              ? ` and ${addonCount} ${addonCount === 1 ? 'add-on' : 'add-ons'}`
-              : ''} to {event?.title ?? 'your event'}{' '}
-            {ticketCount === 1 && addonCount === 0 ? 'is' : 'are'} on their way.
-            {` Order ${order.orderNumber}.`}
-          </Text>
-
-          {guestCount > 0 ? (
-            <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
-              We&apos;ve sent your {guestCount === 1 ? 'guest' : 'guests'} a WhatsApp message. Their{' '}
-              {guestCount === 1 ? 'ticket appears' : 'tickets appear'} the moment they verify their
-              number.
+          <View style={styles.panel}>
+            <Text style={styles.headline}>
+              {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
+              {addonCount > 0
+                ? ` and ${addonCount} ${addonCount === 1 ? 'add-on' : 'add-ons'}`
+                : ''}{' '}
+              to {event?.title ?? 'your event'}{' '}
+              {ticketCount === 1 && addonCount === 0 ? 'is' : 'are'} on their way.
+              {` Order ${order.orderNumber}.`}
             </Text>
-          ) : (
-            <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
-              {/* "One thing left" only when the thing is actually below it. */}
-              {promptForSelfie
-                ? 'Your ticket is ready. One thing left before the gate.'
-                : hasSelfie
-                  ? 'Your entry pass is ready. Bring your face: gate staff check it against your selfie.'
-                  : 'Your ticket is ready.'}
-            </Text>
-          )}
 
-          {attachedLine ? <Text style={styles.attached}>{attachedLine}</Text> : null}
+            {guestCount > 0 ? (
+              <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
+                We&apos;ve sent your {guestCount === 1 ? 'guest' : 'guests'} a WhatsApp message.
+                Their {guestCount === 1 ? 'ticket appears' : 'tickets appear'} the moment they
+                verify their number.
+              </Text>
+            ) : (
+              <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
+                {/* "One thing left" only when the thing is actually below it. */}
+                {promptForSelfie
+                  ? 'Your ticket is ready. One thing left before the gate.'
+                  : hasSelfie
+                    ? 'Your entry pass is ready. Bring your face: gate staff check it against your selfie.'
+                    : 'Your ticket is ready.'}
+              </Text>
+            )}
 
-          {promptForSelfie ? (
-            <>
-              <View style={styles.selfieNotice}>
-                <Text style={styles.selfieNoticeText}>
-                  We need your selfie to admit you to the event.
-                </Text>
-              </View>
+            {attachedLine ? <Text style={styles.attached}>{attachedLine}</Text> : null}
 
-              <Button
-                label="Take a selfie"
-                size="inline"
-                onPress={() => router.push('/account/selfie')}
-              />
+            {promptForSelfie ? (
+              <>
+                <View style={styles.selfieNotice}>
+                  <Text style={styles.selfieNoticeText}>
+                    We need your selfie to admit you to the event.
+                  </Text>
+                </View>
 
-              {/*
+                <Button
+                  label="Take a selfie"
+                  size="inline"
+                  onPress={() => router.push('/account/selfie')}
+                />
+
+                {/*
                 Quiet, but still a control: medium face at full opacity, underlined, with a target
                 a thumb can find. It says where it goes, because a bare "Skip" would not.
               */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Skip the selfie for now and see my ticket"
-                onPress={openTicket}
-                hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
-                style={({ pressed }) => [styles.skip, pressed && styles.skipPressed]}
-              >
-                <Text style={styles.skipLabel}>Not now, see my ticket</Text>
-              </Pressable>
-            </>
-          ) : (
-            <Button label="See my ticket" size="inline" onPress={openTicket} />
-          )}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Skip the selfie for now and see my ticket"
+                  onPress={openTicket}
+                  hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
+                  style={({ pressed }) => [styles.skip, pressed && styles.skipPressed]}
+                >
+                  <Text style={styles.skipLabel}>Not now, see my ticket</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Button label="See my ticket" size="inline" onPress={openTicket} />
+            )}
+          </View>
         </View>
       </Screen>
 
@@ -262,16 +263,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingBottom: space.s5,
   },
+  /** Fills the screen and centres the artwork and the text in it, as one block. */
+  group: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   /** The design's burst, cropped from its full-bleed artboard (1167 × 792). */
   art: {
     width: '100%',
     height: undefined,
     aspectRatio: 1167 / 792,
-  },
-  /** Takes whatever height is left, so the text sits at the bottom of a tall screen. */
-  spacer: {
-    flexGrow: 1,
-    minHeight: space.s5,
+    marginBottom: space.s5,
   },
   panel: {
     alignItems: 'center',
