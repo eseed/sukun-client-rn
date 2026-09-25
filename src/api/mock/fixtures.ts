@@ -405,7 +405,7 @@ export function seedTickets(holderName: string): Ticket[] {
         },
       ],
       holderName,
-      orderNumber: 'SKN-2026-000482',
+      orderNumber: 'SKN26-4827-1958',
       purchasedBy: { name: holderName, isSelf: true },
       addonCount: 0,
       issuedAt: '2026-07-02T10:12:00.000Z',

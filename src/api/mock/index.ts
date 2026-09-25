@@ -111,9 +111,15 @@ function isoDateAfter(date: string): string {
 let orderSeq = 482;
 let ticketSeq = 4821;
 
+/**
+ * The backend's shape, `SKN26-4827-1958`: the year, then eight digits in two groups of four. The
+ * backend draws them at random and ends them in a check digit; here they only need to look right
+ * and differ from one order to the next.
+ */
 function nextOrderNumber(): string {
   orderSeq += 1;
-  return `SKN-2026-${String(orderSeq).padStart(6, '0')}`;
+  const digits = String(48_271_958 + orderSeq * 7_919).slice(-8);
+  return `SKN26-${digits.slice(0, 4)}-${digits.slice(4)}`;
 }
 
 function nextTicketNumber(): string {
