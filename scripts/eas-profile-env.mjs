@@ -17,6 +17,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './ios-release-config.mjs';
 
+const DEV_ONLY_NAMES = ['EXPO_PUBLIC_DEV_SIGN_IN_PHONE', 'EXPO_PUBLIC_DEV_SIGN_IN_CODE'];
+
 const [profileName, platform] = process.argv.slice(2);
 if (!profileName || !platform) {
   console.error('usage: node scripts/eas-profile-env.mjs <profile> <ios|android>');
@@ -41,4 +43,11 @@ if (names.length === 0) {
 
 for (const name of names) {
   console.log(`${name}='${String(env[name]).replace(/'/g, `'\\''`)}'`);
+}
+
+// The dev-only test-account sign-in (src/lib/dev-sign-in.ts) reads these from .env.local, which
+// Metro also loads for a release bundle. Exporting them empty means .env.local can never hand a
+// store build a sign-in code, even though __DEV__ already keeps the button out of one.
+for (const name of DEV_ONLY_NAMES) {
+  if (!(name in env)) console.log(`${name}=''`);
 }

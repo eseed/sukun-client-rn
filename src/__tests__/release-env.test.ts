@@ -13,6 +13,7 @@
  * one of those was correct in eas.json at the time. So configuration being right is not the
  * property worth testing here; the scripts reading it is.
  */
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -69,4 +70,26 @@ describe('local release scripts', () => {
   it('the android build checks the finished bundle before it can be published', () => {
     expect(read('scripts/gradlew-release.sh')).toContain('assert-bundle-env.mjs');
   });
+});
+
+/**
+ * The dev-only test-account sign-in reads its number and code from .env.local, which the
+ * bundler also loads for a release. The profile export has to blank both, whatever eas.json
+ * says, or a store build could carry a working sign-in code.
+ */
+describe('dev sign-in never reaches a release bundle', () => {
+  it.each(['production', 'staging'])(
+    'the %s export blanks both dev sign-in variables',
+    (profile) => {
+      for (const platform of ['ios', 'android']) {
+        const exported = execFileSync(
+          'node',
+          [path.join(ROOT, 'scripts/eas-profile-env.mjs'), profile, platform],
+          { encoding: 'utf8' },
+        );
+        expect(exported).toContain("EXPO_PUBLIC_DEV_SIGN_IN_PHONE=''");
+        expect(exported).toContain("EXPO_PUBLIC_DEV_SIGN_IN_CODE=''");
+      }
+    },
+  );
 });
