@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, ImageSlot, Text } from '../../src/components/ui';
+import { DevSignInLink } from '../../src/components/onboarding/DevSignInLink';
 import { track } from '../../src/lib/analytics';
 import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { useAuthStore } from '../../src/stores/auth';
@@ -71,7 +72,9 @@ export default function WelcomeScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              gated ? 'Go back to browsing events without an account' : 'Skip login and browse events'
+              gated
+                ? 'Go back to browsing events without an account'
+                : 'Skip login and browse events'
             }
             onPress={onSkipLogin}
             // The link is deliberately quiet, but it is the only way past this screen without
@@ -84,6 +87,9 @@ export default function WelcomeScreen() {
             <Text style={styles.skip}>{skipLabel}</Text>
           </Pressable>
         ) : null}
+
+        {/* Metro builds with a test account configured only; renders nothing otherwise. */}
+        <DevSignInLink />
 
         <Text style={styles.terms}>By continuing you agree to our terms &amp; privacy policy</Text>
       </View>
