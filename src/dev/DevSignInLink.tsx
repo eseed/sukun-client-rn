@@ -35,14 +35,23 @@ import { colors } from '../theme/tokens';
 /** What the release bundle check looks for. Keep it in this file only. */
 export const DEV_SIGN_IN_MARKER = 'mobile/auth/dev-sign-in';
 
-const MOCK_DEV_PHONE = '+201000000099';
+/**
+ * The test account the button signs in as. Staging's seeded accounts fill `+2010000000…`, and
+ * the backend refuses any number that belongs to a real account, so this sits in a block no
+ * account uses.
+ */
+const DEV_PHONE = '+201599999901';
 
 async function devSignIn(): Promise<Authenticated> {
   if (API_MODE === 'mock') {
-    await mockApi.auth.requestOtp(MOCK_DEV_PHONE);
-    return mockApi.auth.verifyOtp(MOCK_DEV_PHONE, MOCK_OTP_CODE);
+    await mockApi.auth.requestOtp(DEV_PHONE);
+    return mockApi.auth.verifyOtp(DEV_PHONE, MOCK_OTP_CODE);
   }
-  return request<Authenticated>(DEV_SIGN_IN_MARKER, { method: 'POST', body: {}, auth: false });
+  return request<Authenticated>(DEV_SIGN_IN_MARKER, {
+    method: 'POST',
+    body: { phoneNumber: DEV_PHONE },
+    auth: false,
+  });
 }
 
 export function DevSignInLink() {
@@ -90,7 +99,10 @@ export function DevSignInLink() {
         resumeAfterOnboarding(router);
       }
     } catch (err) {
-      setError(messageForError(err));
+      // A developer is reading this, so say what the server said, not the buyer-facing copy.
+      const code = (err as { code?: unknown }).code;
+      const message = err instanceof Error ? err.message : messageForError(err);
+      setError(typeof code === 'string' ? `${code}: ${message}` : message);
     } finally {
       setBusy(false);
     }
