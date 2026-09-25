@@ -1,13 +1,24 @@
+import type { ComponentType } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, ImageSlot, Text } from '../../src/components/ui';
-import { DevSignInLink } from '../../src/components/onboarding/DevSignInLink';
 import { track } from '../../src/lib/analytics';
 import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
+
+/**
+ * Local Metro builds only: a one-tap sign-in to a staging test account (`src/dev`). The require
+ * sits behind `__DEV__`, which the bundler folds to false for a release, so the module and
+ * everything it names are left out of every store bundle. `assert-bundle-env.mjs` checks.
+ */
+const DevSignInLink: ComponentType | null = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../../src/dev/DevSignInLink') as typeof import('../../src/dev/DevSignInLink'))
+      .DevSignInLink
+  : null;
 
 /** Design screen 01 · Welcome. */
 export default function WelcomeScreen() {
@@ -88,8 +99,7 @@ export default function WelcomeScreen() {
           </Pressable>
         ) : null}
 
-        {/* Metro builds with a test account configured only; renders nothing otherwise. */}
-        <DevSignInLink />
+        {DevSignInLink ? <DevSignInLink /> : null}
 
         <Text style={styles.terms}>By continuing you agree to our terms &amp; privacy policy</Text>
       </View>
