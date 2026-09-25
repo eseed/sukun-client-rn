@@ -25,6 +25,7 @@ const mockRouter = {
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
+  useIsFocused: () => true,
 }));
 
 async function signInAndComplete() {
