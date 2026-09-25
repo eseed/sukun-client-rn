@@ -351,7 +351,7 @@ describe('order and ticket lifecycle', () => {
     expect(order.status).toBe('awaiting_payment');
     // Two tickets cost the same whoever holds them.
     expect(order.totalEgp).toBe('3283.20');
-    expect(order.orderNumber).toMatch(/^SKN-2026-\d{6}$/);
+    expect(order.orderNumber).toMatch(/^SKN26-\d{4}-\d{4}$/);
     expect(order.guests).toHaveLength(2);
   });
 

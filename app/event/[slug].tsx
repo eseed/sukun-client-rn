@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo, useState } from 'react';
 import {
@@ -49,6 +49,10 @@ export default function EventDetailScreen() {
   // away, where the two overlapped outright (build 22). Track whether the hero still covers the
   // status bar; the page puts a background-coloured band there once it does not.
   const [heroUnderStatusBar, setHeroUnderStatusBar] = useState(true);
+  // Checkout is pushed on top of this page, which stays mounted under it, and the last mounted
+  // StatusBar wins: left in place, its light clock carried on over checkout's cream screens,
+  // where it could not be seen. It only speaks while this page is the one showing.
+  const isFocused = useIsFocused();
   const eventSlug =
     typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
@@ -144,7 +148,9 @@ export default function EventDetailScreen() {
     <View style={styles.root}>
       {/* Dark cover image and black full-screen viewer both need a light clock; the cream page
           below them needs a dark one. */}
-      <StatusBar style={selectedMediaUrl !== null || heroUnderStatusBar ? 'light' : 'dark'} />
+      {isFocused ? (
+        <StatusBar style={selectedMediaUrl !== null || heroUnderStatusBar ? 'light' : 'dark'} />
+      ) : null}
 
       <ScrollView
         style={styles.flex}

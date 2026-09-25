@@ -11,7 +11,7 @@ fourteen are committed here and wired into `src/theme/assets.ts`.
 | `sukun-logo-white.png`     | reserved (dark surfaces)        |
 | `deco-swirl.png`           | 02 Phone number                 |
 | `deco-flower.png`          | 04 About you, 08/10 Checkout    |
-| `deco-youre-in.png`        | 12 Confirmation (full bleed)    |
+| `deco-youre-in.png`        | 12 Confirmation (burst, cropped)|
 | `bg-profile-dots.png`      | 15 Profile (full bleed)         |
 | `card-sukun-orange.png`    | 11 Payment                      |
 | `slot-feat-tulua.webp`     | 06 Discover featured card       |

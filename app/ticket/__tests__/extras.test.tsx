@@ -167,7 +167,7 @@ describe('22 Add extras to this ticket', () => {
 
     // The ticket, exactly as the artboard identifies it.
     await waitFor(() => expect(screen.getByText('Full Weekend Pass')).toBeTruthy());
-    expect(screen.getByText('Tulua · Yasmin El Sayed · SKN-2026-000482')).toBeTruthy();
+    expect(screen.getByText('Tulua · Yasmin El Sayed · SKN26-4827-1958')).toBeTruthy();
 
     // Tulua's catalogue, priced by the server.
     expect(screen.getByText('Desert Lodge Room')).toBeTruthy();

@@ -1,13 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, ImageSlot, ResourceState, Text } from '../../src/components/ui';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Button, ResourceState, Screen, Text } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useEvent, useOrder, useTickets } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { designAsset } from '../../src/theme/assets';
-import { colors, fontFamily, fontSize } from '../../src/theme/tokens';
+import { colors, fontFamily, fontSize, space } from '../../src/theme/tokens';
 import type { AddonType, OrderAddon } from '../../src/api/types';
 import { useAuthStore } from '../../src/stores/auth';
 
@@ -72,7 +71,6 @@ function describeAttachedAddons(addons: OrderAddon[]): string | null {
 
 export default function ConfirmationScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   // Buying no longer requires a selfie, so say which of the two things happens next rather
   // than promising a pass that is about to ask for one (CLAUDE.md rule 3).
   const hasSelfie = useAuthStore((s) => Boolean(s.user?.selfieUploaded));
@@ -165,83 +163,89 @@ export default function ConfirmationScreen() {
 
   return (
     <View style={styles.root}>
-      <ImageSlot
-        source={designAsset('decoYoureIn')}
-        tint={colors.gold100}
-        style={styles.background}
-      />
+      {/*
+        The artwork and the text are one group, the text under the artwork, centred on the
+        screen. Laid over a full-bleed background, the text landed on the orange burst and could
+        not be read, and the selfie prompt pushed it further up into it. A short screen scrolls
+        rather than overlapping the two.
+      */}
+      <Screen scroll edges={{ bottom: false }} contentStyle={styles.content}>
+        <View style={styles.group}>
+          <Image
+            source={designAsset('decoYoureIn')}
+            style={styles.art}
+            resizeMode="contain"
+            accessible
+            accessibilityRole="image"
+            accessibilityLabel="You're in"
+          />
 
-      <View
-        style={[
-          styles.panel,
-          // The prompt adds three rows to a panel that is pinned partway down the artwork, and
-          // on a short screen that ran into the bottom nav. It starts higher when it is there.
-          promptForSelfie ? styles.panelWithPrompt : null,
-          { paddingBottom: insets.bottom },
-        ]}
-      >
-        <Text style={styles.headline}>
-          {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
-          {addonCount > 0
-            ? ` and ${addonCount} ${addonCount === 1 ? 'add-on' : 'add-ons'}`
-            : ''} to {event?.title ?? 'your event'}{' '}
-          {ticketCount === 1 && addonCount === 0 ? 'is' : 'are'} on their way.
-          {` Order ${order.orderNumber}.`}
-        </Text>
+          <View style={styles.panel}>
+            <Text style={styles.headline}>
+              {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
+              {addonCount > 0
+                ? ` and ${addonCount} ${addonCount === 1 ? 'add-on' : 'add-ons'}`
+                : ''}{' '}
+              to {event?.title ?? 'your event'}{' '}
+              {ticketCount === 1 && addonCount === 0 ? 'is' : 'are'} on their way.
+              {` Order ${order.orderNumber}.`}
+            </Text>
 
-        {guestCount > 0 ? (
-          <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
-            We&apos;ve sent your {guestCount === 1 ? 'guest' : 'guests'} a WhatsApp message. Their{' '}
-            {guestCount === 1 ? 'ticket appears' : 'tickets appear'} the moment they verify their
-            number.
-          </Text>
-        ) : (
-          <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
-            {/* "One thing left" only when the thing is actually below it. */}
-            {promptForSelfie
-              ? 'Your ticket is ready. One thing left before the gate.'
-              : hasSelfie
-                ? 'Your entry pass is ready. Bring your face: gate staff check it against your selfie.'
-                : 'Your ticket is ready.'}
-          </Text>
-        )}
-
-        {attachedLine ? <Text style={styles.attached}>{attachedLine}</Text> : null}
-
-        {promptForSelfie ? (
-          <>
-            <View style={styles.selfieNotice}>
-              <Text style={styles.selfieNoticeText}>
-                We need your selfie to admit you to the event.
+            {guestCount > 0 ? (
+              <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
+                We&apos;ve sent your {guestCount === 1 ? 'guest' : 'guests'} a WhatsApp message.
+                Their {guestCount === 1 ? 'ticket appears' : 'tickets appear'} the moment they
+                verify their number.
               </Text>
-            </View>
+            ) : (
+              <Text style={[styles.blurb, attachedLine ? styles.blurbAboveAttached : null]}>
+                {/* "One thing left" only when the thing is actually below it. */}
+                {promptForSelfie
+                  ? 'Your ticket is ready. One thing left before the gate.'
+                  : hasSelfie
+                    ? 'Your entry pass is ready. Bring your face: gate staff check it against your selfie.'
+                    : 'Your ticket is ready.'}
+              </Text>
+            )}
 
-            <Button
-              label="Take a selfie"
-              size="inline"
-              onPress={() => router.push('/account/selfie')}
-            />
+            {attachedLine ? <Text style={styles.attached}>{attachedLine}</Text> : null}
 
-            {/*
-              Quiet, but still a control: medium face at full opacity, underlined, with a target
-              a thumb can find. It says where it goes, because a bare "Skip" would not.
-            */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Skip the selfie for now and see my ticket"
-              onPress={openTicket}
-              hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
-              style={({ pressed }) => [styles.skip, pressed && styles.skipPressed]}
-            >
-              <Text style={styles.skipLabel}>Not now, see my ticket</Text>
-            </Pressable>
-          </>
-        ) : (
-          <Button label="See my ticket" size="inline" onPress={openTicket} />
-        )}
-      </View>
+            {promptForSelfie ? (
+              <>
+                <View style={styles.selfieNotice}>
+                  <Text style={styles.selfieNoticeText}>
+                    We need your selfie to admit you to the event.
+                  </Text>
+                </View>
 
-      <BottomNav style={styles.nav} />
+                <Button
+                  label="Take a selfie"
+                  size="inline"
+                  onPress={() => router.push('/account/selfie')}
+                />
+
+                {/*
+                Quiet, but still a control: medium face at full opacity, underlined, with a target
+                a thumb can find. It says where it goes, because a bare "Skip" would not.
+              */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Skip the selfie for now and see my ticket"
+                  onPress={openTicket}
+                  hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
+                  style={({ pressed }) => [styles.skip, pressed && styles.skipPressed]}
+                >
+                  <Text style={styles.skipLabel}>Not now, see my ticket</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Button label="See my ticket" size="inline" onPress={openTicket} />
+            )}
+          </View>
+        </View>
+      </Screen>
+
+      <BottomNav />
     </View>
   );
 }
@@ -255,26 +259,25 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bgPage,
   },
-  background: {
-    ...StyleSheet.absoluteFill,
-    height: undefined,
+  content: {
+    paddingHorizontal: 0,
+    paddingBottom: space.s5,
   },
-  nav: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+  /** Fills the screen and centres the artwork and the text in it, as one block. */
+  group: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  /** The design's burst, cropped from its full-bleed artboard (1167 × 792). */
+  art: {
+    width: '100%',
+    height: undefined,
+    aspectRatio: 1167 / 792,
+    marginBottom: space.s5,
   },
   panel: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '57%',
     alignItems: 'center',
     paddingHorizontal: 34,
-  },
-  panelWithPrompt: {
-    top: '46%',
   },
   headline: {
     fontSize: 14,
