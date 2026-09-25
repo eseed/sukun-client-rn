@@ -42,19 +42,37 @@ export const DEV_SIGN_IN_MARKER = 'mobile/auth/dev-sign-in';
  */
 const DEV_PHONE = '+201599999901';
 
-async function devSignIn(): Promise<Authenticated> {
+/**
+ * A number the backend has almost certainly never seen, in the same unused block, so a flow
+ * that needs a buyer with nothing yet (no ticket for the event, no order holding it) can start
+ * clean. The backend creates the test account on first use.
+ */
+function freshDevPhone(): string {
+  return `+20159999${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+async function devSignIn(phoneNumber: string): Promise<Authenticated> {
   if (API_MODE === 'mock') {
-    await mockApi.auth.requestOtp(DEV_PHONE);
-    return mockApi.auth.verifyOtp(DEV_PHONE, MOCK_OTP_CODE);
+    await mockApi.auth.requestOtp(phoneNumber);
+    return mockApi.auth.verifyOtp(phoneNumber, MOCK_OTP_CODE);
   }
   return request<Authenticated>(DEV_SIGN_IN_MARKER, {
     method: 'POST',
-    body: { phoneNumber: DEV_PHONE },
+    body: { phoneNumber },
     auth: false,
   });
 }
 
 export function DevSignInLink() {
+  return (
+    <>
+      <DevSignInButton label="Dev sign-in (test account)" phoneNumber={() => DEV_PHONE} />
+      <DevSignInButton label="Dev sign-in (new test account)" phoneNumber={freshDevPhone} />
+    </>
+  );
+}
+
+function DevSignInButton({ label, phoneNumber }: { label: string; phoneNumber: () => string }) {
   const router = useRouter();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -64,7 +82,7 @@ export function DevSignInLink() {
     setBusy(true);
     setError(null);
     try {
-      const result = await devSignIn();
+      const result = await devSignIn(phoneNumber());
       // The same hand-off OTP verification makes (useVerifyOtp): store the session with the
       // minimal projection, then replace it with the full profile.
       const projection: CurrentUser = {
@@ -111,14 +129,14 @@ export function DevSignInLink() {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Dev sign-in with a staging test account"
+      accessibilityLabel={label}
       onPress={() => void onPress()}
       disabled={busy}
       hitSlop={{ top: 10, bottom: 10, left: 24, right: 24 }}
       style={styles.wrap}
     >
       <Text variant="metaSm" color={colors.accentSky}>
-        {busy ? 'Signing in…' : 'Dev sign-in (test account)'}
+        {busy ? 'Signing in…' : label}
       </Text>
       {error ? (
         <Text variant="metaSm" color={colors.rose700}>
