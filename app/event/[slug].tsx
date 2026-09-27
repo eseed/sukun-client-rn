@@ -28,6 +28,7 @@ import { useAddons, useEvent } from '../../src/hooks/queries';
 import { describeAddonKinds } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
+import { eventAvailabilityMessage } from '../../src/lib/event-availability';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
 import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
@@ -97,17 +98,7 @@ export default function EventDetailScreen() {
   }
 
   const firstPurchasableTier = event.tiers.find((tier) => tier.isPurchasable);
-  const availability =
-    event.tiers.length === 0
-      ? 'Tickets are not available for this event.'
-      : firstPurchasableTier
-        ? 'Tickets are available now.'
-        : event.state === 'sold_out' ||
-            event.tiers.every((tier) => tier.availabilityStatus === 'sold_out')
-          ? 'This event is sold out.'
-          : event.state === 'sales_closed'
-            ? 'Sales for this event are closed.'
-            : 'Tickets are not on sale yet.';
+  const availability = eventAvailabilityMessage(event);
   const eventId = event.id;
 
   const mapUrl = venueMapUrl(event.venue);
@@ -307,6 +298,24 @@ export default function EventDetailScreen() {
                 What to bring
               </Text>
               <Text variant="bodyMuted">{event.whatToBring}</Text>
+            </>
+          ) : null}
+
+          {/*
+            The event's own terms and cancellation policy, on the page as well as under a
+            picture, so an event without photos still shows them before anyone pays.
+          */}
+          {event.terms || event.cancellationPolicy ? (
+            <>
+              <Text variant="eyebrow" style={styles.sectionLabelSpaced}>
+                Before you book
+              </Text>
+              {event.terms ? <MarkdownText markdown={event.terms} variant="bodyMuted" /> : null}
+              {event.cancellationPolicy ? (
+                <Text variant="metaSm" style={styles.policy}>
+                  Cancellation: {event.cancellationPolicy}
+                </Text>
+              ) : null}
             </>
           ) : null}
         </View>
