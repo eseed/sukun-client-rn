@@ -1,4 +1,5 @@
 import { Keyboard } from 'react-native';
+import { ApiError } from '../../src/api/live/http';
 import { MOCK_OTP_CODE, mockApi, mockConfig, resetMockState } from '../../src/api/mock';
 import { useAuthStore } from '../../src/stores/auth';
 import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
@@ -9,9 +10,11 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 
+let mockParams: Record<string, string> = {};
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockParams,
 }));
 
 beforeEach(() => {
@@ -20,6 +23,7 @@ beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockParams = {};
   useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
 });
 
@@ -73,7 +77,12 @@ describe('Phone number screen', () => {
     fireEvent.changeText(screen.getByPlaceholderText('10 01234567'), '1012345678');
     fireEvent.press(screen.getByText('Send me a code'));
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/(onboarding)/otp'));
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/(onboarding)/otp',
+        params: { resendAfter: '30' },
+      }),
+    );
     expect(useAuthStore.getState().pendingPhone).toBe('+201012345678');
   });
 
@@ -137,6 +146,49 @@ describe('OTP screen', () => {
 
     await waitFor(() => expect(useAuthStore.getState().status).toBe('signed-in'));
     expect(mockReplace).not.toHaveBeenCalledWith('/(onboarding)/phone');
+  });
+
+  it('starts the resend countdown from the wait the server gave', async () => {
+    mockParams = { resendAfter: '120' };
+    await renderWithPendingPhone();
+
+    expect(screen.getByText('Resend in 2:00')).toBeTruthy();
+  });
+
+  it('falls back to 30 seconds when the server gave no wait', async () => {
+    await renderWithPendingPhone();
+
+    expect(screen.getByText('Resend in 0:30')).toBeTruthy();
+  });
+
+  it('counts down from retryAfterSeconds when a resend is refused', async () => {
+    jest.useFakeTimers();
+    try {
+      mockParams = { resendAfter: '1' };
+      await renderWithPendingPhone();
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+      const refusal = new ApiError(
+        'OTP_RATE_LIMITED',
+        'rate limited',
+        429,
+        [],
+        undefined,
+        undefined,
+        90,
+      );
+      jest.spyOn(mockApi.auth, 'requestOtp').mockRejectedValueOnce(refusal);
+
+      fireEvent.press(screen.getByText('Resend code'));
+
+      expect(
+        await screen.findByText('Too many code attempts for this number. Try again in 90 seconds.'),
+      ).toBeTruthy();
+      expect(screen.getByText('Resend in 1:30')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('still redirects when the screen is opened without a pending number', async () => {

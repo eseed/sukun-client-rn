@@ -59,10 +59,14 @@ export default function PhoneScreen() {
 
     setError(null);
     try {
-      await requestOtp.mutateAsync(e164);
+      const result = await requestOtp.mutateAsync(e164);
       setPendingPhone(e164);
       track('otp_requested');
-      router.push('/(onboarding)/otp');
+      // The server says when another code may be asked for (the wait grows with each code).
+      router.push({
+        pathname: '/(onboarding)/otp',
+        params: { resendAfter: String(result.resendAfterSeconds) },
+      });
     } catch (err) {
       setError(messageForError(err));
     }
