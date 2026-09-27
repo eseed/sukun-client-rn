@@ -55,6 +55,29 @@ describe('messageForError', () => {
   });
 });
 
+describe('messageForError for OTP rate limits', () => {
+  const otp = (retryAfterSeconds?: number) => ({ code: 'OTP_RATE_LIMITED', retryAfterSeconds });
+
+  it('says how long to wait, the same way for every number', () => {
+    expect(messageForError(otp(45))).toBe(
+      'Too many code attempts for this number. Try again in 45 seconds.',
+    );
+    expect(messageForError(otp(90))).toBe(
+      'Too many code attempts for this number. Try again in 90 seconds.',
+    );
+    expect(messageForError(otp(600))).toBe(
+      'Too many code attempts for this number. Try again in 10 minutes.',
+    );
+    expect(messageForError(otp(86400))).toBe(
+      'Too many code attempts for this number. Try again in 24 hours.',
+    );
+  });
+
+  it('keeps the old copy when the refusal gives no wait', () => {
+    expect(messageForError(otp())).toBe('Give it a moment before asking for another code.');
+  });
+});
+
 describe('isCartNotEditableError', () => {
   it('reads the refusal off the api error', () => {
     expect(isCartNotEditableError(apiError('CART_NOT_EDITABLE'))).toBe(true);

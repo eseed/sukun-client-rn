@@ -196,11 +196,44 @@ export function isEntryPassNotIssued(error: unknown): boolean {
 }
 
 /** Pulls a display message off whatever the api layer threw. */
+/**
+ * Refusals whose copy says how long to wait, from the error's `retryAfterSeconds`. One wording for
+ * every per-number OTP refusal (resend too soon, daily cap, lock after wrong codes), so it never
+ * hints at whether the number has an account. Without a wait they fall back to MESSAGES.
+ */
+const RATE_LIMIT_TEMPLATES: Record<string, string> = {
+  OTP_RATE_LIMITED: 'Too many code attempts for this number. Try again in {wait}.',
+};
+
+function unit(count: number, singular: string): string {
+  return `${count} ${count === 1 ? singular : `${singular}s`}`;
+}
+
+/**
+ * `retryAfterSeconds` as copy: seconds under two minutes (`"90 seconds"`, matching a 1:30
+ * countdown), whole minutes under two hours, then whole hours, always rounded up. `null` when
+ * the refusal gave no usable wait.
+ */
+function waitText(retryAfterSeconds: unknown): string | null {
+  if (typeof retryAfterSeconds !== 'number' || !Number.isFinite(retryAfterSeconds)) return null;
+  const seconds = Math.max(1, Math.ceil(retryAfterSeconds));
+  if (seconds < 120) return unit(seconds, 'second');
+  if (seconds < 7200) return unit(Math.ceil(seconds / 60), 'minute');
+  return unit(Math.ceil(seconds / 3600), 'hour');
+}
+
+function rateLimitMessage(code: string, retryAfterSeconds: unknown): string | null {
+  const template = RATE_LIMIT_TEMPLATES[code];
+  if (!template) return null;
+  const wait = waitText(retryAfterSeconds);
+  return wait ? template.replace('{wait}', wait) : null;
+}
+
 export function messageForError(error: unknown): string {
   if (isRecord(error)) {
     const code = error.code;
     if (typeof code === 'string') {
-      return messageForCode(code);
+      return rateLimitMessage(code, error.retryAfterSeconds) ?? messageForCode(code);
     }
     if (typeof error.message === 'string' && error.message.trim()) return error.message;
   }
