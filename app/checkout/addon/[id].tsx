@@ -274,72 +274,76 @@ export default function AddonDetailScreen() {
           <Text variant="eyebrow" style={styles.groupLabel}>
             {OPTION_GROUP_LABEL.accommodation}
           </Text>
-          {roomGrid.map((room) => {
-            const forNights = room.options.find((option) => option.nights === selectedNights);
-            const disabled = forNights === undefined || forNights.availability === 'unavailable';
+          <View style={styles.options}>
+            {roomGrid.map((room) => {
+              const forNights = room.options.find((option) => option.nights === selectedNights);
+              const disabled = forNights === undefined || forNights.availability === 'unavailable';
 
-            return (
-              <SelectableCard
-                key={room.type}
-                selected={room.type === selectedRoomType}
-                disabled={disabled}
-                onPress={() => setRoomType(room.type)}
-              >
-                <RadioDot selected={room.type === selectedRoomType} />
-                <View style={styles.rowBody}>
-                  <View style={styles.rowTop}>
-                    <Text style={styles.rowName}>{room.type}</Text>
-                    {forNights ? (
-                      <Text style={styles.rowPrice}>
-                        {forNights.priceEgpNow ? formatEgp(forNights.priceEgpNow) : NO_PRICE}
-                      </Text>
+              return (
+                <SelectableCard
+                  key={room.type}
+                  selected={room.type === selectedRoomType}
+                  disabled={disabled}
+                  onPress={() => setRoomType(room.type)}
+                >
+                  <RadioDot selected={room.type === selectedRoomType} />
+                  <View style={styles.rowBody}>
+                    <View style={styles.rowTop}>
+                      <Text style={styles.rowName}>{room.type}</Text>
+                      {forNights ? (
+                        <Text style={styles.rowPrice}>
+                          {forNights.priceEgpNow ? formatEgp(forNights.priceEgpNow) : NO_PRICE}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Text variant="metaSm" color={colors.textMuted}>
+                      {forNights
+                        ? `${forNights.occupancy} ${forNights.occupancy === 1 ? 'occupant' : 'occupants'}`
+                        : // The catalogue is not a full grid, so a combination that does not exist
+                          // says so instead of pretending to be sold out.
+                          'Not offered for these nights'}
+                    </Text>
+                    {forNights?.availability === 'unavailable' ? (
+                      <Badge label="Sold out" tone="rose" />
                     ) : null}
                   </View>
-                  <Text variant="metaSm" color={colors.textMuted}>
-                    {forNights
-                      ? `${forNights.occupancy} ${forNights.occupancy === 1 ? 'occupant' : 'occupants'}`
-                      : // The catalogue is not a full grid, so a combination that does not exist
-                        // says so instead of pretending to be sold out.
-                        'Not offered for these nights'}
-                  </Text>
-                  {forNights?.availability === 'unavailable' ? (
-                    <Badge label="Sold out" tone="rose" />
-                  ) : null}
-                </View>
-              </SelectableCard>
-            );
-          })}
+                </SelectableCard>
+              );
+            })}
+          </View>
 
           {nightChoices.length > 1 ? (
             <>
               <Text variant="eyebrow" style={styles.groupLabel}>
                 Nights
               </Text>
-              {nightChoices.map((count) => {
-                const sample = roomGrid
-                  .flatMap((room) => room.options)
-                  .find((option) => option.nights === count);
+              <View style={styles.options}>
+                {nightChoices.map((count) => {
+                  const sample = roomGrid
+                    .flatMap((room) => room.options)
+                    .find((option) => option.nights === count);
 
-                return (
-                  <SelectableCard
-                    key={count}
-                    selected={count === selectedNights}
-                    onPress={() => setNights(count)}
-                  >
-                    <RadioDot selected={count === selectedNights} />
-                    <View style={styles.rowBody}>
-                      <Text style={styles.rowName}>
-                        {count === 1 ? '1 night' : `${count} nights`}
-                      </Text>
-                      {sample ? (
-                        <Text variant="metaSm" color={colors.textMuted}>
-                          {formatDate(sample.checkInDate)} → {formatDate(sample.checkOutDate)}
+                  return (
+                    <SelectableCard
+                      key={count}
+                      selected={count === selectedNights}
+                      onPress={() => setNights(count)}
+                    >
+                      <RadioDot selected={count === selectedNights} />
+                      <View style={styles.rowBody}>
+                        <Text style={styles.rowName}>
+                          {count === 1 ? '1 night' : `${count} nights`}
                         </Text>
-                      ) : null}
-                    </View>
-                  </SelectableCard>
-                );
-              })}
+                        {sample ? (
+                          <Text variant="metaSm" color={colors.textMuted}>
+                            {formatDate(sample.checkInDate)} → {formatDate(sample.checkOutDate)}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </SelectableCard>
+                  );
+                })}
+              </View>
             </>
           ) : null}
 
@@ -359,30 +363,32 @@ export default function AddonDetailScreen() {
           <Text variant="eyebrow" style={styles.groupLabel}>
             {OPTION_GROUP_LABEL[addon.type]}
           </Text>
-          {addon.options.map((option) => (
-            <SelectableCard
-              key={option.id}
-              selected={option.id === resolvedOption?.id}
-              disabled={option.availability === 'unavailable'}
-              onPress={() => setOptionId(option.id)}
-            >
-              <RadioDot selected={option.id === resolvedOption?.id} />
-              <View style={styles.rowBody}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.rowName}>{option.label}</Text>
-                  <Text style={styles.rowPrice}>
-                    {option.priceEgpNow ? formatEgp(option.priceEgpNow) : NO_PRICE}
+          <View style={styles.options}>
+            {addon.options.map((option) => (
+              <SelectableCard
+                key={option.id}
+                selected={option.id === resolvedOption?.id}
+                disabled={option.availability === 'unavailable'}
+                onPress={() => setOptionId(option.id)}
+              >
+                <RadioDot selected={option.id === resolvedOption?.id} />
+                <View style={styles.rowBody}>
+                  <View style={styles.rowTop}>
+                    <Text style={styles.rowName}>{option.label}</Text>
+                    <Text style={styles.rowPrice}>
+                      {option.priceEgpNow ? formatEgp(option.priceEgpNow) : NO_PRICE}
+                    </Text>
+                  </View>
+                  <Text variant="metaSm" color={colors.textMuted}>
+                    {describeOption(option as TransportAddonOption)}
                   </Text>
+                  {option.availability === 'unavailable' ? (
+                    <Badge label="Sold out" tone="rose" />
+                  ) : null}
                 </View>
-                <Text variant="metaSm" color={colors.textMuted}>
-                  {describeOption(option as TransportAddonOption)}
-                </Text>
-                {option.availability === 'unavailable' ? (
-                  <Badge label="Sold out" tone="rose" />
-                ) : null}
-              </View>
-            </SelectableCard>
-          ))}
+              </SelectableCard>
+            ))}
+          </View>
         </>
       )}
 
@@ -445,7 +451,10 @@ const styles = StyleSheet.create({
   lead: { color: colors.textMuted, marginTop: space.s2 },
   window: { marginTop: space.s2, marginBottom: space.s3 },
   groupLabel: { marginTop: space.s4, marginBottom: space.s2 },
-  rowBody: { flex: 1, gap: space.s1, marginLeft: space.s3 },
+  // The design's 8 between option rows (artboard 11), so their rounded borders never touch.
+  options: { gap: space.s2 },
+  // Sits on SelectableCard's own 14 gap after the radio, as on the pass step's tier cards.
+  rowBody: { flex: 1, gap: space.s1 },
   /*
    * The price drops to its own line when it will not fit beside the name.
    *
