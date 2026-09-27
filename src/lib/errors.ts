@@ -126,6 +126,37 @@ const MESSAGES: Record<string, string> = {
   EMAIL_VERIFICATION_TOKEN_INVALID: 'That verification link is not valid. Send a new one.',
   EMAIL_VERIFICATION_TARGET_MISMATCH: 'That link was for a different email address.',
 
+  /*
+   * Cart and place-order refusals the backend sends in a race (a pass or an extra selling out
+   * between review and Pay, a code that stopped applying). Said plainly rather than falling back
+   * to "Something went wrong". The web client carries the same copy.
+   */
+  CART_EVENT_MISMATCH: 'That pass is no longer available.',
+  EVENT_NOT_ON_SALE: 'Tickets for this event are no longer on sale.',
+  TIER_NOT_AVAILABLE: 'That pass is no longer on sale.',
+  CAPACITY_NO_LONGER_AVAILABLE: 'This pass just sold out.',
+  // Test and real accounts cannot buy for each other.
+  ORDER_COMMERCE_MODE_MISMATCH: "This order can't be placed from this account.",
+  ZERO_TOTAL_ORDER_NOT_ALLOWED:
+    "Free orders can't be placed here. If you used a promo code, remove it to continue.",
+  ADDON_OPTION_NOT_FOUND:
+    'One of your extras is no longer available. Go back and check your extras.',
+  ADDON_OPTION_NOT_AVAILABLE:
+    'One of your extras is no longer available. Go back and check your extras.',
+  // The event takes no tickets per order right now.
+  CART_TICKET_ITEM_NOT_FOUND: "Tickets for this event can't be bought right now.",
+  CART_NOT_FOUND: 'This checkout is no longer available. Start again from the event.',
+  // An option twice, or a quantity out of bounds.
+  CART_LINE_PAYLOAD_INVALID:
+    "We can't take one of your extras as picked. Go back and check your extras.",
+  ADDONS_FEATURE_DISABLED:
+    "Extras can't be booked for this event right now. Go back and remove them to continue.",
+  // Disabled codes read exactly like unknown ones.
+  PROMO_CODE_DISABLED: 'That promo code is not valid.',
+  PROMO_NOT_APPLICABLE_TO_CART: 'That promo code does not apply to this order.',
+  // Order placement's spelling of the tier refusal.
+  PROMO_CODE_NOT_ELIGIBLE_FOR_TIER: 'That promo code does not apply to this pass.',
+
   VALIDATION_ERROR: 'Some of those details are not valid. Check and try again.',
   INTERNAL_SERVER_ERROR: 'Something went wrong on our side. Try again in a moment.',
 };

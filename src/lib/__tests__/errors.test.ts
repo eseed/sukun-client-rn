@@ -111,3 +111,23 @@ describe('payment provider refusals', () => {
     );
   });
 });
+
+describe('checkout refusals raised in a race', () => {
+  it('says what happened instead of the generic fallback', () => {
+    const cases: [string, string][] = [
+      ['CAPACITY_NO_LONGER_AVAILABLE', 'This pass just sold out.'],
+      ['EVENT_NOT_ON_SALE', 'Tickets for this event are no longer on sale.'],
+      ['TIER_NOT_AVAILABLE', 'That pass is no longer on sale.'],
+      [
+        'ADDON_OPTION_NOT_AVAILABLE',
+        'One of your extras is no longer available. Go back and check your extras.',
+      ],
+      [
+        'ZERO_TOTAL_ORDER_NOT_ALLOWED',
+        "Free orders can't be placed here. If you used a promo code, remove it to continue.",
+      ],
+      ['PROMO_CODE_NOT_ELIGIBLE_FOR_TIER', 'That promo code does not apply to this pass.'],
+    ];
+    for (const [code, message] of cases) expect(messageForError(apiError(code))).toBe(message);
+  });
+});
