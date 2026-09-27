@@ -30,6 +30,7 @@ import { describeOption } from '../../../src/lib/addons';
 import { messageForError } from '../../../src/lib/errors';
 import { formatEgp } from '../../../src/lib/format';
 import { track } from '../../../src/lib/analytics';
+import { beginPaymentAttempt, trackPaymentFailed } from '../../../src/lib/purchase-analytics';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import { colors, fontFamily, space } from '../../../src/theme/tokens';
 import type { AddonDetail, AddonOption, CartPricingLine, OrderDetail } from '../../../src/api/types';
@@ -112,6 +113,16 @@ export default function TicketExtrasReviewScreen() {
       router.replace(`/checkout/payment?orderId=${order.id}`);
     }
   }, [order, router, serverSaysPaid, setCartId, sheet.outcome]);
+
+  /*
+   * The sheet's own FAIL or CANCELLED, reported here because this screen is the one that heard
+   * it. Most buyers who cancel never reach the payment screen, which used to be the only place
+   * this was counted. The helper keeps it to one per attempt if they do go on to it.
+   */
+  useEffect(() => {
+    if (!order || (sheet.outcome !== 'fail' && sheet.outcome !== 'cancelled')) return;
+    trackPaymentFailed(order.id, sheet.outcome);
+  }, [order, sheet.outcome]);
 
   // Only claim nothing was charged once the server has actually said so.
   const sheetError =
@@ -302,6 +313,7 @@ export default function TicketExtrasReviewScreen() {
         total: Number(placed.totalEgp),
         currency: placed.currency,
       });
+      beginPaymentAttempt(placed.id);
       sheet.present(intent);
     } catch (err) {
       const code =

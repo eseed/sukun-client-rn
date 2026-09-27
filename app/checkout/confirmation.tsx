@@ -3,8 +3,9 @@ import { useEffect } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Button, ResourceState, Screen, Text } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
-import { useEvent, useOrder, useTickets } from '../../src/hooks/queries';
+import { useEvent, useOrder, usePaymentStatus, useTickets } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
+import { trackPurchaseCompleted } from '../../src/lib/purchase-analytics';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily, fontSize, space } from '../../src/theme/tokens';
 import type { AddonType, OrderAddon } from '../../src/api/types';
@@ -16,6 +17,10 @@ import { useAuthStore } from '../../src/stores/auth';
  * The guest line is deliberately unconditional on whether the guest has an account: the copy
  * is the same either way, and the WhatsApp message is sent by the backend, not the app
  * (CLAUDE.md rules 4 and 6).
+ *
+ * It is also where `purchase_completed` is sent. Every paid order comes through here, whether
+ * the review screen or the payment screen watched it settle, so this is the one screen that can
+ * count each purchase exactly once. See `src/lib/purchase-analytics.ts`.
  */
 
 /**
@@ -88,6 +93,19 @@ export default function ConfirmationScreen() {
     void refetchOrder();
     void refetchTickets();
   }, [refetchOrder, refetchTickets, validOrderId]);
+
+  /*
+   * A SUCCESS from the sheet sends the buyer here before the webhook has necessarily landed, so
+   * the order can still read `awaiting_payment` on arrival. Payment status is watched until the
+   * server settles it, which refreshes the order, and the purchase is counted only once the
+   * server says paid: the sheet's verdict alone is not proof of payment.
+   */
+  const paid = orderQuery.data?.status === 'paid';
+  usePaymentStatus(validOrderId, { poll: Boolean(orderQuery.data) && !paid });
+
+  useEffect(() => {
+    if (paid && orderQuery.data) void trackPurchaseCompleted(orderQuery.data);
+  }, [orderQuery.data, paid]);
 
   if (!validOrderId) {
     return (

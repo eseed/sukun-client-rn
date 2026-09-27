@@ -3,8 +3,21 @@ import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src
 import { TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
 import { useAuthStore } from '../../../src/stores/auth';
 import { useCheckoutStore } from '../../../src/stores/checkout';
+import { track } from '../../../src/lib/analytics';
+import { resetPurchaseAnalyticsForTests } from '../../../src/lib/purchase-analytics';
 
 import PaymentScreen from '../payment';
+
+jest.mock('../../../src/lib/analytics', () => ({
+  ...jest.requireActual('../../../src/lib/analytics'),
+  track: jest.fn(),
+}));
+const mockTrack = track as jest.Mock;
+
+/** Every call for one event name, so an assertion reads the properties it was sent with. */
+function tracked(event: string) {
+  return mockTrack.mock.calls.filter(([name]) => name === event);
+}
 
 const mockParams: Record<string, string> = {};
 const mockRouter = {
@@ -66,6 +79,8 @@ beforeEach(() => {
   mockPaymob.presentPayVC.mockClear();
   mockPaymob.setSdkListener.mockClear();
   mockRouter.replace.mockClear();
+  mockTrack.mockClear();
+  resetPurchaseAnalyticsForTests();
   useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
 });
 
@@ -151,6 +166,9 @@ it('goes to the confirmation when the SDK reports SUCCESS', async () => {
   await waitFor(() =>
     expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/confirmation?orderId=${order.id}`),
   );
+  // Counted by the confirmation screen, which every paid order reaches, not here.
+  expect(tracked('purchase_completed')).toHaveLength(0);
+  expect(tracked('payment_failed')).toHaveLength(0);
 });
 
 it('surfaces a failure when the SDK reports FAIL', async () => {
@@ -162,6 +180,9 @@ it('surfaces a failure when the SDK reports FAIL', async () => {
     expect(screen.getByText('The payment did not go through. Nothing was charged.')).toBeTruthy(),
   );
   expect(mockRouter.replace).not.toHaveBeenCalled();
+  expect(tracked('payment_failed')).toEqual([
+    ['payment_failed', { order_id: mockParams.orderId, outcome: 'fail' }],
+  ]);
 });
 
 it('surfaces a cancellation when the SDK reports CANCELLED', async () => {
@@ -173,6 +194,9 @@ it('surfaces a cancellation when the SDK reports CANCELLED', async () => {
     expect(screen.getByText('Payment was cancelled. Nothing was charged.')).toBeTruthy(),
   );
   expect(mockRouter.replace).not.toHaveBeenCalled();
+  expect(tracked('payment_failed')).toEqual([
+    ['payment_failed', { order_id: mockParams.orderId, outcome: 'cancelled' }],
+  ]);
 });
 
 it('keeps waiting when the SDK reports PENDING', async () => {

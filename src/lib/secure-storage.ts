@@ -58,4 +58,6 @@ export const SECURE_KEYS = {
   acquisitionDeviceId: 'sukun.acquisition.deviceId',
   acquisitionDeviceIdentityInvalid: 'sukun.acquisition.deviceIdentityInvalid',
   acquisitionAttributionState: 'sukun.acquisition.attributionState',
+  /** Order ids already sent as `purchase_completed`. See `src/lib/purchase-analytics.ts`. */
+  reportedPurchases: 'sukun.analytics.reportedPurchases',
 } as const;
