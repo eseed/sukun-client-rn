@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import {
   BackButton,
@@ -20,6 +20,7 @@ import {
 import { HoldTimer } from '../../src/components/checkout/HoldTimer';
 import { isOrderCancellable, isPaymentRetryable, isPaymentUnsettled } from '../../src/lib/orders';
 import { track } from '../../src/lib/analytics';
+import { beginPaymentAttempt, trackPaymentFailed } from '../../src/lib/purchase-analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
@@ -114,37 +115,17 @@ export default function PaymentScreen() {
   const retryable = !settled && !closed && isPaymentRetryable(status);
   const unsettledAttempt = isPaymentUnsettled(status);
 
-  const trackedSettledRef = useRef(false);
-  const trackedFailedRef = useRef(false);
-
   useEffect(() => {
     if (!settled) return;
-    if (!trackedSettledRef.current) {
-      trackedSettledRef.current = true;
-      if (order) {
-        track('purchase_completed', {
-          order_id: order.id,
-          event_id: order.eventId,
-          total: Number(order.totalEgp),
-          currency: order.currency,
-          item_count: order.items.reduce((sum, item) => sum + item.quantity, 0),
-          guest_count: order.guests.length,
-          addon_count: order.addons.length,
-          has_promo: Number(order.discountEgp) > 0,
-        });
-      }
-    }
+    // `purchase_completed` is sent by the confirmation screen, which every paid order reaches
+    // whichever screen watched it settle (see `src/lib/purchase-analytics.ts`).
     reset();
     router.replace(`/checkout/confirmation?orderId=${validOrderId}`);
-  }, [order, reset, router, settled, validOrderId]);
+  }, [reset, router, settled, validOrderId]);
 
   useEffect(() => {
-    if (!failed || trackedFailedRef.current || !validOrderId) return;
-    trackedFailedRef.current = true;
-    track('payment_failed', {
-      order_id: validOrderId,
-      outcome: sdkResult === 'cancelled' ? 'cancelled' : 'fail',
-    });
+    if (!failed || !validOrderId) return;
+    trackPaymentFailed(validOrderId, sdkResult === 'cancelled' ? 'cancelled' : 'fail');
   }, [failed, sdkResult, validOrderId]);
 
   async function onPay() {
@@ -158,6 +139,7 @@ export default function PaymentScreen() {
 
     try {
       const intent = await initiate.mutateAsync(validOrderId);
+      beginPaymentAttempt(validOrderId);
       track('payment_started', {
         order_id: validOrderId,
         total: Number(order?.totalEgp ?? 0),
@@ -185,7 +167,7 @@ export default function PaymentScreen() {
 
     try {
       const intent = await retry.mutateAsync(validOrderId);
-      trackedFailedRef.current = false;
+      beginPaymentAttempt(validOrderId);
       track('payment_retried', { order_id: validOrderId });
       presentPaymob(intent);
     } catch (err) {

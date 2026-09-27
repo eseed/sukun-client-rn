@@ -26,6 +26,7 @@ import {
   useRemoveCartPromo,
 } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
+import { beginPaymentAttempt, trackPaymentFailed } from '../../src/lib/purchase-analytics';
 import { heldOrderIdFromError, messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
 import { useCheckoutStore } from '../../src/stores/checkout';
@@ -129,6 +130,16 @@ export default function ReviewScreen() {
     router.replace(`/checkout/payment?orderId=${orderId}` as never);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /*
+   * The sheet's own FAIL or CANCELLED, reported here because this screen is the one that heard
+   * it. Most buyers who cancel never reach the payment screen, which used to be the only place
+   * this was counted. The helper keeps it to one per attempt if they do go on to it.
+   */
+  useEffect(() => {
+    if (!order || (sheet.outcome !== 'fail' && sheet.outcome !== 'cancelled')) return;
+    trackPaymentFailed(order.id, sheet.outcome);
+  }, [order, sheet.outcome]);
 
   // Only claim nothing was charged once the server has actually said so.
   const sheetError =
@@ -292,6 +303,7 @@ export default function ReviewScreen() {
         total: Number(placed.totalEgp),
         currency: placed.currency,
       });
+      beginPaymentAttempt(placed.id);
       sheet.present(intent);
     } catch (err) {
       const code =
