@@ -15,6 +15,7 @@ import {
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
 import { track } from '../../src/lib/analytics';
+import { trackMetaAddTickets } from '../../src/lib/meta-events';
 import { messageForError } from '../../src/lib/errors';
 import { useEvent } from '../../src/hooks/queries';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
@@ -122,6 +123,7 @@ export default function ChoosePassScreen() {
   const onContinue = () => {
     if (!canContinue) return;
     if (access.needs === null) {
+      if (selectedTier) trackMetaAddTickets(event, selectedTier, quantity);
       router.push(`/checkout/guests?eventId=${validEventId}`);
       return;
     }

@@ -220,3 +220,15 @@ starts from a stale number.
   unset id turns that SDK off, so a misconfigured build sends nothing rather than polluting the
   other environment. A new Mixpanel project must be created in the **EU** region, since the app
   posts to `api-eu.mixpanel.com`.
+- **Meta app events** (`react-native-fbsdk-next`) send the website Pixel's purchase-journey events
+  from the app, to the Meta app connected to the same dataset. `src/lib/meta-events.ts` maps each
+  action to its event (the web's `sukun-client-web/src/lib/meta-events.ts`; change them together)
+  and screens call it, never `trackMeta` or the SDK. The SDK sits behind the same consent switch:
+  `plugins/withMetaAppEvents.js` builds it asleep (no auto-init, no automatic events, no
+  advertising id, the `AD_ID` permission removed) and `enableAnalytics()` starts it with Meta's
+  automatic install and app-open events. No tracking-permission prompt on iOS (owner's call,
+  2026-09-28); installs are measured through SKAdNetwork. Only Meta's own parameters: tickets by
+  event id, extras by option id, values only as the server gave them, never the app user id, a
+  name, email, phone number, or a search that looks like one. `EXPO_PUBLIC_META_APP_ID` and
+  `EXPO_PUBLIC_META_CLIENT_TOKEN` are set in the production profile only; blank turns Meta off.
+  The consent screen, `app/account/analytics.tsx` and `app/legal/terms.tsx` say exactly this.

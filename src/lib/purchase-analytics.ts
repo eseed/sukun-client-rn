@@ -1,5 +1,6 @@
 import type { OrderDetail } from '../api/types';
 import { track } from './analytics';
+import { trackMetaPurchase } from './meta-events';
 import { getSecureItem, SECURE_KEYS, setSecureItem } from './secure-storage';
 
 /**
@@ -58,6 +59,8 @@ export async function trackPurchaseCompleted(order: OrderDetail): Promise<void> 
     addon_count: order.addons.length,
     has_promo: Number(order.discountEgp) > 0,
   });
+  // Meta's Purchase: the same order, under the same once-only rule.
+  trackMetaPurchase(order);
 
   const next = [...stored, order.id].slice(-REMEMBERED_PURCHASES);
   storedPurchases = Promise.resolve(next);

@@ -35,6 +35,7 @@ const CHECKED = [
   'EXPO_PUBLIC_API_BASE_URL',
   'EXPO_PUBLIC_MIXPANEL_TOKEN',
   'EXPO_PUBLIC_CLARITY_PROJECT_ID',
+  'EXPO_PUBLIC_META_APP_ID',
 ];
 
 const eas = JSON.parse(fs.readFileSync(path.join(ROOT, 'eas.json'), 'utf8'));

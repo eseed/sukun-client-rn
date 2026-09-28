@@ -50,9 +50,12 @@ export default function AnalyticsChoicesScreen() {
         We use Mixpanel to count how features are used and Microsoft Clarity to record replays of
         the screens you visit. Kochava measures which Sukun install links lead to an install. If you
         allow it, the app sends Kochava&apos;s attribution result and an opaque Sukun installation
-        ID to our backend, where it can be linked to your account after phone verification. Your
-        name, email, and phone number are not sent to Kochava. This integration does not request
-        IDFA, Google Advertising ID, or Apple&apos;s tracking permission.
+        ID to our backend, where it can be linked to your account after phone verification. Meta
+        measures our campaigns: it receives app installs and opens, the events you search for and
+        view, your checkout and sign-up steps, completed purchases and device details, and may use
+        this activity under its own terms for measurement and advertising. Your Sukun account ID,
+        name, email, and phone number are not sent to Kochava or Meta, and neither requests IDFA,
+        Google Advertising ID, or Apple&apos;s tracking permission.
       </Text>
 
       <Card radiusSize={14} style={styles.card}>
@@ -65,8 +68,8 @@ export default function AnalyticsChoicesScreen() {
 
       <Text variant="bodyMuted" style={styles.note}>
         {granted
-          ? 'Turning this off stops analytics, session replay and Kochava attribution on this device. Unsent analytics data is cleared. You can turn them back on here at any time.'
-          : 'Analytics, session replay and Kochava attribution are off on this device. You can turn them back on here at any time.'}
+          ? 'Turning this off stops analytics, session replay, Kochava attribution and Meta measurement on this device. Unsent Mixpanel data is cleared. You can turn them back on here at any time.'
+          : 'Analytics, session replay, Kochava attribution and Meta measurement are off on this device. You can turn them back on here at any time.'}
       </Text>
 
       <Text variant="metaSm" color={colors.textMuted} style={styles.note}>

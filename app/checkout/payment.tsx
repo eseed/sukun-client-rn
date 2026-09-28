@@ -20,6 +20,7 @@ import {
 import { HoldTimer } from '../../src/components/checkout/HoldTimer';
 import { isOrderCancellable, isPaymentRetryable, isPaymentUnsettled } from '../../src/lib/orders';
 import { track } from '../../src/lib/analytics';
+import { trackMetaAddPaymentInfo } from '../../src/lib/meta-events';
 import { beginPaymentAttempt, trackPaymentFailed } from '../../src/lib/purchase-analytics';
 import { messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
@@ -145,6 +146,7 @@ export default function PaymentScreen() {
         total: Number(order?.totalEgp ?? 0),
         currency: order?.currency ?? 'EGP',
       });
+      trackMetaAddPaymentInfo(order);
       presentPaymob(intent);
     } catch (err) {
       setSheetPresented(false);
@@ -169,6 +171,7 @@ export default function PaymentScreen() {
       const intent = await retry.mutateAsync(validOrderId);
       beginPaymentAttempt(validOrderId);
       track('payment_retried', { order_id: validOrderId });
+      trackMetaAddPaymentInfo(order);
       presentPaymob(intent);
     } catch (err) {
       setSheetPresented(false);

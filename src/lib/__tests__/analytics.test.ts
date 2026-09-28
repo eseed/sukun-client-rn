@@ -1,5 +1,6 @@
 import * as Clarity from '@microsoft/react-native-clarity';
 import { Mixpanel } from 'mixpanel-react-native';
+import { AppEventsLogger, Settings } from 'react-native-fbsdk-next';
 
 /**
  * The consent gate is the whole point of this module, so what is asserted here is mostly what
@@ -159,6 +160,111 @@ describe('sign-out', () => {
     await flush();
 
     expect(clarityMock.startNewSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Meta app events', () => {
+  const metaSettings = Settings as jest.Mocked<typeof Settings>;
+  const metaLogger = AppEventsLogger as jest.Mocked<typeof AppEventsLogger>;
+  const TICKET = {
+    content_ids: ['event-1'],
+    content_type: 'product' as const,
+    contents: [{ id: 'event-1', quantity: 1 }],
+    num_items: 1,
+    content_name: 'Tulua',
+  };
+
+  it('starts nothing and logs nothing before consent', () => {
+    const analytics = loadAnalytics();
+
+    analytics.trackMeta('AddToCart', TICKET);
+
+    expect(metaSettings.initializeSDK).not.toHaveBeenCalled();
+    expect(metaSettings.setAutoLogAppEventsEnabled).not.toHaveBeenCalled();
+    expect(metaLogger.logEvent).not.toHaveBeenCalled();
+  });
+
+  it("starts the SDK with Meta's install and app-open events once consent is given", () => {
+    const analytics = loadAnalytics();
+
+    analytics.enableAnalytics();
+
+    expect(metaSettings.setAutoLogAppEventsEnabled).toHaveBeenCalledWith(true);
+    expect(metaLogger.setFlushBehavior).toHaveBeenCalledWith('auto');
+    expect(metaSettings.initializeSDK).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends each event under the SDK's names, with the value to sum", () => {
+    const analytics = loadAnalytics();
+
+    analytics.enableAnalytics();
+    analytics.trackMeta('AddToCart', { ...TICKET, value: 1710, currency: 'EGP' });
+    analytics.trackMeta('CompleteRegistration');
+    analytics.trackMeta('Search', { search_string: 'yoga', content_name: 'wellness' });
+
+    expect(metaLogger.logEvent.mock.calls).toEqual([
+      [
+        'fb_mobile_add_to_cart',
+        1710,
+        {
+          fb_content_id: '["event-1"]',
+          fb_content: '[{"id":"event-1","quantity":1}]',
+          fb_content_type: 'product',
+          fb_description: 'Tulua',
+          fb_num_items: 1,
+          fb_currency: 'EGP',
+        },
+      ],
+      ['fb_mobile_complete_registration', {}],
+      ['fb_mobile_search', { fb_search_string: 'yoga', fb_description: 'wellness' }],
+    ]);
+  });
+
+  it('sends a Purchase through logPurchase, with the order id', () => {
+    const analytics = loadAnalytics();
+
+    analytics.enableAnalytics();
+    analytics.trackMeta(
+      'Purchase',
+      { ...TICKET, value: 2280, currency: 'EGP' },
+      { orderId: 'order-1' },
+    );
+
+    expect(metaLogger.logPurchase).toHaveBeenCalledWith(2280, 'EGP', {
+      fb_content_id: '["event-1"]',
+      fb_content: '[{"id":"event-1","quantity":1}]',
+      fb_content_type: 'product',
+      fb_description: 'Tulua',
+      fb_num_items: 1,
+      fb_currency: 'EGP',
+      fb_order_id: 'order-1',
+    });
+    expect(metaLogger.logEvent).not.toHaveBeenCalled();
+  });
+
+  it('stops the automatic events and sends nothing once consent is withdrawn', () => {
+    const analytics = loadAnalytics();
+
+    analytics.enableAnalytics();
+    analytics.disableAnalytics();
+    analytics.trackMeta('AddToCart', TICKET);
+
+    expect(metaSettings.setAutoLogAppEventsEnabled).toHaveBeenLastCalledWith(false);
+    // Meta's dashboard can keep automatic events on: the queue stays on the device instead.
+    expect(metaLogger.setFlushBehavior).toHaveBeenLastCalledWith('explicit_only');
+    expect(metaLogger.logEvent).not.toHaveBeenCalled();
+  });
+
+  it('starts the SDK only once, however often consent comes back', () => {
+    const analytics = loadAnalytics();
+
+    analytics.enableAnalytics();
+    analytics.disableAnalytics();
+    analytics.enableAnalytics();
+
+    expect(metaSettings.initializeSDK).toHaveBeenCalledTimes(1);
+    expect(metaSettings.setAutoLogAppEventsEnabled).toHaveBeenLastCalledWith(true);
+    expect(metaLogger.setFlushBehavior).toHaveBeenLastCalledWith('auto');
   });
 });
 

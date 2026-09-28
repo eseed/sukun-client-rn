@@ -1,6 +1,6 @@
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Modal,
@@ -31,6 +31,7 @@ import { messageForError } from '../../src/lib/errors';
 import { eventAvailabilityMessage } from '../../src/lib/event-availability';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
+import { trackMetaFindLocation, trackMetaViewContent } from '../../src/lib/meta-events';
 import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
@@ -58,6 +59,14 @@ export default function EventDetailScreen() {
     typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
+
+  // Meta's ViewContent, once per event shown, however often the event is refetched.
+  const viewedEventId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!event || viewedEventId.current === event.id) return;
+    viewedEventId.current = event.id;
+    trackMetaViewContent(event);
+  }, [event]);
   // The catalogue is public, so this needs no cart and no sign-in. A failed or still-loading
   // fetch reads as "no extras", which is the same silent state as a genuinely empty catalogue:
   // better to under-promise on the event page than to advertise extras that are not there.
@@ -110,6 +119,7 @@ export default function EventDetailScreen() {
 
   function onOpenVenue() {
     track('venue_map_opened', { event_id: eventId, event_slug: eventSlug ?? '' });
+    if (event) trackMetaFindLocation(event);
     void openVenueInMaps(event?.venue);
   }
 
