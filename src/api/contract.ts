@@ -167,7 +167,7 @@ export interface SukunApi {
     }): Promise<CursorPage<Ticket>>;
     detail(ticketId: string): Promise<Ticket>;
     claim(ticketId: string): Promise<Ticket>;
-    /** PENDING BACKEND — no entry-pass endpoint on staging yet. See `EntryPass`. */
+    /** Current authenticated holder pass. See `EntryPass`. */
     entryPass(ticketId: string): Promise<EntryPass>;
     /** Addons attached to a ticket after fulfilment. */
     addons(ticketId: string, includeRefunded?: boolean): Promise<TicketAddon[]>;

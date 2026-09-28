@@ -192,7 +192,7 @@ export default function ProfileFormScreen() {
           onPress: () => {
             void useAuthStore
               .getState()
-              .signOut({ remote: false })
+              .signOut({ remote: false, revokePushToken: true })
               .then(() => router.replace('/(onboarding)/phone'));
           },
         },

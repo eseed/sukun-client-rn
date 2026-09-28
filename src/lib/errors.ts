@@ -172,22 +172,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export function codeForError(error: unknown): string | undefined {
+  if (!isRecord(error) || typeof error.code !== 'string') return undefined;
+  return error.code;
+}
+
 /**
  * True when there is simply no entry pass to show yet, as opposed to one that failed to load.
  *
- * Two situations produce it and the screen treats them alike: the entry-pass route is not
- * deployed yet (it answers 404/405/501), or the backend has the route and declines to mint a
- * code this far out from the event. Neither is something the holder can retry, so the pass
- * panel shows its "check back" placeholder rather than an error. The `ENTRY_PASS_NOT_*` prefix
- * is here ahead of the backend on purpose: whatever it names that refusal, this build already
- * reads it as "not yet" instead of falling through to generic error copy.
+ * Legacy route-unavailable responses and explicit entry-window refusals are not retryable from
+ * the screen. A 404 by itself is deliberately excluded: the P1 route uses TICKET_NOT_FOUND for
+ * an unknown or unowned ticket, and that must refresh ticket state rather than look like a pass
+ * that is merely not ready yet.
  */
 export function isEntryPassNotIssued(error: unknown): boolean {
   if (!isRecord(error)) return false;
   const status = typeof error.status === 'number' ? error.status : 0;
-  const code = typeof error.code === 'string' ? error.code : '';
+  const code = codeForError(error) ?? '';
   return (
-    status === 404 ||
     status === 405 ||
     status === 501 ||
     code === 'NOT_IMPLEMENTED' ||

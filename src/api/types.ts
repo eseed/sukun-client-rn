@@ -471,11 +471,6 @@ export interface Ticket {
 
 /**
  * The rotating entry QR payload.
- *
- * PENDING BACKEND — there is no entry-pass endpoint on `staging` yet
- * (`MobileTicketsController` exposes list / detail / claim only). The mock issues a signed-
- * looking payload that rotates on `refreshAfterSeconds` so the screen, its timer, and its
- * rotation behaviour are all real. Wire to the endpoint when it lands.
  */
 export interface EntryPass {
   ticketId: string;

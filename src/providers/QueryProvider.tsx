@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useState } from 'react';
+import { NotificationResponseRouter } from '../services/notifications/NotificationResponseRouter';
+import { PushTokenRegistration } from '../services/notifications/PushTokenRegistration';
 import { setAuthQueryCacheClearHandler, useAuthStore } from '../stores/auth';
 
 /**
@@ -37,5 +39,11 @@ export function QueryProvider({ children }: { children: ReactNode }) {
     }
   }, [authStatus, client, user]);
 
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <NotificationResponseRouter />
+      <PushTokenRegistration />
+      {children}
+    </QueryClientProvider>
+  );
 }

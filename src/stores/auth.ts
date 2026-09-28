@@ -1,11 +1,17 @@
 import type { useRouter } from 'expo-router';
 import { create } from 'zustand';
-import { api } from '../api';
+import { API_MODE, api } from '../api';
+import { revokeLivePushToken } from '../api/live/push-tokens';
 import { setAuthFailureHandler } from '../api/live/http';
 import type { CurrentUser } from '../api/types';
 import { identify, resetAnalytics } from '../lib/analytics';
 import { deleteSecureItem, getSecureItem, SECURE_KEYS, setSecureItem } from '../lib/secure-storage';
 import { requiresLivingArea } from '../lib/phone';
+import { getOrCreateSukunDeviceId } from '../services/attribution/device-id';
+import {
+  cancelPendingPushRegistrations,
+  waitForPendingPushRegistrations,
+} from '../services/notifications/push-registration-state';
 
 /**
  * Session state. Tokens live in the keychain; this store holds the in-memory view of who is
@@ -112,7 +118,7 @@ interface AuthState {
     user: CurrentUser,
   ) => Promise<void>;
   setUser: (user: CurrentUser) => void;
-  signOut: (options?: { remote?: boolean }) => Promise<void>;
+  signOut: (options?: { remote?: boolean; revokePushToken?: boolean }) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -233,6 +239,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   async signOut(options) {
     const generation = ++sessionGeneration;
+    const revokePushToken =
+      API_MODE === 'live' && (options?.remote !== false || options?.revokePushToken === true);
+    cancelPendingPushRegistrations();
     clearQueryCache?.();
     set({
       status: 'signed-out',
@@ -244,6 +253,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     resetAnalytics();
 
     await queueSecureTransition(async () => {
+      if (revokePushToken) {
+        try {
+          // Revoke before logout or local session disposal while bearer credentials still exist.
+          await waitForPendingPushRegistrations();
+          const deviceId = await getOrCreateSukunDeviceId();
+          if (deviceId) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3_000);
+            try {
+              await revokeLivePushToken(deviceId, controller.signal);
+            } finally {
+              clearTimeout(timeout);
+            }
+          }
+        } catch {
+          // Push is auxiliary; inability to revoke must never block sign-out.
+        }
+      }
       if (options?.remote !== false) {
         try {
           await api.auth.logout();

@@ -1,6 +1,7 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import {
   BackButton,
@@ -12,10 +13,27 @@ import {
   Text,
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
-import { useClaimTicket, useEntryPass, useTicket, useTicketAddons } from '../../src/hooks/queries';
+import {
+  queryKeys,
+  useClaimTicket,
+  useEntryPass,
+  useTicket,
+  useTicketAddons,
+} from '../../src/hooks/queries';
 import { describeTicketAddon, ticketAddonStatusLabel } from '../../src/lib/addons';
-import { isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
-import { missingProfileFields, ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
+import { codeForError, isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
+import {
+  getEntryPassOpensAt,
+  getEntryPassRefreshAt,
+} from '../../src/lib/entry-pass';
+import { api } from '../../src/api';
+import {
+  getAuthSessionGeneration,
+  isCurrentSignedInSession,
+  missingProfileFields,
+  ONBOARDING_RESUME_ROUTE,
+  useAuthStore,
+} from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 
 const QR_SIZE = 200;
@@ -23,40 +41,169 @@ const QR_SIZE = 200;
 /**
  * Design screen 21 · Entry pass / QR.
  *
- * PENDING BACKEND — there is no entry-pass endpoint on staging; `MobileTicketsController`
- * exposes list / detail / claim only. The mock issues a payload that rotates every 30
- * seconds so the screen, its countdown and its refresh behaviour are all real. See
- * `EntryPass` in `src/api/types.ts` for the shape the endpoint should return.
- *
- * Until it lands the live api's call 404s, and the QR panel says the code will appear closer
- * to the event rather than showing an error. That placeholder is driven entirely by the
- * response, so the same installed build renders the real rotating QR the moment the endpoint
- * starts answering: no rebuild, no release.
- *
- * The rotation is what makes a screenshot useless; the selfie is what stops someone else
- * walking in with a shared code (CLAUDE.md rule 3). This screen is where that selfie is
- * asked for: nothing earlier in the app demands one, so a holder meets the camera once, on
- * the ticket that needs it, with the reason in front of them.
+ * The short-lived QR and the selfie are the two entry checks (CLAUDE.md rule 3). This screen is
+ * where that selfie is asked for: nothing earlier in the app demands one, so a holder meets the
+ * camera once, on the ticket that needs it, with the reason in front of them.
  */
 export default function EntryPassScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const ticketId = typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id) ? id : undefined;
+  const isFocused = useIsFocused();
+  const [now, setNow] = useState(() => Date.now());
+  const [focusTime, setFocusTime] = useState(() => ({ focused: isFocused, value: Date.now() }));
+  const isScreenClockCurrent = !isFocused || focusTime.focused === isFocused;
+  const currentTime = Math.max(now, isScreenClockCurrent ? focusTime.value : 0);
 
   const ticketQuery = useTicket(ticketId);
   const addonsQuery = useTicketAddons(ticketId);
+  const queryClient = useQueryClient();
+  const entryPassOpensAt = ticketQuery.data ? getEntryPassOpensAt(ticketQuery.data.days) : null;
+  const entryPassWindowOpen =
+    isScreenClockCurrent && entryPassOpensAt !== null && currentTime >= entryPassOpensAt;
   const passQuery = useEntryPass(ticketId, {
-    enabled: Boolean(ticketId) && ticketQuery.data?.usageStatus === 'usable',
+    enabled: Boolean(ticketId) && ticketQuery.data?.usageStatus === 'usable' && entryPassWindowOpen,
   });
+  const entryPassData = passQuery.data;
+  const passExpiresAt = entryPassData ? Date.parse(entryPassData.expiresAt) : Number.NaN;
+  const entryPassDataUpdatedAt = passQuery.dataUpdatedAt;
+  const entryPassError = passQuery.error;
+  const entryPassIsFetching = passQuery.isFetching;
+  const refetchEntryPass = passQuery.refetch;
   const claimTicket = useClaimTicket();
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setNow(Date.now());
+    });
+    return () => appState.remove();
   }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const focusedAt = Date.now();
+      setNow(focusedAt);
+      setFocusTime({ focused: isFocused, value: focusedAt });
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (!isFocused || !isScreenClockCurrent) return;
+
+    const deadlines: number[] = [];
+    if (entryPassOpensAt !== null && entryPassOpensAt > currentTime) deadlines.push(entryPassOpensAt);
+    if (Number.isFinite(passExpiresAt) && passExpiresAt > currentTime) deadlines.push(passExpiresAt);
+    if (deadlines.length === 0) return;
+
+    const timeout = setTimeout(
+      () => setNow(Date.now()),
+      Math.max(0, Math.min(...deadlines) - Date.now() + 1),
+    );
+    return () => clearTimeout(timeout);
+  }, [isFocused, isScreenClockCurrent, entryPassOpensAt, passExpiresAt, currentTime]);
+
+  useEffect(() => {
+    if (
+      !isFocused ||
+      !ticketId ||
+      !entryPassWindowOpen ||
+      entryPassData?.payload ||
+      entryPassIsFetching
+    ) {
+      return;
+    }
+
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refetchEntryPass();
+    });
+    return () => appState.remove();
+  }, [
+    isFocused,
+    ticketId,
+    entryPassWindowOpen,
+    entryPassData,
+    entryPassIsFetching,
+    refetchEntryPass,
+  ]);
+
+  useEffect(() => {
+    const pass = entryPassData;
+    if (!isFocused || !ticketId || !pass?.payload || entryPassIsFetching) {
+      return;
+    }
+
+    const refreshAt = getEntryPassRefreshAt(pass, entryPassDataUpdatedAt);
+    if (entryPassError) {
+      const appState = AppState.addEventListener('change', (state) => {
+        if (state === 'active' && Date.now() >= refreshAt) void refetchEntryPass();
+      });
+      return () => appState.remove();
+    }
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let isForeground = AppState.currentState === 'active';
+
+    const clearRefreshTimer = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = undefined;
+    };
+    const scheduleRefresh = () => {
+      clearRefreshTimer();
+      if (!isForeground) return;
+      timeout = setTimeout(
+        () => {
+          void refetchEntryPass();
+        },
+        Math.max(0, refreshAt - Date.now()),
+      );
+    };
+
+    const appState = AppState.addEventListener('change', (state) => {
+      isForeground = state === 'active';
+      if (isForeground) scheduleRefresh();
+      else clearRefreshTimer();
+    });
+    scheduleRefresh();
+
+    return () => {
+      clearRefreshTimer();
+      appState.remove();
+    };
+  }, [
+    isFocused,
+    ticketId,
+    entryPassData,
+    entryPassDataUpdatedAt,
+    entryPassError,
+    entryPassIsFetching,
+    refetchEntryPass,
+  ]);
+
+  const passErrorCode = codeForError(passQuery.error);
+  useEffect(() => {
+    if (passErrorCode !== 'TICKET_NOT_FOUND' && passErrorCode !== 'TICKET_NOT_ACTIVE') return;
+
+    void queryClient.invalidateQueries({ queryKey: queryKeys.ticketsRoot });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.ticketRoot });
+
+    if (passErrorCode === 'TICKET_NOT_ACTIVE') {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.selfie });
+      const sessionGeneration = getAuthSessionGeneration();
+      void api.auth
+        .me()
+        .then((currentUser) => {
+          if (isCurrentSignedInSession(sessionGeneration)) {
+            setUser(currentUser);
+            queryClient.setQueryData(queryKeys.me, currentUser);
+          }
+        })
+        .catch(() => undefined);
+    }
+  }, [passErrorCode, passQuery.errorUpdatedAt, queryClient, setUser]);
 
   if (!ticketId) {
     return (
@@ -100,26 +247,29 @@ export default function EntryPassScreen() {
   const unusable = usageStatus === 'voided' || usageStatus === 'refunded';
 
   const pass = passQuery.data;
-  const rotation = pass?.refreshAfterSeconds ?? 30;
-  const hasPass = Boolean(pass?.payload);
+  const ticketRefusedPass =
+    passErrorCode === 'TICKET_NOT_FOUND' || passErrorCode === 'TICKET_NOT_ACTIVE';
+  const hasPass = Boolean(
+    pass?.payload &&
+      Number.isFinite(passExpiresAt) &&
+      passExpiresAt > currentTime &&
+      isScreenClockCurrent &&
+      !ticketRefusedPass,
+  );
 
   /*
-   * "No pass yet" is not a failure: either the endpoint is not deployed, or the backend has it
-   * and will not mint a code this far out from the event. Both get the placeholder, and a pass
-   * that arrives without a payload is treated the same way.
+   * An explicit entry-window refusal or empty response is a check-back state; ordinary endpoint
+   * failures remain retryable, and an unexpired cached pass stays visible unless the server says
+   * the ticket itself is no longer eligible.
    */
   const passNotIssued =
     (passQuery.error ? isEntryPassNotIssued(passQuery.error) : false) ||
     (pass !== undefined && !pass.payload);
 
-  // The countdown is derived from the pass's own expiry rather than held in state.
-
-  const secondsLeft = pass
-    ? Math.max(0, Math.ceil((Date.parse(pass.expiresAt) - now) / 1000))
-    : rotation;
+  // The loader counts to the next client refresh attempt; expiresAt remains the hard QR boundary.
+  const nextRefreshAt = pass ? getEntryPassRefreshAt(pass, passQuery.dataUpdatedAt) : null;
 
   const venue = ticket.event.venueName ?? '';
-  const progress = Math.max(0, Math.min(1, secondsLeft / rotation));
 
   const details = [
     { label: 'Holder', value: ticket.holderName },
@@ -203,6 +353,15 @@ export default function EntryPassScreen() {
                   style={styles.compactState}
                 />
               </View>
+            ) : !entryPassWindowOpen ? (
+              <View style={styles.passPending}>
+                <ResourceState
+                  status="empty"
+                  emptyTitle="QR Code will show here."
+                  emptyMessage="Your entry pass opens 12 hours before the event starts."
+                  style={styles.compactState}
+                />
+              </View>
             ) : passQuery.isPending ? (
               <View style={styles.qrPlaceholder}>
                 <ResourceState
@@ -211,12 +370,27 @@ export default function EntryPassScreen() {
                   style={styles.compactState}
                 />
               </View>
-            ) : passNotIssued ? (
+            ) : passNotIssued && !hasPass ? (
               <View style={styles.passPending}>
                 <ResourceState
                   status="empty"
                   emptyTitle="QR Code will show here."
-                  emptyMessage="Check back 2 days before the event."
+                  emptyMessage="The entry pass is not available yet. Try again closer to the event."
+                  style={styles.compactState}
+                />
+              </View>
+            ) : hasPass ? (
+              <QRCode
+                value={pass?.payload ?? ''}
+                size={QR_SIZE}
+                color={colors.black}
+                backgroundColor={colors.creme}
+              />
+            ) : passQuery.isFetching || (pass && !passQuery.error) ? (
+              <View style={styles.qrPlaceholder}>
+                <ResourceState
+                  status="loading"
+                  loadingLabel="Refreshing entry pass..."
                   style={styles.compactState}
                 />
               </View>
@@ -229,28 +403,34 @@ export default function EntryPassScreen() {
                   style={styles.compactState}
                 />
               </View>
-            ) : (
-              <QRCode
-                value={pass?.payload ?? ''}
-                size={QR_SIZE}
-                color={colors.black}
-                backgroundColor={colors.creme}
-              />
-            )}
+            ) : null}
 
             {needsSelfie ? (
               <Button label="Take selfie" onPress={onRemediate} style={styles.qrAction} />
             ) : null}
 
+            {hasPass && passQuery.error && !passNotIssued ? (
+              <>
+                <InlineError
+                  message={messageForError(passQuery.error)}
+                  style={styles.actionError}
+                />
+                <Button
+                  label="Retry refresh"
+                  onPress={() => void passQuery.refetch()}
+                  loading={passQuery.isFetching}
+                  style={styles.qrAction}
+                />
+              </>
+            ) : null}
+
             {/* Nothing is rotating until there is a code, so neither is the countdown. */}
-            {hasPass ? (
-              <View style={styles.refreshRow}>
-                <View style={styles.refreshTrack}>
-                  <View style={[styles.refreshFill, { flex: progress }]} />
-                  <View style={{ flex: 1 - progress }} />
-                </View>
-                <Text variant="metaSm">Refreshes in {secondsLeft}s</Text>
-              </View>
+            {hasPass && nextRefreshAt !== null ? (
+              <EntryPassRefreshTimer
+                nextRefreshAt={nextRefreshAt}
+                dataUpdatedAt={passQuery.dataUpdatedAt}
+                isRefreshing={passQuery.isFetching}
+              />
             ) : null}
           </View>
         ) : null}
@@ -284,13 +464,62 @@ export default function EntryPassScreen() {
           </View>
         ) : null}
 
-        {hasPass ? (
-          <Text style={styles.footnote}>
-            This code regenerates every ~{rotation} seconds. A screenshot won&apos;t get anyone in.
-          </Text>
-        ) : null}
       </Screen>
       <BottomNav tone="inverse" />
+    </View>
+  );
+}
+
+function EntryPassRefreshTimer({
+  nextRefreshAt,
+  dataUpdatedAt,
+  isRefreshing,
+}: {
+  nextRefreshAt: number;
+  dataUpdatedAt: number;
+  isRefreshing: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const stop = () => {
+      if (interval) clearInterval(interval);
+      interval = undefined;
+    };
+    const start = () => {
+      stop();
+      setNow(Date.now());
+      interval = setInterval(() => setNow(Date.now()), 1000);
+    };
+
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') start();
+      else stop();
+    });
+    if (AppState.currentState === 'active') start();
+
+    return () => {
+      stop();
+      appState.remove();
+    };
+  }, []);
+
+  const secondsLeft = Math.max(0, Math.ceil((nextRefreshAt - now) / 1000));
+  const refreshWindowMs = Math.max(1, nextRefreshAt - dataUpdatedAt);
+  const progress = Math.max(0, Math.min(1, (secondsLeft * 1000) / refreshWindowMs));
+
+  return (
+    <View style={styles.refreshRow}>
+      <View style={styles.refreshTrack}>
+        <View style={[styles.refreshFill, { flex: progress }]} />
+        <View style={{ flex: 1 - progress }} />
+      </View>
+      <Text variant="metaSm">
+        {isRefreshing && secondsLeft === 0
+          ? 'Refreshing entry pass...'
+          : `Refreshes in ${secondsLeft}s`}
+      </Text>
     </View>
   );
 }
@@ -429,12 +658,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: fontFamily.bodyMedium,
     color: colors.creme,
-  },
-  footnote: {
-    fontSize: 12,
-    lineHeight: 12 * 1.6,
-    color: colors.creme,
-    opacity: 0.55,
-    marginTop: 20,
   },
 });

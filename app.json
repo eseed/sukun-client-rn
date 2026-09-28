@@ -42,6 +42,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       [
         "expo-secure-store",
         {
