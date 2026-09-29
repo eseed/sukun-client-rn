@@ -17,7 +17,10 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    Sukun grants (an admin invitation) is the exception: it never binds by itself, even to a
    number that already has an account. It waits as `pending_claim` until its holder claims
    it, which `ClaimGate` puts in front of them first thing (`app/claim.tsx`), so the admin
-   can count granted against claimed.
+   can count granted against claimed. Builds from before the claim screen never offer to
+   claim, so the backend claims for them: every request carries `X-Sukun-Client-Revision`
+   (`MOBILE_CLIENT_REVISION` in `src/api/live/http.ts`), and one below 2, or none, has
+   granted tickets claimed on its behalf when it loads them.
 3. **The selfie is the anti-fraud control, and it is asked for once, at the QR.** A holder
    meets the camera when they open an entry pass, on the ticket that needs it, and never
    before: not to browse, not to register, not to pay. It is required for a *usable ticket*
