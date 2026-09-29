@@ -7,6 +7,7 @@ import { trackPushRegistration } from './push-registration-state';
 
 const REGISTRATION_ATTEMPTS = 3;
 const MAX_RETRY_DELAY_MS = 5_000;
+let permissionRequest: Promise<boolean> | null = null;
 
 function hasPermission(permissions: Notifications.NotificationPermissionsStatus): boolean {
   return (
@@ -15,17 +16,46 @@ function hasPermission(permissions: Notifications.NotificationPermissionsStatus)
   );
 }
 
-async function requestPermissionIfNeeded(): Promise<boolean> {
+async function performPermissionRequest(): Promise<boolean> {
+  const platform = Platform.OS;
+  if (platform !== 'ios' && platform !== 'android') return false;
+
+  let stage = 'notification permission lookup';
   try {
-    let permissions = await Notifications.getPermissionsAsync();
-    if (!hasPermission(permissions) && permissions.status === 'undetermined') {
-      permissions = await Notifications.requestPermissionsAsync();
+    if (platform === 'android') {
+      stage = 'Android notification channel setup';
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.DEFAULT,
+      });
     }
+
+    let permissions: Notifications.NotificationPermissionsStatus | null = null;
+    try {
+      permissions = await Notifications.getPermissionsAsync();
+    } catch {
+      // A failed lookup is not evidence that the user has already allowed notifications.
+      console.warn('[push] notification permission lookup failed');
+    }
+    if (permissions && hasPermission(permissions)) return true;
+
+    stage = 'notification permission request';
+    permissions = await Notifications.requestPermissionsAsync();
     return hasPermission(permissions);
   } catch {
-    console.warn('[push] notification permission lookup failed');
+    console.warn(`[push] ${stage} failed`);
     return false;
   }
+}
+
+/** Ask on each app start until permission is granted; coalesce simultaneous callers. */
+export function requestNotificationPermission(): Promise<boolean> {
+  if (permissionRequest) return permissionRequest;
+
+  permissionRequest = performPermissionRequest().finally(() => {
+    permissionRequest = null;
+  });
+  return permissionRequest;
 }
 
 /** Ask for an Expo Push Token after notification permission and the Android channel are ready. */
@@ -37,16 +67,8 @@ export async function getExpoPushToken(
 
   let stage = 'token lookup';
   try {
-    if (platform === 'android') {
-      stage = 'Android notification channel setup';
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.DEFAULT,
-      });
-    }
-
     stage = 'notification permission';
-    if (!(await requestPermissionIfNeeded())) return null;
+    if (!(await requestNotificationPermission())) return null;
 
     stage = 'Expo project configuration';
     const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;

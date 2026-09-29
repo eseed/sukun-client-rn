@@ -1,6 +1,20 @@
 {
   "components": {
     "schemas": {
+      "AppConfigResponseDto": {
+        "properties": {
+          "allowGuestBrowsing": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GuestBrowsingFlagsDto"
+              }
+            ],
+            "description": "Per-platform guest browsing, read by the app at launch."
+          }
+        },
+        "required": ["allowGuestBrowsing"],
+        "type": "object"
+      },
       "CursorPageMetaDto": {
         "properties": {
           "hasNextPage": {
@@ -70,6 +84,22 @@
           }
         },
         "required": ["statusCode", "error", "message", "details", "requestId", "timestamp"],
+        "type": "object"
+      },
+      "GuestBrowsingFlagsDto": {
+        "properties": {
+          "android": {
+            "description": "Whether the Android app offers the guest path. Normally false.",
+            "example": false,
+            "type": "boolean"
+          },
+          "ios": {
+            "description": "Whether the iOS app offers the guest path: the skip link on Welcome and the exits from the registration steps. Normally true; App Store guideline 5.1.1(v) requires it.",
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": ["ios", "android"],
         "type": "object"
       },
       "PublicAccommodationAddonOptionResponseDto": {
@@ -412,6 +442,265 @@
           "availableQuantity"
         ],
         "type": "object"
+      },
+      "PublicCheckoutPreviewAddonRequestDto": {
+        "properties": {
+          "optionId": {
+            "description": "Add-on option id, from the public add-on catalog.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "quantity": {
+            "description": "Units for the buyer, at most 10 here (the signed-in cart allows more). A room line must be 1.",
+            "maximum": 10,
+            "minimum": 1,
+            "type": "number"
+          }
+        },
+        "required": ["optionId", "quantity"],
+        "type": "object"
+      },
+      "PublicCheckoutPreviewRequestDto": {
+        "properties": {
+          "addons": {
+            "description": "Extras for the buyer, one line per option (no option twice). At most one room line, quantity 1, single occupancy.",
+            "items": {
+              "$ref": "#/components/schemas/PublicCheckoutPreviewAddonRequestDto"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "promoCode": {
+            "description": "Optional promo code. A problem with it never fails the request; see promoStatus and promoError.",
+            "example": "SUKUN20",
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "tierId": {
+            "description": "The pass (ticket tier). Always one ticket, for the buyer.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": ["tierId"],
+        "type": "object"
+      },
+      "PublicCheckoutPreviewResponseDto": {
+        "properties": {
+          "canPlaceOrder": {
+            "description": "Whether this selection would pass the signed-in preview right now. Checks that depend on who the buyer is happen after sign-in. Disable Pay only when this is false.",
+            "type": "boolean"
+          },
+          "eventId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/PublicCheckoutPricingIssueResponseDto"
+            },
+            "type": "array"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/PublicCheckoutPricingResponseDto"
+          },
+          "promoError": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicCheckoutPromoError"
+              }
+            ],
+            "description": "Set only when promoStatus is `rejected`. Disabled codes, and any code while the event is not on sale, read as PROMO_CODE_NOT_FOUND.",
+            "nullable": true
+          },
+          "promoStatus": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicCheckoutPromoStatus"
+              }
+            ],
+            "description": "`none`: no code sent. `applied`: the code is in the price. `rejected`: priced without it, see promoError. `deferred`: too many codes tried from here; priced without it and nothing said about the code, apply it after sign-in."
+          },
+          "validatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "eventId",
+          "canPlaceOrder",
+          "validatedAt",
+          "promoStatus",
+          "promoError",
+          "issues",
+          "pricing"
+        ],
+        "type": "object"
+      },
+      "PublicCheckoutPricingIssueResponseDto": {
+        "properties": {
+          "code": {
+            "example": "ADDON_OUT_OF_STOCK",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "description": "For ADDON_OUT_OF_STOCK: { requested, available }. `available` is null whenever the public add-on catalog would hide the count, and 0 when sold out.",
+            "type": "object"
+          },
+          "path": {
+            "description": "Indexes this request's `addons` (or `tickets`, `pricing.totalEgp`). The signed-in preview indexes the saved cart instead, so compare issue codes, never paths.",
+            "example": "addons.1",
+            "type": "string"
+          }
+        },
+        "required": ["code"],
+        "type": "object"
+      },
+      "PublicCheckoutPricingLineResponseDto": {
+        "properties": {
+          "addonName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "addonOptionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lineTotalEgp": {
+            "example": "200.00",
+            "nullable": true,
+            "type": "string"
+          },
+          "optionLabel": {
+            "nullable": true,
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "tierId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "tierName": {
+            "nullable": true,
+            "type": "string"
+          },
+          "unitPriceEgp": {
+            "example": "100.00",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": ["quantity"],
+        "type": "object"
+      },
+      "PublicCheckoutPricingResponseDto": {
+        "properties": {
+          "addonLines": {
+            "items": {
+              "$ref": "#/components/schemas/PublicCheckoutPricingLineResponseDto"
+            },
+            "type": "array"
+          },
+          "addonsSubtotalEgp": {
+            "type": "string"
+          },
+          "discountEgp": {
+            "type": "string"
+          },
+          "netEgp": {
+            "type": "string"
+          },
+          "promo": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicCheckoutPromoBreakdownResponseDto"
+              }
+            ],
+            "nullable": true,
+            "type": "object"
+          },
+          "status": {
+            "description": "`unavailable` (lines and promo only) whenever validation, pricing or promo issues exist. A zero total is still `complete`, with ZERO_TOTAL_ORDER_NOT_ALLOWED in issues.",
+            "enum": ["complete", "unavailable"],
+            "type": "string"
+          },
+          "subtotalEgp": {
+            "type": "string"
+          },
+          "ticketLines": {
+            "items": {
+              "$ref": "#/components/schemas/PublicCheckoutPricingLineResponseDto"
+            },
+            "type": "array"
+          },
+          "ticketsSubtotalEgp": {
+            "type": "string"
+          },
+          "totalEgp": {
+            "type": "string"
+          },
+          "vatEgp": {
+            "type": "string"
+          },
+          "vatRate": {
+            "example": "0.1400",
+            "type": "string"
+          }
+        },
+        "required": ["status", "ticketLines", "addonLines"],
+        "type": "object"
+      },
+      "PublicCheckoutPromoBreakdownResponseDto": {
+        "properties": {
+          "addonOptionId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "configuredDiscountEgp": {
+            "type": "string"
+          },
+          "discountEgp": {
+            "type": "string"
+          },
+          "eligibleSubtotalEgp": {
+            "type": "string"
+          },
+          "scope": {
+            "enum": ["ticket_only", "cart", "addon_option"],
+            "type": "string"
+          },
+          "tierId": {
+            "format": "uuid",
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "scope",
+          "configuredDiscountEgp",
+          "eligibleSubtotalEgp",
+          "discountEgp"
+        ],
+        "type": "object"
+      },
+      "PublicCheckoutPromoError": {
+        "description": "Set only when promoStatus is `rejected`. Disabled codes, and any code while the event is not on sale, read as PROMO_CODE_NOT_FOUND.",
+        "enum": ["PROMO_CODE_NOT_FOUND", "PROMO_CODE_ALREADY_USED", "PROMO_NOT_APPLICABLE_TO_CART"],
+        "type": "string"
+      },
+      "PublicCheckoutPromoStatus": {
+        "description": "`none`: no code sent. `applied`: the code is in the price. `rejected`: priced without it, see promoError. `deferred`: too many codes tried from here; priced without it and nothing said about the code, apply it after sign-in.",
+        "enum": ["none", "applied", "rejected", "deferred"],
+        "type": "string"
       },
       "PublicEventDayResponseDto": {
         "properties": {
@@ -1226,6 +1515,28 @@
         },
         "required": ["id", "type", "name", "featuredImageUrl", "options"],
         "type": "object"
+      },
+      "PublicVerifyEmailRequestDto": {
+        "properties": {
+          "token": {
+            "description": "One-time email verification token from the confirmation link",
+            "example": "base64url-one-time-verification-token",
+            "type": "string"
+          }
+        },
+        "required": ["token"],
+        "type": "object"
+      },
+      "PublicVerifyEmailResponseDto": {
+        "properties": {
+          "verified": {
+            "description": "Email verification state after processing the token",
+            "example": true,
+            "type": "boolean"
+          }
+        },
+        "required": ["verified"],
+        "type": "object"
       }
     }
   },
@@ -1237,6 +1548,96 @@
   },
   "openapi": "3.0.0",
   "paths": {
+    "/api/v1/public/app-config": {
+      "get": {
+        "description": "Feature flags the app reads at launch so they can be changed without a store release. Responses are English-only; Accept-Language is ignored.",
+        "operationId": "PublicAppConfigController_get_v1",
+        "parameters": [
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "allowGuestBrowsing": {
+                    "android": false,
+                    "ios": true
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AppConfigResponseDto"
+                }
+              }
+            },
+            "description": "Current flags"
+          }
+        },
+        "summary": "Mobile app configuration",
+        "tags": ["Public App Config"]
+      }
+    },
+    "/api/v1/public/email-verification/verify": {
+      "post": {
+        "description": "Consumes a one-time email verification token without an authenticated session. The verification token itself is the proof of control of the target email; the account and email are derived server-side from the stored token row. No authentication, user ID, phone number, or email address is required.",
+        "operationId": "PublicEmailVerificationController_verify_v1",
+        "parameters": [
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicVerifyEmailRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicVerifyEmailResponseDto"
+                }
+              }
+            },
+            "description": "Email verified"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid, expired, or unusable token (EMAIL_VERIFICATION_TOKEN_INVALID, EMAIL_VERIFICATION_TOKEN_EXPIRED). A token whose snapshotted email no longer matches the account is reported as invalid."
+          }
+        },
+        "summary": "Verify an email with a one-time token",
+        "tags": ["Public App Users"]
+      }
+    },
     "/api/v1/public/events": {
       "get": {
         "description": "Returns a cursor-paginated list of publicly visible events. Filters apply before ordering. Same-field values use OR; different fields use AND. Date boundaries are interpreted in Africa/Cairo (inclusive from, exclusive next-day to). No authentication is required.",
@@ -1838,6 +2239,118 @@
         "tags": ["Public Addons"]
       }
     },
+    "/api/v1/public/events/{identifier}/checkout-preview": {
+      "post": {
+        "description": "Prices one ticket for the buyer, plus extras for that buyer, exactly as the signed-in cart preview (`POST /mobile/carts/{cartId}/preview`) would, without an account or a cart. Nothing is saved, held or claimed, and no pricing confirmation token is issued: the signed-in preview before Pay is authoritative.\n\nTiers and add-on options the public event page hides are refused. Shared rooms, more than one room and repeated options are refused. A promo problem never fails the request: the price is computed without the code and `promoStatus`/`promoError` say why. No authentication. Browsers must send an `Origin` listed in WEB_CLIENT_ORIGINS; with WEB_CLIENT_ORIGINS unset the route answers 503 to everyone.",
+        "operationId": "PublicCheckoutPreviewController_preview_v1",
+        "parameters": [
+          {
+            "description": "Event UUID or slug.",
+            "in": "path",
+            "name": "identifier",
+            "required": true,
+            "schema": {
+              "pattern": "^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[a-z0-9]+(?:-[a-z0-9]+)*)$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicCheckoutPreviewRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCheckoutPreviewResponseDto"
+                }
+              }
+            },
+            "description": "The price, with any issues that would stop the order. Never cached."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "VALIDATION_ERROR (body or identifier); CART_LINE_PAYLOAD_INVALID (an option twice, quantity out of bounds); CART_EVENT_MISMATCH (tier not in this event or not publicly visible); CART_TICKET_ITEM_NOT_FOUND (the event allows no tickets per order); ADDON_OPTION_NOT_AVAILABLE (option not in this event or not publicly visible); WEB_SHARED_ROOM_NOT_ALLOWED (room occupancy other than 1); PERSON_ALREADY_HAS_ACCOMMODATION (more than one room)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "CHECKOUT_PREVIEW_ORIGIN_NOT_ALLOWED: the page origin is not in WEB_CLIENT_ORIGINS"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "EVENT_NOT_FOUND"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "ADDONS_FEATURE_DISABLED: extras sent while add-ons are switched off"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "CHECKOUT_PREVIEW_RATE_LIMITED, with retryAfterSeconds and a Retry-After header. The buyer may continue to sign-in; the signed-in preview prices the order."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "CHECKOUT_PREVIEW_NOT_CONFIGURED: WEB_CLIENT_ORIGINS is not set on this environment, so the preview is off"
+          }
+        },
+        "summary": "Price a web checkout selection without signing in",
+        "tags": ["Public Checkout"]
+      }
+    },
     "/api/v1/public/events/{identifier}/meta": {
       "get": {
         "description": "Returns minimal metadata for Open Graph and marketing-page rendering. Does not load tier availability or media arrays. No authentication is required.",
@@ -1910,6 +2423,10 @@
     {
       "description": "",
       "name": "Public Addons"
+    },
+    {
+      "description": "",
+      "name": "Public Checkout"
     }
   ]
 }

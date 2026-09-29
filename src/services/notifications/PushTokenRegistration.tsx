@@ -9,11 +9,21 @@ import {
   useAuthStore,
 } from '../../stores/auth';
 import { getOrCreateSukunDeviceId } from '../attribution/device-id';
-import { getExpoPushToken, registerExpoPushToken } from './push-registration';
+import {
+  getExpoPushToken,
+  registerExpoPushToken,
+  requestNotificationPermission,
+} from './push-registration';
 
 export function PushTokenRegistration() {
   const status = useAuthStore((state) => state.status);
   const appUserId = useAuthStore((state) => state.user?.id);
+
+  useEffect(() => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      void requestNotificationPermission();
+    }
+  }, []);
 
   useEffect(() => {
     const platform = Platform.OS;
