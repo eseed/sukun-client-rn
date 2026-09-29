@@ -15,6 +15,8 @@ function statusBadge(ticket: Ticket): { label: string; tone: BadgeTone } {
     case 'usable':
       return { label: 'Paid', tone: 'sky' };
     case 'pending_claim':
+      // A granted ticket in the holder's own list waits on them, not on a guest.
+      if (ticket.source === 'invitation') return { label: 'Ready to claim', tone: 'gold' };
       // Identical wording regardless of whether the guest has an account (CLAUDE.md rule 4).
       return { label: 'Sent to guest', tone: 'gold' };
     case 'selfie_required':
@@ -53,6 +55,7 @@ export function TicketCard({
   const first = ticket.days[0]?.date ?? '';
   const last = ticket.days[ticket.days.length - 1]?.date ?? first;
   const usable = ticket.usageStatus === 'usable';
+  const claimable = ticket.source === 'invitation' && ticket.usageStatus === 'pending_claim';
 
   return (
     <Pressable
@@ -85,8 +88,12 @@ export function TicketCard({
             {addonCount} {addonCount === 1 ? 'add-on' : 'add-ons'} attached
           </Text>
         ) : null}
-        <Text style={[styles.cta, !usable && styles.ctaMuted]}>
-          {usable ? 'View entry pass →' : 'Waiting to bind to their number'}
+        <Text style={[styles.cta, !usable && !claimable && styles.ctaMuted]}>
+          {usable
+            ? 'View entry pass →'
+            : claimable
+              ? 'Claim your ticket →'
+              : 'Waiting to bind to their number'}
         </Text>
         {/* Only a usable ticket can take extras: they attach to a ticket, and one that has not
             bound to its holder yet has nothing to attach them to. */}

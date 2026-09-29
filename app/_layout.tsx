@@ -63,7 +63,8 @@ export default function RootLayout() {
   useEffect(() => {
     // Every gate below returns null until it resolves, so hiding the splash on fonts alone
     // would trade the splash for a blank screen. Wait for all three.
-    const ready = (fontsLoaded || fontError) && consentStatus !== 'loading' && flagsStatus !== 'loading';
+    const ready =
+      (fontsLoaded || fontError) && consentStatus !== 'loading' && flagsStatus !== 'loading';
     if (ready) void SplashScreen.hideAsync();
   }, [fontsLoaded, fontError, consentStatus, flagsStatus]);
 
@@ -101,6 +102,11 @@ export default function RootLayout() {
             <Stack.Screen name="event/[slug]" />
             <Stack.Screen name="checkout" />
             <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_bottom' }} />
+            {/* Answered with a button, not swiped away: "Not now" is always on screen. */}
+            <Stack.Screen
+              name="claim"
+              options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+            />
             <Stack.Screen name="orders/index" />
             <Stack.Screen name="orders/[id]" />
             <Stack.Screen name="account/profile" />

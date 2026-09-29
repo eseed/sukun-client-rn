@@ -626,6 +626,63 @@ function issueTicketsFor(order: OrderDetail): void {
  * Recipients were recorded against cart attendees, so they resolve here by phone — the same phone
  * the ticket was issued to. A recipient who already held a ticket resolves straight by ticket id.
  */
+/**
+ * Test/dev seam: a ticket Sukun grants to a number, as an admin invitation does on the backend.
+ * It waits for its holder to claim it, whether or not the number already has an account.
+ */
+export function grantMockTicket({
+  phoneNumber,
+  holderName,
+  eventId = Object.keys(eventDetails)[0] ?? '',
+  tierId,
+  addonCount = 0,
+}: {
+  phoneNumber: string;
+  holderName: string;
+  eventId?: string;
+  tierId?: string;
+  addonCount?: number;
+}): Ticket {
+  const event = eventDetails[eventId];
+  if (!event) throw new Error(`No mock event ${eventId}`);
+  const tier = (tierId ? event.tiers.find((t) => t.id === tierId) : event.tiers[0]) ?? null;
+  if (!tier) throw new Error(`No mock tier ${tierId ?? ''} on ${eventId}`);
+
+  const ticket: Ticket = {
+    id: `tk-grant-${ticketSeq + 1}`,
+    ticketNumber: nextTicketNumber(),
+    status: 'pending_claim',
+    usageStatus: 'pending_claim',
+    source: 'invitation',
+    event: {
+      id: event.id,
+      slug: event.slug,
+      title: event.title,
+      coverImageUrl: event.coverImageUrl,
+      venueName: event.venue?.name ?? null,
+      venueMapUrl: event.venue?.mapUrl ?? null,
+    },
+    tier: { id: tier.id, name: tier.name },
+    days: tier.days.map((d) => {
+      const day = event.days.find((ed) => ed.id === d.id);
+      return {
+        id: d.id,
+        date: d.dayDate,
+        startsAt: day?.startsAt ?? `${d.dayDate}T13:00:00.000Z`,
+        gatesOpenAt: day?.gatesOpenAt ?? null,
+      };
+    }),
+    holderName,
+    orderNumber: null,
+    purchasedBy: null,
+    addonCount,
+    issuedAt: iso(),
+  };
+  state.tickets.unshift(ticket);
+  state.ticketOwnerPhones.set(ticket.id, phoneNumber);
+  return ticket;
+}
+
 function issueAddonsFor(order: OrderDetail): void {
   for (const line of order.addons) {
     const option = findOption(line.addonOptionId);
@@ -723,9 +780,13 @@ export const mockApi: SukunApi = {
       state.user = refreshUserStatus(user);
       state.accounts.set(e164, state.user);
 
-      // Any ticket already waiting on this number binds now (CLAUDE.md rule 2).
+      // Any ticket a friend bought for this number binds now (CLAUDE.md rule 2). One Sukun
+      // granted does not: its holder claims it, which is how the admin tells granted from
+      // claimed. Mirrors the backend's `TicketBindingRepository.findAndLockEligible`.
       state.tickets = state.tickets.map((t) =>
-        t.status === 'pending_claim' && state.ticketOwnerPhones.get(t.id) === e164
+        t.status === 'pending_claim' &&
+        t.source !== 'invitation' &&
+        state.ticketOwnerPhones.get(t.id) === e164
           ? {
               ...t,
               status: 'active',

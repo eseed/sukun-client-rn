@@ -13,7 +13,11 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    Egypt and lists it first. Exclusions live in one place per repo and must agree — see
    `EXCLUDED_COUNTRIES` in `src/lib/phone.ts` and in the backend's phone normalizer.
 2. **A ticket can exist before its owner.** Guests are attached _by phone_ from contacts;
-   their ticket binds when they register that number. There are no claim codes.
+   their ticket binds when they register that number. There are no claim codes. A ticket
+   Sukun grants (an admin invitation) is the exception: it never binds by itself, even to a
+   number that already has an account. It waits as `pending_claim` until its holder claims
+   it, which `ClaimGate` puts in front of them first thing (`app/claim.tsx`), so the admin
+   can count granted against claimed.
 3. **The selfie is the anti-fraud control, and it is asked for once, at the QR.** A holder
    meets the camera when they open an entry pass, on the ticket that needs it, and never
    before: not to browse, not to register, not to pay. It is required for a *usable ticket*

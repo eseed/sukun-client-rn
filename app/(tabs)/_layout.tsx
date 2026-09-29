@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { StyleSheet, Text, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ClaimGate } from '../../src/components/tickets/ClaimGate';
 import { DiscoverIcon, ProfileIcon, TicketsIcon } from '../../src/components/ui';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { text } from '../../src/theme/typography';
@@ -60,41 +61,44 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.textPrimary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: [styles.bar, { height: BAR_CONTENT_HEIGHT + insets.bottom }],
-        tabBarItemStyle: styles.item,
-        sceneStyle: { backgroundColor: colors.bgPage },
-      }}
-    >
-      <Tabs.Screen
-        name="discover"
-        options={{
-          title: 'Discover',
-          tabBarLabel: tabLabel('Discover'),
-          tabBarIcon: ({ color }) => <DiscoverIcon color={color} />,
+    <>
+      <ClaimGate />
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: colors.textPrimary,
+          tabBarInactiveTintColor: colors.textMuted,
+          tabBarStyle: [styles.bar, { height: BAR_CONTENT_HEIGHT + insets.bottom }],
+          tabBarItemStyle: styles.item,
+          sceneStyle: { backgroundColor: colors.bgPage },
         }}
-      />
-      <Tabs.Screen
-        name="tickets"
-        options={{
-          title: 'Tickets',
-          tabBarLabel: tabLabel('Tickets'),
-          tabBarIcon: ({ color }) => <TicketsIcon color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarLabel: tabLabel('Profile'),
-          tabBarIcon: ({ color }) => <ProfileIcon color={color} />,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="discover"
+          options={{
+            title: 'Discover',
+            tabBarLabel: tabLabel('Discover'),
+            tabBarIcon: ({ color }) => <DiscoverIcon color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="tickets"
+          options={{
+            title: 'Tickets',
+            tabBarLabel: tabLabel('Tickets'),
+            tabBarIcon: ({ color }) => <TicketsIcon color={color} />,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarLabel: tabLabel('Profile'),
+            tabBarIcon: ({ color }) => <ProfileIcon color={color} />,
+          }}
+        />
+      </Tabs>
+    </>
   );
 }
 
