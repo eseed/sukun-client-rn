@@ -26,6 +26,7 @@ import {
   useRemoveCartPromo,
 } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
+import { trackMetaAddPaymentInfo, trackMetaInitiateCheckout } from '../../src/lib/meta-events';
 import { beginPaymentAttempt, trackPaymentFailed } from '../../src/lib/purchase-analytics';
 import { heldOrderIdFromError, messageForError } from '../../src/lib/errors';
 import { formatEgp } from '../../src/lib/format';
@@ -281,6 +282,8 @@ export default function ReviewScreen() {
       return;
     }
 
+    if (cart) trackMetaInitiateCheckout({ cart, totalEgp: pricing?.totalEgp });
+
     try {
       const placed =
         order ?? (await placeOrder.mutateAsync({ cartId, pricingConfirmationToken: token }));
@@ -304,6 +307,7 @@ export default function ReviewScreen() {
         currency: placed.currency,
       });
       beginPaymentAttempt(placed.id);
+      trackMetaAddPaymentInfo(placed);
       sheet.present(intent);
     } catch (err) {
       const code =

@@ -1,5 +1,6 @@
 import * as Clarity from '@microsoft/react-native-clarity';
 import { Mixpanel } from 'mixpanel-react-native';
+import { AppEventsLogger, Settings } from 'react-native-fbsdk-next';
 
 /**
  * Environments are separated by giving each build its own Mixpanel and Clarity project ids. A
@@ -24,6 +25,7 @@ const flush = () => new Promise((resolve) => setImmediate(resolve));
 const configured = {
   mixpanel: process.env.EXPO_PUBLIC_MIXPANEL_TOKEN,
   clarity: process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID,
+  meta: process.env.EXPO_PUBLIC_META_APP_ID,
 };
 
 let warn: jest.SpyInstance;
@@ -37,22 +39,27 @@ afterEach(() => {
   warn.mockRestore();
   process.env.EXPO_PUBLIC_MIXPANEL_TOKEN = configured.mixpanel;
   process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID = configured.clarity;
+  process.env.EXPO_PUBLIC_META_APP_ID = configured.meta;
 });
 
 describe('a build with no analytics ids', () => {
   beforeEach(() => {
     process.env.EXPO_PUBLIC_MIXPANEL_TOKEN = '';
     process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID = '';
+    process.env.EXPO_PUBLIC_META_APP_ID = '';
   });
 
-  it('starts neither SDK, even once consent is granted', async () => {
+  it('starts no SDK, even once consent is granted', async () => {
     const analytics = loadAnalytics();
 
     analytics.enableAnalytics();
     await flush();
+    analytics.trackMeta('ViewContent', { content_ids: ['event-1'] });
 
     expect(MixpanelMock).not.toHaveBeenCalled();
     expect(clarityMock.initialize).not.toHaveBeenCalled();
+    expect(Settings.initializeSDK).not.toHaveBeenCalled();
+    expect(AppEventsLogger.logEvent).not.toHaveBeenCalled();
   });
 
   it('drops events rather than queuing them for a project it cannot name', async () => {
@@ -78,7 +85,7 @@ describe('a build with no analytics ids', () => {
     analytics.resetAnalytics();
     await flush();
 
-    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(3);
   });
 });
 

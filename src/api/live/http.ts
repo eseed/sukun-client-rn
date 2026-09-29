@@ -19,6 +19,19 @@ const API_PREFIX = 'api';
 const API_VERSION = 'v1';
 const REFRESH_PATH = 'mobile/auth/refresh';
 
+/**
+ * The mobile contract revision this build speaks, sent on every request as
+ * `X-Sukun-Client-Revision`. The backend keeps an older build's behaviour for any build that sends
+ * a lower number or none, so a change the app depends on reaches new builds without forcing an
+ * update on old ones. Raise it when a release starts to depend on such a change, and name the
+ * change in `sukun-backend/src/common/http/mobile-client-revision.util.ts`.
+ *
+ * - 2: claims a ticket an admin granted itself, on `app/claim.tsx`. Builds before it get granted
+ *   tickets claimed for them when they load their tickets.
+ */
+export const MOBILE_CLIENT_REVISION = 2;
+const CLIENT_REVISION_HEADER = 'X-Sukun-Client-Revision';
+
 interface RefreshResult {
   refreshed: boolean;
   definitiveFailure: boolean;
@@ -102,7 +115,11 @@ async function rotateTokens(): Promise<RefreshResult> {
   try {
     response = await fetch(url(REFRESH_PATH), {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        [CLIENT_REVISION_HEADER]: String(MOBILE_CLIENT_REVISION),
+      },
       body: JSON.stringify({ refreshToken }),
     });
   } catch {
@@ -215,7 +232,11 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   // The app is English-only (CLAUDE.md) — every mobile/public endpoint defaults to Arabic
   // content (event copy, error messages) without this header.
-  const headers: Record<string, string> = { Accept: 'application/json', 'Accept-Language': 'en' };
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Accept-Language': 'en',
+    [CLIENT_REVISION_HEADER]: String(MOBILE_CLIENT_REVISION),
+  };
   if (body !== undefined && form === undefined) headers['Content-Type'] = 'application/json';
   const sentAccessToken = auth ? (token ?? (await getSecureItem(SECURE_KEYS.accessToken))) : null;
   if (auth) {

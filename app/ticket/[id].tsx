@@ -21,6 +21,7 @@ import {
   useTicketAddons,
 } from '../../src/hooks/queries';
 import { describeTicketAddon, ticketAddonStatusLabel } from '../../src/lib/addons';
+import { track } from '../../src/lib/analytics';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
 import {
   getEntryPassOpensAt,
@@ -242,6 +243,8 @@ export default function EntryPassScreen() {
   const addons = addonsQuery.data ?? [];
   const usageStatus = ticket.usageStatus;
   const needsClaim = usageStatus === 'pending_claim';
+  // Granted by Sukun rather than bought for them: it is theirs to take, not waiting on anyone.
+  const granted = ticket.source === 'invitation';
   const needsSelfie = usageStatus === 'selfie_required';
   const needsProfile = usageStatus === 'profile_incomplete';
   const unusable = usageStatus === 'voided' || usageStatus === 'refunded';
@@ -280,6 +283,11 @@ export default function EntryPassScreen() {
     setActionError(null);
     try {
       await claimTicket.mutateAsync(ticket.id);
+      track('ticket_claimed', {
+        ticket_id: ticket.id,
+        event_id: ticket.event.id,
+        source: ticket.source,
+      });
     } catch (err) {
       setActionError(messageForError(err));
     }
@@ -316,14 +324,18 @@ export default function EntryPassScreen() {
           <View style={styles.statusPanel}>
             <Text variant="titleSm" style={styles.statusTitle}>
               {needsClaim
-                ? 'This ticket is waiting to bind'
+                ? granted
+                  ? 'This ticket is yours to claim'
+                  : 'This ticket is waiting to bind'
                 : needsProfile
                   ? 'Finish your profile to use this ticket'
                   : 'This ticket cannot be used'}
             </Text>
             <Text variant="bodyMuted" style={styles.statusCopy}>
               {needsClaim
-                ? 'Claim it to attach the ticket to your phone number.'
+                ? granted
+                  ? 'Sukun has given you this ticket. Claim it to add it to your tickets.'
+                  : 'Claim it to attach the ticket to your phone number.'
                 : needsProfile
                   ? 'Add the required profile details before opening the entry pass.'
                   : 'This ticket has been voided or refunded.'}

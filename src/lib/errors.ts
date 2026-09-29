@@ -30,6 +30,8 @@ const MESSAGES: Record<string, string> = {
   ORDER_NOT_FOUND: "We couldn't find that order.",
   TICKET_NOT_FOUND: "We couldn't find that ticket.",
   TICKET_FORBIDDEN: 'That ticket is not yours.',
+  // A granted ticket revoked, or one already claimed on another account, before this claim.
+  TICKET_NOT_CLAIMABLE: 'This ticket can no longer be claimed.',
   TICKET_FILTER_INVALID: "We couldn't load your tickets. Try again.",
   BUYER_NOT_FOUND: 'Complete your profile before buying tickets.',
   SELFIE_NOT_FOUND: 'Add your selfie to use this ticket.',

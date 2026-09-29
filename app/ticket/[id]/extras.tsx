@@ -31,6 +31,7 @@ import { useCheckoutStore } from '../../../src/stores/checkout';
 import { designAsset } from '../../../src/theme/assets';
 import { colors, space } from '../../../src/theme/tokens';
 import type { AddonDetail, AddonOption, CartPreview } from '../../../src/api/types';
+import { trackMetaAddExtrasToTicket } from '../../../src/lib/meta-events';
 
 /**
  * Design screen 22 · Add extras to an existing ticket.
@@ -362,7 +363,13 @@ export default function TicketExtrasScreen() {
         label={picked.length > 0 ? 'Continue' : 'Choose an extra'}
         disabled={!canContinue}
         loading={preview.isPending || createCart.isPending}
-        onPress={() => router.push(`/ticket/${context.ticketId}/review` as never)}
+        onPress={() => {
+          trackMetaAddExtrasToTicket(
+            picked.map(([optionId, quantity]) => ({ id: optionId, quantity })),
+            subtotal,
+          );
+          router.push(`/ticket/${context.ticketId}/review` as never);
+        }}
       />
     </Screen>
   );

@@ -16,7 +16,7 @@ import { BackButton, BulletHeading, Screen, StepLabel, Text } from '../../src/co
  * links to.
  */
 
-const EFFECTIVE_DATE = '2 September 2026';
+const EFFECTIVE_DATE = '28 September 2026';
 const CONTACT = 'sukunwellness.co/support';
 
 const SECTIONS: { title: string; body: string }[] = [
@@ -68,7 +68,7 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Analytics and session replay',
-    body: 'We use Mixpanel to count how features are used and Microsoft Clarity to record anonymised replays of screens, so we can find what is broken or confusing. We also use Kochava to measure which Sukun install links lead to an install. With your permission, the app sends Kochava’s raw install-attribution result and an opaque Sukun installation ID to our backend; after you verify your phone, that installation can be linked to your account. Your name, email, and phone number are not sent to Kochava. This integration does not request IDFA, Google Advertising ID, or Apple’s tracking permission. If you are in the EU, the UK, Switzerland, or California, the app asks your permission before these services start, and answering no keeps them off. Wherever you are, and whether or not you were asked, you can turn them off at any time under Analytics & session replay on the Profile tab. Turning them off takes effect immediately; unsent Mixpanel data is cleared from the device.',
+    body: 'We use Mixpanel to count how features are used and Microsoft Clarity to record anonymised replays of screens, so we can find what is broken or confusing. We also use Kochava to measure which Sukun install links lead to an install. With your permission, the app sends Kochava’s raw install-attribution result and an opaque Sukun installation ID to our backend; after you verify your phone, that installation can be linked to your account. Your name, email, and phone number are not sent to Kochava. We also use Meta to measure our campaigns: with the same permission, the app sends Meta its install and app-open events, and an event for each step towards a purchase: a search on Discover, with the words you searched for, each event you view, opening a venue’s map, choosing tickets or extras, starting checkout, finishing sign-up, and opening the card sheet. These name the event and extras involved and how many, with a price or total from our servers where there is one. A purchase is sent with the order total, currency and order reference once your payment is confirmed. Meta also receives device details, such as the model, operating system, language, time zone and mobile network, your IP address, and an installation identifier of its own. The app does not send Meta your Sukun account ID, name, email, or phone number, and a search that looks like an email address or a phone number is not sent. Meta may use this activity under its own terms and privacy policy for measurement and advertising. Neither Kochava nor Meta is given IDFA or Google Advertising ID, and the app does not request Apple’s tracking permission. If you are in the EU, the UK, Switzerland, or California, the app asks your permission before these services start, and answering no keeps them off. Wherever you are, and whether or not you were asked, you can turn them off at any time under Analytics & session replay on the Profile tab. Turning them off takes effect immediately; unsent Mixpanel data is cleared from the device.',
   },
   {
     /**
@@ -79,11 +79,11 @@ const SECTIONS: { title: string; body: string }[] = [
      * processor at once instead of a clause buried in one of them.
      */
     title: 'Who else sees your data',
-    body: 'We share only what each of these needs to do its job: Paymob to take a payment, our messaging provider to deliver your one time code and ticket messages on WhatsApp, our email provider to send receipts, Mixpanel and Microsoft Clarity for the analytics described above, Kochava for install attribution, and our hosting and file storage providers in the European Union. Each of them is required to protect your data to the same standard this policy sets out, to use it only for the work we ask of them, and not to use it for anything of their own. We do not sell your data or send it to Kochava for ad targeting.',
+    body: 'We share only what each of these needs to do its job: Paymob to take a payment, our messaging provider to deliver your one time code and ticket messages on WhatsApp, our email provider to send receipts, Mixpanel and Microsoft Clarity for the analytics described above, Kochava for install attribution, Meta to measure our campaigns, and our hosting and file storage providers in the European Union. Each of them except Meta is required to protect your data to the same standard this policy sets out, to use it only for the work we ask of them, and not to use it for anything of their own. Meta may use app activity under its own terms and privacy policy for measurement and advertising. We do not sell your data or send it to Kochava for ad targeting.',
   },
   {
     title: 'Where your data is held',
-    body: 'Sukun data is stored on servers in the European Union, and our analytics providers are configured to keep European data in Europe. We keep your account data for as long as your account exists, and order records for as long as Egyptian tax and accounting rules require.',
+    body: 'Sukun data is stored on servers in the European Union, and our analytics providers are configured to keep European data in Europe, except Meta, which handles the activity it receives under its own privacy policy. We keep your account data for as long as your account exists, and order records for as long as Egyptian tax and accounting rules require.',
   },
   {
     title: 'Deleting your account',

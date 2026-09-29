@@ -8,7 +8,11 @@ import { useEvents } from '../../src/hooks/queries';
 import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
 import { messageForError } from '../../src/lib/errors';
 import { formatTagLabel } from '../../src/lib/format';
+import { trackMetaSearch } from '../../src/lib/meta-events';
 import { colors, fontFamily } from '../../src/theme/tokens';
+
+/** How long the search text must stay put to count as a search, for Meta. */
+const SEARCH_SETTLED_MS = 1000;
 
 const THUMBS: DesignAssetKey[] = ['eventThumb1', 'eventThumb2', 'eventThumb3'];
 
@@ -19,6 +23,9 @@ export default function DiscoverScreen() {
   const [tag, setTag] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 250);
+  // A search the person paused on, not every keystroke the list follows (Meta's Search).
+  const settledSearch = useDebouncedValue(search, SEARCH_SETTLED_MS);
+  useEffect(() => trackMetaSearch(settledSearch, tag), [settledSearch, tag]);
 
   /**
    * The chip vocabulary, taken from the events themselves rather than a hardcoded list — the

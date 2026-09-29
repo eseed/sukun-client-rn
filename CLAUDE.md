@@ -13,7 +13,14 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    Egypt and lists it first. Exclusions live in one place per repo and must agree — see
    `EXCLUDED_COUNTRIES` in `src/lib/phone.ts` and in the backend's phone normalizer.
 2. **A ticket can exist before its owner.** Guests are attached _by phone_ from contacts;
-   their ticket binds when they register that number. There are no claim codes.
+   their ticket binds when they register that number. There are no claim codes. A ticket
+   Sukun grants (an admin invitation) is the exception: it never binds by itself, even to a
+   number that already has an account. It waits as `pending_claim` until its holder claims
+   it, which `ClaimGate` puts in front of them first thing (`app/claim.tsx`), so the admin
+   can count granted against claimed. Builds from before the claim screen never offer to
+   claim, so the backend claims for them: every request carries `X-Sukun-Client-Revision`
+   (`MOBILE_CLIENT_REVISION` in `src/api/live/http.ts`), and one below 2, or none, has
+   granted tickets claimed on its behalf when it loads them.
 3. **The selfie is the anti-fraud control, and it is asked for once, at the QR.** A holder
    meets the camera when they open an entry pass, on the ticket that needs it, and never
    before: not to browse, not to register, not to pay. It is required for a *usable ticket*
@@ -220,3 +227,15 @@ starts from a stale number.
   unset id turns that SDK off, so a misconfigured build sends nothing rather than polluting the
   other environment. A new Mixpanel project must be created in the **EU** region, since the app
   posts to `api-eu.mixpanel.com`.
+- **Meta app events** (`react-native-fbsdk-next`) send the website Pixel's purchase-journey events
+  from the app, to the Meta app connected to the same dataset. `src/lib/meta-events.ts` maps each
+  action to its event (the web's `sukun-client-web/src/lib/meta-events.ts`; change them together)
+  and screens call it, never `trackMeta` or the SDK. The SDK sits behind the same consent switch:
+  `plugins/withMetaAppEvents.js` builds it asleep (no auto-init, no automatic events, no
+  advertising id, the `AD_ID` permission removed) and `enableAnalytics()` starts it with Meta's
+  automatic install and app-open events. No tracking-permission prompt on iOS (owner's call,
+  2026-09-28); installs are measured through SKAdNetwork. Only Meta's own parameters: tickets by
+  event id, extras by option id, values only as the server gave them, never the app user id, a
+  name, email, phone number, or a search that looks like one. `EXPO_PUBLIC_META_APP_ID` and
+  `EXPO_PUBLIC_META_CLIENT_TOKEN` are set in the production profile only; blank turns Meta off.
+  The consent screen, `app/account/analytics.tsx` and `app/legal/terms.tsx` say exactly this.

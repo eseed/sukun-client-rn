@@ -1,5 +1,6 @@
 import type { OrderDetail } from '../../api/types';
 import { track } from '../analytics';
+import { trackMetaPurchase } from '../meta-events';
 import {
   beginPaymentAttempt,
   resetPurchaseAnalyticsForTests,
@@ -9,7 +10,9 @@ import {
 import { getSecureItem, SECURE_KEYS, setSecureItem } from '../secure-storage';
 
 jest.mock('../analytics', () => ({ track: jest.fn() }));
+jest.mock('../meta-events', () => ({ trackMetaPurchase: jest.fn() }));
 const mockTrack = track as jest.Mock;
+const mockMetaPurchase = trackMetaPurchase as jest.Mock;
 
 function paidOrder(overrides: Partial<OrderDetail> = {}): OrderDetail {
   return {
@@ -39,6 +42,7 @@ function paidOrder(overrides: Partial<OrderDetail> = {}): OrderDetail {
 
 beforeEach(async () => {
   mockTrack.mockClear();
+  mockMetaPurchase.mockClear();
   resetPurchaseAnalyticsForTests();
   await setSecureItem(SECURE_KEYS.reportedPurchases, '');
 });
@@ -67,6 +71,9 @@ describe('trackPurchaseCompleted', () => {
     await trackPurchaseCompleted(order);
 
     expect(mockTrack).toHaveBeenCalledTimes(1);
+    // Meta's Purchase rides on the same once-only rule.
+    expect(mockMetaPurchase).toHaveBeenCalledTimes(1);
+    expect(mockMetaPurchase).toHaveBeenCalledWith(order);
   });
 
   it('remembers a reported order across a restart', async () => {

@@ -21,6 +21,7 @@ import {
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { setUserProperties, track } from '../../src/lib/analytics';
+import { trackMetaCompleteRegistration } from '../../src/lib/meta-events';
 import { messageForError } from '../../src/lib/errors';
 import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
@@ -152,6 +153,7 @@ export default function ProfileFormScreen() {
       // This is the end of registration now, so the signup event belongs here.
       if (useAuthStore.getState().isNewUser) {
         track('signup_completed');
+        trackMetaCompleteRegistration();
         useAuthStore.getState().setIsNewUser(false);
       }
       resumeAfterOnboarding(router);

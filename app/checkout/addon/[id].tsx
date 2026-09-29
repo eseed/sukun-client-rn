@@ -18,6 +18,7 @@ import { useAddon } from '../../../src/hooks/queries';
 import { useCheckoutAccess } from '../../../src/hooks/useCheckoutAccess';
 import { messageForError } from '../../../src/lib/errors';
 import { formatDate, formatEgp } from '../../../src/lib/format';
+import { trackMetaAddExtra } from '../../../src/lib/meta-events';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import { colors, space } from '../../../src/theme/tokens';
 import type {
@@ -243,6 +244,10 @@ export default function AddonDetailScreen() {
           }
         : { assignments: [] }),
     });
+    // Saving the extra exactly as it was adds nothing to the basket.
+    if (picked?.optionId !== resolvedOption.id || picked.quantity !== quantity) {
+      trackMetaAddExtra({ optionId: resolvedOption.id, addonName: addon.name, quantity });
+    }
     router.back();
   }
 

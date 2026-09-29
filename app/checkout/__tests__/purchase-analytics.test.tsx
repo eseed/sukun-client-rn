@@ -1,6 +1,6 @@
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src/api/mock';
 import { TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
-import { track } from '../../../src/lib/analytics';
+import { track, trackMeta } from '../../../src/lib/analytics';
 import { resetPurchaseAnalyticsForTests } from '../../../src/lib/purchase-analytics';
 import { useAuthStore } from '../../../src/stores/auth';
 import { useCheckoutStore } from '../../../src/stores/checkout';
@@ -22,8 +22,12 @@ import ReviewScreen from '../review';
 jest.mock('../../../src/lib/analytics', () => ({
   ...jest.requireActual('../../../src/lib/analytics'),
   track: jest.fn(),
+  trackMeta: jest.fn(),
 }));
 const mockTrack = track as jest.Mock;
+const mockTrackMeta = trackMeta as jest.Mock;
+/** Meta events sent, by name, in order. */
+const metaSent = (name: string) => mockTrackMeta.mock.calls.filter(([event]) => event === name);
 
 const mockPaymob = jest.requireMock('paymob-reactnative').default as Record<string, jest.Mock>;
 
@@ -109,6 +113,7 @@ beforeEach(() => {
   for (const key of Object.keys(mockParams)) delete mockParams[key];
   mockRouter.replace.mockClear();
   mockTrack.mockClear();
+  mockTrackMeta.mockClear();
   mockPaymob.presentPayVC!.mockClear();
   mockPaymob.setSdkListener!.mockClear();
   useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
@@ -138,6 +143,18 @@ describe('Confirmation', () => {
       addon_count: 0,
       has_promo: false,
     });
+    // Meta's Purchase goes with it: the server's total, the tickets by event, the order id.
+    expect(metaSent('Purchase')).toEqual([
+      [
+        'Purchase',
+        expect.objectContaining({
+          contents: [{ id: TULUA_ID, quantity: 2 }],
+          value: Number(order.totalEgp),
+          currency: 'EGP',
+        }),
+        { orderId: order.id },
+      ],
+    ]);
   });
 
   it('sends it once, however often the confirmation is shown', async () => {
@@ -208,6 +225,29 @@ describe('Review & pay', () => {
     const listener = mockPaymob.setSdkListener!.mock.calls.at(-1)?.[0] as (r: unknown) => void;
     return { orderId, emit: (status: string) => act(() => listener({ status })) };
   }
+
+  it("sends Meta's InitiateCheckout, then AddPaymentInfo as the sheet opens", async () => {
+    await openSheetFromReview();
+
+    const [initiate] = metaSent('InitiateCheckout');
+    expect(initiate).toEqual([
+      'InitiateCheckout',
+      expect.objectContaining({
+        content_ids: [TULUA_ID],
+        contents: [{ id: TULUA_ID, quantity: 1 }],
+        num_items: 1,
+        currency: 'EGP',
+      }),
+    ]);
+    const [payment] = metaSent('AddPaymentInfo');
+    expect(payment![1]).toEqual({ value: expect.any(Number), currency: 'EGP' });
+    // The order was priced at the quote: both carry the same total.
+    expect(payment![1].value).toBe((initiate![1] as { value: number }).value);
+    expect(mockTrackMeta.mock.calls.map(([event]) => event)).toEqual([
+      'InitiateCheckout',
+      'AddPaymentInfo',
+    ]);
+  });
 
   it('leaves purchase_completed to the confirmation it goes to on SUCCESS', async () => {
     const { orderId, emit } = await openSheetFromReview();

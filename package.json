@@ -60,6 +60,7 @@
     "react-dom": "19.2.3",
     "react-hook-form": "^7.85.0",
     "react-native": "0.86.3",
+    "react-native-fbsdk-next": "^13.4.3",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-kochava-measurement": "5.0.0",
     "react-native-kochava-measurement-google": "5.0.0",
