@@ -258,5 +258,7 @@ starts from a stale number.
   2026-09-28); installs are measured through SKAdNetwork. Only Meta's own parameters: tickets by
   event id, extras by option id, values only as the server gave them, never the app user id, a
   name, email, phone number, or a search that looks like one. `EXPO_PUBLIC_META_APP_ID` and
-  `EXPO_PUBLIC_META_CLIENT_TOKEN` are set in the production profile only; blank turns Meta off.
+  `EXPO_PUBLIC_META_CLIENT_TOKEN` belong in the production profile only; absent turns Meta off.
+  Leave the keys out until the ids exist: EAS rejects an `eas.json` with an empty env value,
+  and every `eas` command, not only builds, fails on it.
   The consent screen, `app/account/analytics.tsx` and `app/legal/terms.tsx` say exactly this.
