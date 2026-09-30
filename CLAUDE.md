@@ -153,7 +153,9 @@ What the local path needs, none of it in the repo:
   provisioning profile** for `co.sukunwellness` at `../secrets/sukun-appstore.mobileprovision`.
   Take both from EAS rather than making new ones: `eas credentials`, iOS, production, then
   download to `credentials.json`, import the `.p12` into the keychain and move the
-  `.mobileprovision` into place.
+  `.mobileprovision` into place. The profile must carry the Push Notifications entitlement
+  (`aps-environment`), which `expo-notifications` adds to the build; one made before Push was
+  enabled on the App ID does not, and the signing check refuses it.
 - An **App Store Connect API key** (App Manager role) saved as
   `../secrets/AuthKey_<key id>.p8`, with its ids filled into `../secrets/ios-release.env`.
 

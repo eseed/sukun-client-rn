@@ -61,6 +61,25 @@ if (!fs.existsSync(PROFILE)) {
     note(`Profile is for "${appId.split('.').slice(1).join('.')}", not ${BUNDLE_ID}`);
   }
 
+  // expo-notifications makes prebuild add the aps-environment entitlement, and Xcode refuses
+  // to sign it with a profile that does not carry it. A profile made before the App ID had
+  // the Push Notifications capability never will: regenerate it (EAS does this on its next
+  // iOS build) and download the new one in place of this one. Read here, and by the Associated
+  // Domains check below.
+  const appJson = JSON.parse(fs.readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
+  const usesPush = (appJson.expo?.plugins ?? []).some(
+    (plugin) => (Array.isArray(plugin) ? plugin[0] : plugin) === 'expo-notifications',
+  );
+  const apsEnvironment = extract('Entitlements.aps-environment');
+  if (usesPush && apsEnvironment !== 'production') {
+    note(
+      apsEnvironment === null
+        ? 'Profile has no Push Notifications entitlement (aps-environment), which ' +
+            'expo-notifications needs. Regenerate it after enabling Push on the App ID.'
+        : `Profile's aps-environment is "${apsEnvironment}", not "production"`,
+    );
+  }
+
   // An App Store profile provisions no specific devices. One that lists devices is an ad hoc
   // or development profile, which uploads and is then rejected.
   if (extract('ProvisionedDevices') !== null) {
@@ -78,7 +97,6 @@ if (!fs.existsSync(PROFILE)) {
   // Universal Links (the invitation's claim link opening the app) need the Associated Domains
   // capability on the App ID, and a profile generated after it was switched on. Without it the
   // archive fails to sign twenty minutes in, naming the entitlement.
-  const appJson = JSON.parse(fs.readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
   const wantsDomains = (appJson.expo?.ios?.associatedDomains ?? []).length > 0;
   if (
     wantsDomains &&
