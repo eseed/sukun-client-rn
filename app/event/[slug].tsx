@@ -383,18 +383,22 @@ export default function EventDetailScreen() {
       )}
 
       <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.barPriceBlock}>
-          <Text style={styles.barLabel}>From</Text>
-          <Text style={styles.barPrice}>
-            {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
-          </Text>
-        </View>
+        {/* A holder with an invitation waiting is not buying, so no price is shown to them. */}
+        {invitation ? null : (
+          <View style={styles.barPriceBlock}>
+            <Text style={styles.barLabel}>From</Text>
+            <Text style={styles.barPrice}>
+              {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
+            </Text>
+          </View>
+        )}
         <Button
           label={
             invitation ? 'Claim ticket' : firstPurchasableTier ? 'Get tickets' : 'Not available'
           }
           variant="accent"
           size="inline"
+          style={invitation ? styles.flex : undefined}
           onPress={onGetTickets}
           disabled={!invitation && !firstPurchasableTier}
         />

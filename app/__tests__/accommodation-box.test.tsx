@@ -139,6 +139,8 @@ describe('Accommodation available, on the event page', () => {
     renderWithProviders(<EventDetailScreen />);
 
     await waitFor(() => expect(screen.getByText('Claim ticket')).toBeTruthy());
+    // An invitee is not buying, so the bar shows no price.
+    expect(screen.queryByText('From')).toBeNull();
     fireEvent.press(await box());
     expect(mockRouter.push).toHaveBeenCalledWith(`/ticket/${granted.id}`);
   });
