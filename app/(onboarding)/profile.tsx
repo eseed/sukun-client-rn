@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
@@ -104,12 +104,19 @@ export default function ProfileFormScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const flower = designAsset('decoFlower');
 
+  /*
+   * Only the form on screen moves on. Two can be stacked (the claim screen can open over sign-up,
+   * and a claim then asks for this form again), and both see the profile become complete when
+   * the top one saves. The one underneath once took the pending claim to the ticket, and the top
+   * one's own exit then replaced that ticket before the claim was made.
+   */
+  const isFocused = useIsFocused();
   useEffect(() => {
-    if (!user || saved) return;
+    if (!user || saved || !isFocused) return;
     if (user.profileComplete || missingProfileFields(user).length === 0) {
       resumeAfterOnboarding(router);
     }
-  }, [router, saved, user]);
+  }, [isFocused, router, saved, user]);
 
   const { control, handleSubmit, formState, reset } = useForm<FormValues>({
     resolver: zodResolver(schema),

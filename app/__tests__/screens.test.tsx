@@ -79,6 +79,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
   useIsFocused: () => true,
+  usePathname: () => '/discover',
   Redirect: () => null,
   Stack: Object.assign(() => null, { Screen: () => null }),
   Tabs: Object.assign(() => null, { Screen: () => null }),

@@ -13,6 +13,7 @@ import { ClaimGate } from '../../src/components/tickets/ClaimGate';
 import { TicketCard } from '../../src/components/tickets/TicketCard';
 import { BottomNav } from '../../src/components/ui/BottomNav';
 import {
+  continueAfterProfile,
   ONBOARDING_RESUME_ROUTE,
   resumeAfterOnboarding,
   useAuthStore,
@@ -20,6 +21,7 @@ import {
 import { useClaimPromptStore } from '../../src/stores/claimPrompt';
 import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
 
+import ProfileFormScreen from '../(onboarding)/profile';
 import ClaimScreen from '../claim';
 
 /**
@@ -39,10 +41,15 @@ const mockRouter = {
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => ({}),
+  useIsFocused: () => mockFocused,
+  usePathname: () => mockPathname,
   Redirect: () => null,
   Stack: Object.assign(() => null, { Screen: () => null }),
   Tabs: Object.assign(() => null, { Screen: () => null }),
 }));
+
+let mockPathname = '/discover';
+let mockFocused = true;
 
 const PHONE = '+201012345678';
 
@@ -97,6 +104,8 @@ beforeEach(() => {
   mockRouter.back.mockClear();
   mockRouter.replace.mockClear();
   mockRouter.canGoBack.mockReturnValue(true);
+  mockPathname = '/discover';
+  mockFocused = true;
   useClaimPromptStore.getState().reset();
   useAuthStore.setState({
     status: 'signed-out',
@@ -490,5 +499,66 @@ describe('the Tickets tab while an invitation waits', () => {
     view.unmount();
     renderWithProviders(<BottomNav />);
     expect(await screen.findByRole('button', { name: 'Tickets' })).toBeTruthy();
+  });
+});
+
+/*
+ * Regression, 2026-09-30 (build 31): the claim screen opened over the sign-up profile form, the
+ * claim asked for the form again, and saving the top form made both move on. The hidden one
+ * took the claim to the ticket and the top one replaced that with the selfie offer, so the
+ * holder landed on Discover with the ticket still to claim.
+ */
+describe('claiming from the middle of sign-up', () => {
+  it('keeps the claim screen away while sign-up is on screen', async () => {
+    grantMockTicket({ phoneNumber: PHONE, holderName: 'Yasmin El Sayed' });
+    await signIn();
+    mockPathname = '/profile';
+
+    const { rerender } = renderWithProviders(<ClaimGate />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockRouter.push).not.toHaveBeenCalledWith('/claim');
+
+    mockPathname = '/discover';
+    rerender(<ClaimGate />);
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/claim'));
+  });
+
+  it('moves on only from the profile form on screen, not one left underneath', async () => {
+    await mockApi.auth.requestOtp(PHONE);
+    await mockApi.auth.verifyOtp(PHONE, MOCK_OTP_CODE);
+    const incomplete = await mockApi.auth.me();
+    useAuthStore.setState({
+      status: 'signed-in',
+      user: incomplete,
+      pendingPhone: null,
+      pendingClaimTicketId: 'tkt-waiting',
+    });
+    mockFocused = false;
+    renderWithProviders(<ProfileFormScreen />);
+
+    // The form on top saves: the profile is complete now, and the claim is still to be made.
+    const complete = await signIn();
+    await act(async () => {
+      useAuthStore.setState({ user: complete });
+    });
+    expect(mockRouter.replace).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().pendingClaimTicketId).toBe('tkt-waiting');
+  });
+
+  it('takes a saved profile that was there for a claim straight to the ticket to claim it', async () => {
+    const user = await signIn();
+    const withoutSelfie = { ...user, selfieUploaded: false };
+
+    useAuthStore.setState({ pendingClaimTicketId: 'tkt-waiting' });
+    continueAfterProfile(mockRouter as never, withoutSelfie);
+    expect(mockRouter.replace).toHaveBeenCalledWith('/ticket/tkt-waiting?claim=1');
+    expect(useAuthStore.getState().pendingClaimTicketId).toBeNull();
+
+    // Registration with no claim behind it still offers the selfie.
+    mockRouter.replace.mockClear();
+    continueAfterProfile(mockRouter as never, withoutSelfie);
+    expect(mockRouter.replace).toHaveBeenCalledWith('/account/selfie?next=resume');
   });
 });

@@ -369,9 +369,13 @@ export function resumeAfterOnboarding(router: Router): void {
  * Where the profile form goes once it is saved. The selfie is offered here, as an optional
  * step with "Add the selfie later", because the QR code will need it; nothing waits on it
  * (CLAUDE.md rule 3), and someone who has one already goes straight on.
+ *
+ * A form that was there for a claim goes straight to the ticket, where the claim is made: the
+ * claim is what they asked for, and the ticket offers the selfie itself.
  */
 export function continueAfterProfile(router: Router, user: CurrentUser | null): void {
-  if (user && !user.selfieUploaded) router.replace('/account/selfie?next=resume');
+  const claiming = useAuthStore.getState().pendingClaimTicketId !== null;
+  if (!claiming && user && !user.selfieUploaded) router.replace('/account/selfie?next=resume');
   else resumeAfterOnboarding(router);
 }
 

@@ -15,6 +15,7 @@ let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
   useLocalSearchParams: () => mockParams,
+  useIsFocused: () => true,
 }));
 
 beforeEach(() => {
