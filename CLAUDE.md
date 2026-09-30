@@ -32,6 +32,14 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    - **An invitation may include a plus one.** Once they claim, the guest names someone by
      number; that person gets an invitation of their own (same tier, no add-ons, no plus one of
      their own) and a WhatsApp if the number has no account (rule 6).
+   - **The invitation links to the website, which hands it to the app.** The WhatsApp button
+     opens `https://book.sukunwellness.co/claim` (staging: `clientstaging.`). A phone with the
+     app opens the app instead (Universal Links / App Links: `associatedDomains` and
+     `intentFilters` in `app.json`, the website's `.well-known` files), and
+     `app/+native-intent.tsx` routes it: signed in, the claim screen; anyone else, the entry
+     gate, after which `ClaimGate` shows it. Without the app, the website claims and declines
+     in full and offers the download. Plus ones, the QR and the selfie stay in the app. The
+     iOS profile needs the Associated Domains capability; `assert-ios-signing.mjs` checks it.
 3. **The selfie is the anti-fraud control, and it is required only for the QR.** It is
    demanded when a holder opens an entry pass whose QR is due (inside the 12 hours before the
    event) and nowhere else: not to browse, register, claim or pay. It is *offered*, never

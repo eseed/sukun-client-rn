@@ -11,6 +11,10 @@
       "supportsTablet": false,
       "buildNumber": "31",
       "bundleIdentifier": "co.sukunwellness",
+      "associatedDomains": [
+        "applinks:book.sukunwellness.co",
+        "applinks:clientstaging.sukunwellness.co"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry.",
@@ -20,6 +24,28 @@
     },
     "android": {
       "package": "co.sukunwellness",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "book.sukunwellness.co",
+              "pathPrefix": "/claim"
+            },
+            {
+              "scheme": "https",
+              "host": "clientstaging.sukunwellness.co",
+              "pathPrefix": "/claim"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#F7F0E0",

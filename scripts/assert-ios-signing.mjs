@@ -75,6 +75,22 @@ if (!fs.existsSync(PROFILE)) {
     if (days < 21) console.warn(`Warning: the provisioning profile expires in ${days} days.`);
   }
 
+  // Universal Links (the invitation's claim link opening the app) need the Associated Domains
+  // capability on the App ID, and a profile generated after it was switched on. Without it the
+  // archive fails to sign twenty minutes in, naming the entitlement.
+  const appJson = JSON.parse(fs.readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
+  const wantsDomains = (appJson.expo?.ios?.associatedDomains ?? []).length > 0;
+  if (
+    wantsDomains &&
+    extract('Entitlements.com\\.apple\\.developer\\.associated-domains') === null
+  ) {
+    note(
+      'Profile lacks the Associated Domains entitlement that app.json asks for. Turn the ' +
+        'capability on for the App ID and download a new App Store profile (an EAS build does ' +
+        'both), then replace the one in ../secrets.',
+    );
+  }
+
   const teams = Array.from({ length: count('TeamIdentifier') }, (_, i) =>
     extract(`TeamIdentifier.${i}`),
   );
@@ -92,12 +108,19 @@ if (!fs.existsSync(PROFILE)) {
   if (profileCertHashes.length === 0) note('Profile carries no certificate');
 }
 
-const identities = execFileSync('security', ['find-identity', '-v', '-p', 'codesigning']).toString();
+const identities = execFileSync('security', [
+  'find-identity',
+  '-v',
+  '-p',
+  'codesigning',
+]).toString();
 const keychainHashes = [...identities.matchAll(/\)\s+([A-F0-9]{40})\s+"([^"]+)"/g)].map(
   ([, hash, name]) => ({ hash, name }),
 );
 
-const distribution = keychainHashes.filter(({ name }) => /Apple Distribution|iPhone Distribution/.test(name));
+const distribution = keychainHashes.filter(({ name }) =>
+  /Apple Distribution|iPhone Distribution/.test(name),
+);
 if (distribution.length === 0) {
   note('No Apple Distribution certificate in the login keychain');
 }
@@ -106,7 +129,7 @@ if (profileCertHashes.length > 0 && keychainHashes.length > 0) {
   const match = keychainHashes.find(({ hash }) => profileCertHashes.includes(hash));
   if (!match) {
     note(
-      'The provisioning profile\'s certificate is not in this keychain. Import the .p12 that ' +
+      "The provisioning profile's certificate is not in this keychain. Import the .p12 that " +
         'goes with it (the same one EAS holds), not a different distribution certificate.',
     );
   } else {
@@ -117,7 +140,9 @@ if (profileCertHashes.length > 0 && keychainHashes.length > 0) {
 if (problems.length > 0) {
   console.error('\nThe local iOS release is not ready:\n');
   for (const problem of problems) console.error(`  - ${problem}`);
-  console.error('\nSee the "Releasing to iOS" section of CLAUDE.md for how to obtain each piece.\n');
+  console.error(
+    '\nSee the "Releasing to iOS" section of CLAUDE.md for how to obtain each piece.\n',
+  );
   process.exit(1);
 }
 
