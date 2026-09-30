@@ -12,6 +12,7 @@ import {
   cancelPendingPushRegistrations,
   waitForPendingPushRegistrations,
 } from '../services/notifications/push-registration-state';
+import { useClaimPromptStore } from './claimPrompt';
 
 /**
  * Session state. Tokens live in the keychain; this store holds the in-memory view of who is
@@ -242,6 +243,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await deleteSecureItem(SECURE_KEYS.setupDeferred);
     });
     if (generation !== sessionGeneration) return;
+    // Signing in is opening the app: any invitation waiting is the first thing they see.
+    useClaimPromptStore.getState().forgetShown();
     set({ status: 'signed-in', user, pendingPhone: null, setupDeferred: false });
     identify(user.id);
   },
@@ -263,6 +266,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       API_MODE === 'live' && (options?.remote !== false || options?.revokePushToken === true);
     cancelPendingPushRegistrations();
     clearQueryCache?.();
+    useClaimPromptStore.getState().forgetShown();
     set({
       status: 'signed-out',
       user: null,

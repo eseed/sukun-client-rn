@@ -1,4 +1,4 @@
-import { Alert, AppState } from 'react-native';
+import { Alert, AppState, Text } from 'react-native';
 import {
   grantMockTicket,
   mockApi,
@@ -9,7 +9,7 @@ import {
 } from '../../src/api/mock';
 import { eventDetails, SOUND_BATH_ID, TULUA_ID } from '../../src/api/mock/fixtures';
 import type { EventTier } from '../../src/api/types';
-import { ClaimGate } from '../../src/components/tickets/ClaimGate';
+import { ClaimGate, REOPEN_AFTER_MS } from '../../src/components/tickets/ClaimGate';
 import { TicketCard } from '../../src/components/tickets/TicketCard';
 import { BottomNav } from '../../src/components/ui/BottomNav';
 import {
@@ -68,12 +68,17 @@ async function signIn() {
 }
 
 /** Brings the app back from the background, the way `AppState` reports it. */
-async function returnToForeground() {
+async function returnToForeground(awayMs = 0) {
   const calls = (AppState.addEventListener as jest.Mock).mock.calls;
   const listener = calls[calls.length - 1]?.[1] as ((state: string) => void) | undefined;
+  const now = Date.now();
+  const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
   await act(async () => {
+    listener?.('background');
+    clock.mockReturnValue(now + awayMs);
     listener?.('active');
   });
+  clock.mockRestore();
 }
 
 /** Makes a mock tier sold out or off sale, and returns the undo. */
@@ -254,6 +259,57 @@ describe('ClaimGate', () => {
     view.rerender(<ClaimGate />);
     await returnToForeground();
     expect(mockRouter.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('covers the tabs until it knows, so the claim screen comes before Discover', async () => {
+    grantMockTicket({ phoneNumber: PHONE, holderName: 'Yasmin El Sayed' });
+    await signIn();
+
+    renderWithProviders(
+      <ClaimGate>
+        <Text>Discover</Text>
+      </ClaimGate>,
+    );
+
+    expect(screen.getByTestId('claim-gate-holding')).toBeTruthy();
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/claim'));
+    act(() => useClaimPromptStore.getState().setOpen(true));
+    await waitFor(() => expect(screen.queryByTestId('claim-gate-holding')).toBeNull());
+  });
+
+  it('shows the tabs straight away once it knows nothing is waiting', async () => {
+    await signIn();
+    renderWithProviders(
+      <ClaimGate>
+        <Text>Discover</Text>
+      </ClaimGate>,
+    );
+
+    await waitFor(() => expect(screen.queryByTestId('claim-gate-holding')).toBeNull());
+    expect(mockRouter.push).not.toHaveBeenCalled();
+  });
+
+  it('opens it again when the app is opened after a while in the background', async () => {
+    grantMockTicket({ phoneNumber: PHONE, holderName: 'Yasmin El Sayed' });
+    await signIn();
+    renderWithProviders(<ClaimGate />);
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(1));
+
+    // A quick trip to another app does not bring it back.
+    await returnToForeground(30 * 1000);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(mockRouter.push).toHaveBeenCalledTimes(1);
+
+    await returnToForeground(REOPEN_AFTER_MS);
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(2));
+  });
+
+  it('opens it again after signing out and back in', async () => {
+    useClaimPromptStore.getState().markShown(['t1']);
+    await useAuthStore.getState().signOut({ remote: false });
+    expect(useClaimPromptStore.getState().shownTicketIds.size).toBe(0);
   });
 
   it('opens it again for a ticket granted while the app sat in the background', async () => {

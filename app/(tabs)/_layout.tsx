@@ -64,8 +64,7 @@ export default function TabsLayout() {
   const invitationWaiting = useHasWaitingInvitation();
 
   return (
-    <>
-      <ClaimGate />
+    <ClaimGate>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -104,7 +103,7 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-    </>
+    </ClaimGate>
   );
 }
 
