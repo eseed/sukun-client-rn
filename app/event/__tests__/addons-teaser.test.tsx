@@ -1,6 +1,7 @@
 import { renderWithProviders, screen, waitFor } from '../../../src/test-utils';
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src/api/mock';
 import { useAuthStore } from '../../../src/stores/auth';
+import { api } from '../../../src/api';
 
 import EventDetailScreen from '../[slug]';
 
@@ -42,6 +43,26 @@ async function signInAndComplete() {
   useAuthStore.setState({ status: 'signed-in', user: complete, pendingPhone: null });
 }
 
+/**
+ * Tulua with no room left to book. An event that sells a stay shows the "Accommodation
+ * available" box instead of this line (`accommodation-box.test.tsx`), so the line is what an
+ * event says when its rooms are gone, or when it never sold any.
+ */
+function withoutStaysOnSale() {
+  const list = api.addons.list.bind(api.addons);
+  return jest
+    .spyOn(api.addons, 'list')
+    .mockImplementation(async (identifier) =>
+      (await list(identifier)).map((addon) =>
+        addon.type === 'accommodation' ? { ...addon, availability: 'unavailable' as const } : addon,
+      ),
+    );
+}
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 beforeEach(() => {
   resetMockState();
   mockConfig.latencyMs = 0;
@@ -52,6 +73,7 @@ beforeEach(() => {
 
 describe('07 Event detail · extras teaser', () => {
   it('names the kinds of extra on offer, without naming any single one', async () => {
+    withoutStaysOnSale();
     mockParams.slug = 'tulua';
     await signInAndComplete();
 
@@ -91,6 +113,7 @@ describe('07 Event detail · extras teaser', () => {
    * it. A control here would only repeat "Get tickets" while looking like something else.
    */
   it('is information, not a control', async () => {
+    withoutStaysOnSale();
     mockParams.slug = 'tulua';
     await signInAndComplete();
 
@@ -108,6 +131,7 @@ describe('07 Event detail · extras teaser', () => {
    * meant to persuade.
    */
   it('shows for a signed-out visitor too', async () => {
+    withoutStaysOnSale();
     mockParams.slug = 'tulua';
 
     renderWithProviders(<EventDetailScreen />);

@@ -42,7 +42,8 @@ import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
  */
 export default function ChoosePassScreen() {
   const router = useRouter();
-  const { eventId } = useLocalSearchParams<{ eventId: string }>();
+  // `for=stay`: sent here by "Book your stay", which needs a ticket to attach the room to.
+  const { eventId, for: purpose } = useLocalSearchParams<{ eventId: string; for?: string }>();
   const validEventId =
     typeof eventId === 'string' && /^[A-Za-z0-9_-]+$/.test(eventId) ? eventId : undefined;
   const access = useCheckoutAccess({ browsable: true });
@@ -153,6 +154,12 @@ export default function ChoosePassScreen() {
       <View style={styles.heading}>
         <BulletHeading title="Choose your pass" size="md" />
       </View>
+
+      {purpose === 'stay' ? (
+        <View style={styles.stayNotice}>
+          <Text style={styles.stayNoticeText}>Get your ticket first to book your stay</Text>
+        </View>
+      ) : null}
 
       <View style={styles.tiers}>
         {event.tiers.map((tier) => (
@@ -301,6 +308,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.rose700,
     textTransform: 'capitalize',
+  },
+  /*
+   * The gold tonal pair the design system spends on "this needs something first" (the
+   * confirmation's selfie notice, the "Selfie needed" badge), so it reads the same way here.
+   */
+  stayNotice: {
+    alignSelf: 'stretch',
+    backgroundColor: colors.gold100,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  stayNoticeText: {
+    fontSize: 13,
+    lineHeight: 13 * 1.5,
+    fontFamily: fontFamily.bodyMedium,
+    textAlign: 'center',
+    color: colors.gold700,
   },
   notice: {
     marginBottom: 12,

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { Ticket } from '../api/types';
 import { useTickets } from './queries';
 
 /**
@@ -27,4 +28,21 @@ export function useHoldsTicketForEvent(eventId: string | null): {
     holdsTicket,
     isPending: ticketsQuery.isPending && ticketsQuery.fetchStatus !== 'idle',
   };
+}
+
+/**
+ * The signed-in holder's own ticket to this event, once it is theirs (`active`): the ticket extras
+ * can be added to, which is where "Book your stay" takes a holder. `null` for anyone else,
+ * including someone whose ticket is still waiting to be claimed, who claims it first.
+ */
+export function useOwnTicketForEvent(eventId: string | null): Ticket | null {
+  const ticketsQuery = useTickets(['active']);
+  return useMemo(() => {
+    if (!eventId) return null;
+    return (
+      (ticketsQuery.data?.data ?? []).find(
+        (ticket) => ticket.event.id === eventId && ticket.status === 'active',
+      ) ?? null
+    );
+  }, [eventId, ticketsQuery.data]);
 }
