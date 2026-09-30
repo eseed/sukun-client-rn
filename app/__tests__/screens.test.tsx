@@ -1409,6 +1409,37 @@ describe('14 Entry pass', () => {
   });
 
   /*
+   * Before the window, which is where a holder almost always is, the screen does not ask for a
+   * pass at all. It says when the code will appear instead of loading or failing.
+   */
+  it('does not ask for a pass before the window opens, and says when it will', async () => {
+    await signInAndComplete();
+    const { data } = await mockApi.tickets.list();
+    mockParams.id = data[0]!.id;
+    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass');
+    // One minute before the window opens, 12 hours ahead of the first day.
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-23T00:59:00.000Z'));
+
+    try {
+      renderWithProviders(<EntryPassScreen />);
+
+      await waitFor(() =>
+        expect(
+          screen.getByText('Your entry pass opens 12 hours before the event starts.'),
+        ).toBeTruthy(),
+      );
+      expect(screen.getByText('QR Code will show here.')).toBeTruthy();
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(entryPass).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
+  });
+
+  /*
    * An endpoint that answers but does not issue passes yet (501, 405, or an ENTRY_PASS_NOT_*
    * refusal) is not something the holder can retry, and the panel must not claim a code is
    * rotating when there is none. The same build renders the QR above as soon as it answers.
