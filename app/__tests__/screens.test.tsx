@@ -1380,46 +1380,68 @@ describe('13 My tickets', () => {
 });
 
 describe('14 Entry pass', () => {
+  // Inside the 12 hours before the first day of the seeded ticket (2026-10-23 13:00Z), when the
+  // screen asks for a pass at all. Outside it, every ticket says the QR will show here later.
+  const insideEntryWindow = Date.parse('2026-10-23T08:00:00.000Z');
+
   it('renders the live pass, the rotation notice and the holder details', async () => {
     await signInAndComplete();
     const { data } = await mockApi.tickets.list();
     mockParams.id = data[0]!.id;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() => expect(screen.getByText('Tulua · live entry pass')).toBeTruthy());
-    expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
-    expect(screen.getByText('Holder')).toBeTruthy();
-    expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
-    expect(screen.getByText('Venue')).toBeTruthy();
-    // The pass shows the ticket's full venue string, as the design draws it.
-    expect(screen.getByText('Tunis Village, Fayoum')).toBeTruthy();
-    expect(screen.getByText(/This code regenerates every ~/)).toBeTruthy();
+      await waitFor(() => expect(screen.getByText('Tulua · live entry pass')).toBeTruthy());
+      expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
+      expect(screen.getByText('Holder')).toBeTruthy();
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+      expect(screen.getByText('Venue')).toBeTruthy();
+      // The pass shows the ticket's full venue string, as the design draws it.
+      expect(screen.getByText('Tunis Village, Fayoum')).toBeTruthy();
+      // The mock's pass lives 30s and is refetched 3s before it expires; the clock is frozen.
+      await waitFor(() => expect(screen.getByText('Refreshes in 27s')).toBeTruthy());
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
+    } finally {
+      now.mockRestore();
+    }
   });
 
   /*
-   * The entry-pass endpoint is not deployed, so the live api's request 404s. That is not
-   * something the holder can retry, and the panel must not claim a code is rotating when there
-   * is none. The same build renders the QR above as soon as the endpoint answers.
+   * An endpoint that answers but does not issue passes yet (501, 405, or an ENTRY_PASS_NOT_*
+   * refusal) is not something the holder can retry, and the panel must not claim a code is
+   * rotating when there is none. The same build renders the QR above as soon as it answers.
    */
   it('says the code will appear later while the endpoint is not serving a pass', async () => {
     await signInAndComplete();
     const { data } = await mockApi.tickets.list();
     mockParams.id = data[0]!.id;
-    const notDeployed = Object.assign(new Error('Cannot GET'), { code: 'UNKNOWN', status: 404 });
-    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(notDeployed);
+    const notServing = Object.assign(new Error('Not implemented'), {
+      code: 'NOT_IMPLEMENTED',
+      status: 501,
+    });
+    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(notServing);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() => expect(screen.getByText('QR Code will show here.')).toBeTruthy());
-    expect(screen.getByText('Check back 2 days before the event.')).toBeTruthy();
-    expect(screen.queryByText('Try again')).toBeNull();
-    expect(screen.queryByText(/Refreshes in/)).toBeNull();
-    expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
-    // The ticket's own details still belong on the screen.
-    expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
-
-    entryPass.mockRestore();
+      await waitFor(() =>
+        expect(
+          screen.getByText('The entry pass is not available yet. Try again closer to the event.'),
+        ).toBeTruthy(),
+      );
+      expect(entryPass).toHaveBeenCalled();
+      expect(screen.getByText('QR Code will show here.')).toBeTruthy();
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+      // The ticket's own details still belong on the screen.
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
   });
 
   /**
@@ -1482,18 +1504,23 @@ describe('14 Entry pass', () => {
       status: 500,
     });
     const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(serverError);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText('Something went wrong on our side. Try again in a moment.'),
-      ).toBeTruthy(),
-    );
-    expect(screen.getByText('Try again')).toBeTruthy();
-    expect(screen.queryByText('QR Code will show here.')).toBeNull();
-
-    entryPass.mockRestore();
+      await waitFor(() =>
+        expect(
+          screen.getByText('Something went wrong on our side. Try again in a moment.'),
+        ).toBeTruthy(),
+      );
+      expect(screen.getByText('Try again')).toBeTruthy();
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
   });
 });
 
