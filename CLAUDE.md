@@ -27,8 +27,12 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
      and the UI says so on the button rather than offering it.
    - **Claiming needs a complete profile, with no skip** (`readyToClaim` in
      `src/stores/auth.ts`): the holder finishes it and the claim is made when they are back.
-   - **A holder can decline** ("I can't make it"), the RSVP no. The Tickets tab pulses while
-     any invitation waits for either answer.
+   - **The claim comes first.** `ClaimGate` covers the tabs until it knows whether an
+     invitation waits, so the claim screen is the first thing seen on a cold start, a sign-in,
+     or a return after `REOPEN_AFTER_MS` in the background. An invitee is never shown a price:
+     the event page offers "Claim ticket" alone.
+   - **A holder can decline** ("Sorry, can't make it"), the RSVP no. The Tickets tab pulses
+     while any invitation waits for either answer.
    - **An invitation may include a plus one.** Once they claim, the guest names someone by
      number; that person gets an invitation of their own (same tier, no add-ons, no plus one of
      their own) and a WhatsApp if the number has no account (rule 6).

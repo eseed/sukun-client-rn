@@ -173,7 +173,7 @@ export interface SukunApi {
      * event is sold out (`CLAIM_SOLD_OUT`) or not on sale (`CLAIM_NOT_ON_SALE`).
      */
     claim(ticketId: string): Promise<Ticket>;
-    /** "I can't make it": the RSVP no to a granted ticket not claimed yet. Voids it. */
+    /** "Sorry, can't make it": the RSVP no to a granted ticket not claimed yet. Voids it. */
     decline(ticketId: string): Promise<void>;
     /** Names the guest's plus one, who is sent an invitation of their own. */
     invitePlusOne(ticketId: string, input: InvitePlusOneInput): Promise<Ticket>;

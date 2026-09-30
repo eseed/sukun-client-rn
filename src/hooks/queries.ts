@@ -613,7 +613,7 @@ export function useClaimTicket() {
   });
 }
 
-/** "I can't make it": the ticket is voided, so it drops out of every list and detail. */
+/** "Sorry, can't make it": the ticket is voided, so it drops out of every list and detail. */
 export function useDeclineTicket() {
   const client = useQueryClient();
   return useMutation({

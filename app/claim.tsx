@@ -26,7 +26,7 @@ import { colors, fontFamily, space } from '../src/theme/tokens';
  *   off-sale ticket says so on its button (never a faded "Claim").
  * - Claiming needs a complete profile, and cannot skip it: the holder is sent to finish it and
  *   the claim is made when they are back (`readyToClaim`).
- * - "I can't make it" declines, the RSVP no, and is always open.
+ * - "Sorry, can't make it" declines, the RSVP no, and is always open.
  *
  * "Not now" is always offered. The screen comes back the next time the app is opened, and the
  * Tickets tab pulses until every invitation is answered.
@@ -181,7 +181,7 @@ function GrantedTicket({
       "We'll let Sukun know and cancel this invitation. This can't be undone.",
       [
         { text: 'Keep my invitation', style: 'cancel' },
-        { text: "I can't make it", style: 'destructive', onPress: () => void onDecline() },
+        { text: "Sorry, can't make it", style: 'destructive', onPress: () => void onDecline() },
       ],
     );
   }
@@ -227,7 +227,7 @@ function GrantedTicket({
           onPress={() => void onClaim()}
         />
         <Button
-          label="I can't make it"
+          label="Sorry, can't make it"
           variant="secondary"
           loading={declineTicket.isPending}
           disabled={busy}

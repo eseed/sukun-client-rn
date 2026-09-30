@@ -357,7 +357,7 @@ describe('ClaimScreen', () => {
       ).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Claim ticket' })).toBeNull();
       // Declining is still open.
-      expect(screen.getByRole('button', { name: "I can't make it" })).toBeTruthy();
+      expect(screen.getByRole('button', { name: "Sorry, can't make it" })).toBeTruthy();
     } finally {
       restore();
     }
@@ -369,7 +369,7 @@ describe('ClaimScreen', () => {
     const alert = confirmAlerts();
 
     renderWithProviders(<ClaimScreen />);
-    fireEvent.press(await screen.findByRole('button', { name: "I can't make it" }));
+    fireEvent.press(await screen.findByRole('button', { name: "Sorry, can't make it" }));
 
     expect(alert).toHaveBeenCalledWith("Can't make it?", expect.any(String), expect.any(Array));
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/tickets'));

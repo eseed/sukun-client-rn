@@ -335,14 +335,14 @@ export default function EntryPassScreen() {
     }
   }
 
-  /** "I can't make it": the RSVP no. It cannot be taken back, so it is confirmed first. */
+  /** "Sorry, can't make it": the RSVP no. It cannot be taken back, so it is confirmed first. */
   function confirmDecline() {
     Alert.alert(
       "Can't make it?",
       "We'll let Sukun know and cancel this invitation. This can't be undone.",
       [
         { text: 'Keep my invitation', style: 'cancel' },
-        { text: "I can't make it", style: 'destructive', onPress: () => void onDecline() },
+        { text: "Sorry, can't make it", style: 'destructive', onPress: () => void onDecline() },
       ],
     );
   }
@@ -428,7 +428,7 @@ export default function EntryPassScreen() {
                   disabled={soldOut || notOnSale || declineTicket.isPending}
                 />
                 <Button
-                  label="I can't make it"
+                  label="Sorry, can't make it"
                   variant="secondary"
                   onPress={confirmDecline}
                   loading={declineTicket.isPending}
