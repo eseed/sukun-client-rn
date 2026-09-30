@@ -1024,10 +1024,19 @@ export const mockApi: SukunApi = {
      * The same answer the deployed backend gives with neither variable set, which is also the
      * app's own build-time fallback. Mock mode is for building screens, so the guest path is
      * whatever the platform's safe default is rather than something a developer has to know
-     * to turn on.
+     * to turn on. Nothing is forced to update, for the same reason.
      */
     async get(): Promise<AppConfig> {
-      return delay({ allowGuestBrowsing: { ios: true, android: false } }, 0.3);
+      return delay(
+        {
+          allowGuestBrowsing: { ios: true, android: false },
+          forceUpdate: {
+            ios: { enabled: false, minimumVersion: null },
+            android: { enabled: false, minimumVersion: null },
+          },
+        },
+        0.3,
+      );
     },
   },
 

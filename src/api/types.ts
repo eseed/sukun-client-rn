@@ -72,6 +72,21 @@ export interface AppConfig {
     ios: boolean;
     android: boolean;
   };
+  /**
+   * Per-platform force update, set by admins from the dashboard. Optional because a backend
+   * from before it existed does not send it, and that has to read as "nothing forced".
+   * See `src/lib/force-update.ts`.
+   */
+  forceUpdate?: {
+    ios: ForceUpdateRule;
+    android: ForceUpdateRule;
+  };
+}
+
+/** `ForceUpdateRuleDto`: `minimumVersion` is null whenever `enabled` is false. */
+export interface ForceUpdateRule {
+  enabled: boolean;
+  minimumVersion: string | null;
 }
 
 /** `AppUserAreaResponseDto` as returned by the mobile API. */

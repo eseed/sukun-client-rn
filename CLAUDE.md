@@ -221,6 +221,24 @@ but an explicit "false" leaves the guest path on, because shipping without it is
 Review rejected under guideline 5.1.1(v). Android fails towards closed: only an explicit
 "true" opens it. Nothing reads `Platform.OS` at a call site; the split lives in the two flags.
 
+### Force update
+
+Admins can hold an out-of-date build on a blocking screen until it is updated from the store.
+Each platform has its own switch and minimum store version (`2.1.0`, the `version` in
+`app.json`, not the build number), set on the dashboard's App updates page and sent in
+`forceUpdate` by `GET public/app-config`. `src/stores/flags.ts` resolves it with the guest flag
+at launch and re-reads it whenever the app returns to the foreground; `app/_layout.tsx` returns
+`ForceUpdateScreen` ahead of everything, the consent question included, while
+`useUpdateRequired()` is true. "Update now" opens the store (`src/lib/force-update.ts`, App
+Store id `6804203454`, Play package `co.sukunwellness`).
+
+It fails open: no rule, an unreadable version, a first launch offline, or the web target never
+block. A device that has been told to update stays blocked offline through the cached rule
+until the update lifts it. Only builds that carry the screen honour the switch, so it is no
+substitute for `MOBILE_CLIENT_REVISION` when an older build cannot handle a backend change.
+Raise the minimum only once the new version is live in that store, or people are blocked with
+nothing to update to.
+
 ### Build numbers
 
 `eas.json` sets `appVersionSource: "local"`, so the build number is `ios.buildNumber` in
