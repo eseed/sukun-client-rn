@@ -21,3 +21,12 @@ export function useClaimableTickets() {
 
   return { tickets, query };
 }
+
+/**
+ * Whether an invitation is waiting for the holder to claim or decline it, which is what keeps
+ * the Tickets tab pulsing. A grant the event is too full to claim still counts: it waits for an
+ * answer all the same, and declining is always open.
+ */
+export function useHasWaitingInvitation(): boolean {
+  return useClaimableTickets().tickets.length > 0;
+}

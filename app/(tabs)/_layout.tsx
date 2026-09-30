@@ -2,7 +2,9 @@ import { Tabs } from 'expo-router';
 import { StyleSheet, Text, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClaimGate } from '../../src/components/tickets/ClaimGate';
-import { DiscoverIcon, ProfileIcon, TicketsIcon } from '../../src/components/ui';
+import { TicketsTabIcon } from '../../src/components/tickets/TicketsTabIcon';
+import { DiscoverIcon, ProfileIcon } from '../../src/components/ui';
+import { useHasWaitingInvitation } from '../../src/hooks/useClaimableTickets';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { text } from '../../src/theme/typography';
 
@@ -59,6 +61,7 @@ const tabLabel = (title: string) => {
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const invitationWaiting = useHasWaitingInvitation();
 
   return (
     <>
@@ -86,7 +89,10 @@ export default function TabsLayout() {
           options={{
             title: 'Tickets',
             tabBarLabel: tabLabel('Tickets'),
-            tabBarIcon: ({ color }) => <TicketsIcon color={color} />,
+            tabBarAccessibilityLabel: invitationWaiting
+              ? 'Tickets, an invitation is waiting for you'
+              : 'Tickets',
+            tabBarIcon: ({ color }) => <TicketsTabIcon color={color} waiting={invitationWaiting} />,
           }}
         />
         <Tabs.Screen

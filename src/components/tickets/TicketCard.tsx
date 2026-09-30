@@ -12,15 +12,24 @@ import { Badge, type BadgeTone, ImageSlot, Text } from '../ui';
 
 function statusBadge(ticket: Ticket): { label: string; tone: BadgeTone } {
   switch (ticket.usageStatus) {
+    // A missing selfie holds back only the QR code (CLAUDE.md rule 3), so the ticket itself
+    // reads as the holder's, like a usable one; the call to action below names the selfie.
     case 'usable':
-      return { label: 'Paid', tone: 'sky' };
+    case 'selfie_required':
+      return ticket.source === 'invitation'
+        ? { label: 'Claimed', tone: 'sky' }
+        : { label: 'Paid', tone: 'sky' };
     case 'pending_claim':
       // A granted ticket in the holder's own list waits on them, not on a guest.
-      if (ticket.source === 'invitation') return { label: 'Ready to claim', tone: 'gold' };
+      if (ticket.source === 'invitation') {
+        if (ticket.claimAvailability === 'sold_out') return { label: 'Sold out', tone: 'rose' };
+        if (ticket.claimAvailability === 'not_on_sale') {
+          return { label: 'Not on sale yet', tone: 'gold' };
+        }
+        return { label: 'Ready to claim', tone: 'gold' };
+      }
       // Identical wording regardless of whether the guest has an account (CLAUDE.md rule 4).
       return { label: 'Sent to guest', tone: 'gold' };
-    case 'selfie_required':
-      return { label: 'Selfie needed', tone: 'gold' };
     case 'profile_incomplete':
       return { label: 'Profile needed', tone: 'gold' };
     case 'voided':
@@ -29,6 +38,35 @@ function statusBadge(ticket: Ticket): { label: string; tone: BadgeTone } {
       return { label: 'Refunded', tone: 'rose' };
     default:
       return { label: 'Paid', tone: 'sky' };
+  }
+}
+
+/**
+ * What tapping the card leads to, in the holder's words. Every state says what happens next:
+ * nothing here describes the ticket in the system's terms ("bind", "pending").
+ */
+function callToAction(ticket: Ticket): { label: string; muted: boolean } {
+  switch (ticket.usageStatus) {
+    case 'usable':
+      return { label: 'View entry pass →', muted: false };
+    case 'selfie_required':
+      return { label: 'Add a selfie for your QR code →', muted: false };
+    case 'profile_incomplete':
+      return { label: 'Complete your profile →', muted: false };
+    case 'pending_claim':
+      if (ticket.source !== 'invitation') return { label: 'View ticket →', muted: true };
+      if (ticket.claimAvailability === 'sold_out')
+        return { label: 'Event sold out →', muted: true };
+      if (ticket.claimAvailability === 'not_on_sale') {
+        return { label: 'Not on sale yet →', muted: true };
+      }
+      return { label: 'Claim your ticket →', muted: false };
+    case 'voided':
+      return { label: 'This ticket was cancelled', muted: true };
+    case 'refunded':
+      return { label: 'This ticket was refunded', muted: true };
+    default:
+      return { label: 'View ticket →', muted: true };
   }
 }
 
@@ -55,7 +93,7 @@ export function TicketCard({
   const first = ticket.days[0]?.date ?? '';
   const last = ticket.days[ticket.days.length - 1]?.date ?? first;
   const usable = ticket.usageStatus === 'usable';
-  const claimable = ticket.source === 'invitation' && ticket.usageStatus === 'pending_claim';
+  const cta = callToAction(ticket);
 
   return (
     <Pressable
@@ -88,13 +126,7 @@ export function TicketCard({
             {addonCount} {addonCount === 1 ? 'add-on' : 'add-ons'} attached
           </Text>
         ) : null}
-        <Text style={[styles.cta, !usable && !claimable && styles.ctaMuted]}>
-          {usable
-            ? 'View entry pass →'
-            : claimable
-              ? 'Claim your ticket →'
-              : 'Waiting to bind to their number'}
-        </Text>
+        <Text style={[styles.cta, cta.muted && styles.ctaMuted]}>{cta.label}</Text>
         {/* Only a usable ticket can take extras: they attach to a ticket, and one that has not
             bound to its holder yet has nothing to attach them to. */}
         {usable && onAddExtras ? (

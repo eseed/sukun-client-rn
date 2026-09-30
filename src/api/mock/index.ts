@@ -1,6 +1,8 @@
 import { normalizePhone, requiresLivingArea } from '../../lib/phone';
 import type { SukunApi } from '../contract';
 import type {
+  ClaimAvailability,
+  PlusOneGuestStatus,
   AccountDeletionPreview,
   AddonDetail,
   AddonSummary,
@@ -170,6 +172,18 @@ interface MockState {
   ticketAddons: Map<string, TicketAddon[]>;
   /** Which tickets occupy a room, per event, so one-room-per-person survives fulfilment. */
   accommodationTicketIds: Map<string, Set<string>>;
+  /** The invitation behind each granted ticket, keyed by ticket id. */
+  invitations: Map<string, MockInvitation>;
+}
+
+/** What the backend's `invitations` row says about a granted ticket. */
+interface MockInvitation {
+  plusOneAllowed: boolean;
+  /** Set on a plus one's ticket: the ticket of the guest who named them. */
+  plusOneOfTicketId: string | null;
+  declined: boolean;
+  /** The guest took this plus one back before they claimed. */
+  removed: boolean;
 }
 
 interface DeletedAccount {
@@ -201,6 +215,7 @@ const state: MockState = {
   pricingTokens: new Map(),
   ticketAddons: new Map(),
   accommodationTicketIds: new Map(),
+  invitations: new Map(),
 };
 
 /** Test/dev seam: reset the mock between runs. */
@@ -223,6 +238,7 @@ export function resetMockState(): void {
   state.pricingTokens.clear();
   state.ticketAddons.clear();
   state.accommodationTicketIds.clear();
+  state.invitations.clear();
   resetCartSequences();
   orderSeq = 482;
   ticketSeq = 4821;
@@ -608,6 +624,9 @@ function issueTicketsFor(order: OrderDetail): void {
         purchasedBy: { name: holder, isSelf: !guest },
         addonCount: 0,
         issuedAt: iso(),
+        claimAvailability: null,
+        invitedBy: null,
+        plusOne: null,
       };
       state.tickets.unshift(ticket);
       state.ticketOwnerPhones.set(ticket.id, guest?.phoneNumber ?? buyerPhone ?? '');
@@ -636,11 +655,17 @@ export function grantMockTicket({
   eventId = Object.keys(eventDetails)[0] ?? '',
   tierId,
   addonCount = 0,
+  plusOneAllowed = false,
+  plusOneOfTicketId = null,
 }: {
   phoneNumber: string;
   holderName: string;
   eventId?: string;
   tierId?: string;
+  /** Sukun lets this guest bring someone. */
+  plusOneAllowed?: boolean;
+  /** Set for a plus one: the ticket of the guest who named them. */
+  plusOneOfTicketId?: string | null;
   addonCount?: number;
 }): Ticket {
   const event = eventDetails[eventId];
@@ -675,11 +700,89 @@ export function grantMockTicket({
     holderName,
     orderNumber: null,
     purchasedBy: null,
-    addonCount,
+    // A plus one gets the tier, never the add-ons that came with the guest's invitation.
+    addonCount: plusOneOfTicketId ? 0 : addonCount,
     issuedAt: iso(),
+    claimAvailability: null,
+    invitedBy: null,
+    plusOne: null,
   };
   state.tickets.unshift(ticket);
   state.ticketOwnerPhones.set(ticket.id, phoneNumber);
+  state.invitations.set(ticket.id, {
+    plusOneAllowed: plusOneOfTicketId ? false : plusOneAllowed,
+    plusOneOfTicketId,
+    declined: false,
+    removed: false,
+  });
+  return withGuestContext(ticket);
+}
+
+/**
+ * Whether the shop could sell this ticket's tier right now, which is when a granted ticket may be
+ * claimed: it takes its seat on the claim, not when it was granted. Mirrors the backend's
+ * `TicketClaimAvailabilityService`.
+ */
+function claimAvailabilityFor(ticket: Ticket): ClaimAvailability {
+  const event = eventDetails[ticket.event.id];
+  const tier = event?.tiers.find((candidate) => candidate.id === ticket.tier.id);
+  if (!event || !tier) return 'not_on_sale';
+  if (event.state === 'sold_out' || tier.availabilityStatus === 'sold_out') return 'sold_out';
+  if (event.state !== 'on_sale' || !tier.isPurchasable) return 'not_on_sale';
+  return 'available';
+}
+
+/** The plus ones a guest named, newest first. */
+function plusOnesOf(ticketId: string): Ticket[] {
+  return state.tickets.filter(
+    (candidate) => state.invitations.get(candidate.id)?.plusOneOfTicketId === ticketId,
+  );
+}
+
+function livePlusOneOf(ticketId: string): Ticket | undefined {
+  return plusOnesOf(ticketId).find(
+    (candidate) => candidate.status === 'pending_claim' || candidate.status === 'active',
+  );
+}
+
+/**
+ * Fills in what the backend says about a ticket because it came from an invitation:
+ * `claimAvailability`, `invitedBy` and `plusOne`. See `InvitationGuestService.contextForTickets`.
+ */
+function withGuestContext(ticket: Ticket): Ticket {
+  const invitation = state.invitations.get(ticket.id);
+  if (!invitation) return ticket;
+
+  ticket.claimAvailability =
+    ticket.status === 'pending_claim' ? claimAvailabilityFor(ticket) : null;
+
+  const parent = invitation.plusOneOfTicketId
+    ? state.tickets.find((candidate) => candidate.id === invitation.plusOneOfTicketId)
+    : undefined;
+  ticket.invitedBy = parent ? { name: parent.holderName.trim().split(/\s+/)[0] ?? '' } : null;
+
+  if (!invitation.plusOneAllowed) {
+    ticket.plusOne = null;
+    return ticket;
+  }
+
+  // The newest one settles it: a plus one taken back hides the older ones.
+  const latest = plusOnesOf(ticket.id)[0];
+  const latestInvitation = latest ? state.invitations.get(latest.id) : undefined;
+  const status: PlusOneGuestStatus | null = !latest
+    ? null
+    : latestInvitation?.declined
+      ? 'declined'
+      : latest.status === 'active'
+        ? 'claimed'
+        : latest.status === 'pending_claim'
+          ? 'waiting'
+          : null;
+  const phoneE164 = latest ? state.ticketOwnerPhones.get(latest.id) : undefined;
+
+  ticket.plusOne = {
+    guest: latest && status && phoneE164 ? { name: latest.holderName, phoneE164, status } : null,
+  };
   return ticket;
 }
 
@@ -1530,13 +1633,14 @@ export const mockApi: SukunApi = {
             state.ticketOwnerPhones.get(ticket.id) === user.phoneNumber ||
             state.ticketBuyerPhones.get(ticket.id) === user.phoneNumber,
         )
-        .filter((ticket) => statuses.includes(ticket.status));
+        .filter((ticket) => statuses.includes(ticket.status))
+        .map(withGuestContext);
       return delay(page(data, params?.cursor, params?.limit, 100));
     },
 
     async detail(ticketId: string): Promise<Ticket> {
       const ticket = ticketBelongsToUser(ticketId, requireUser());
-      return delay(ticket, 0.5);
+      return delay(withGuestContext(ticket), 0.5);
     },
 
     async claim(ticketId: string): Promise<Ticket> {
@@ -1551,11 +1655,98 @@ export const mockApi: SukunApi = {
       }
       if (ticket.status === 'active') {
         ticket.usageStatus = ticketUsageStatus(ticket, user);
-        return delay(ticket, 0.6);
+        return delay(withGuestContext(ticket), 0.6);
+      }
+      if (!user.profileComplete) {
+        throw new MockApiError(
+          'PROFILE_INCOMPLETE',
+          'Complete your profile to claim this ticket.',
+          403,
+        );
+      }
+      // A granted ticket takes its seat here, so it is refused when the shop could not sell it.
+      if (ticket.source === 'invitation') {
+        const availability = claimAvailabilityFor(ticket);
+        if (availability === 'sold_out') {
+          throw new MockApiError('CLAIM_SOLD_OUT', 'This event is sold out.', 409);
+        }
+        if (availability === 'not_on_sale') {
+          throw new MockApiError('CLAIM_NOT_ON_SALE', 'Tickets are not on sale.', 409);
+        }
       }
       ticket.status = 'active';
       ticket.usageStatus = ticketUsageStatus(ticket, user);
-      return delay(ticket, 0.6);
+      return delay(withGuestContext(ticket), 0.6);
+    },
+
+    async decline(ticketId: string): Promise<void> {
+      const user = requireUser();
+      const ticket = state.tickets.find((t) => t.id === ticketId);
+      const invitation = state.invitations.get(ticketId);
+      if (!ticket || !invitation || state.ticketOwnerPhones.get(ticketId) !== user.phoneNumber) {
+        throw new MockApiError('TICKET_NOT_FOUND', 'Ticket not found', 404);
+      }
+      if (invitation.declined) return delay(undefined, 0.5);
+      if (ticket.status !== 'pending_claim') {
+        throw new MockApiError('TICKET_NOT_DECLINABLE', 'That ticket is already yours.', 409);
+      }
+      ticket.status = 'voided';
+      ticket.usageStatus = 'voided';
+      ticket.claimAvailability = null;
+      invitation.declined = true;
+      return delay(undefined, 0.5);
+    },
+
+    async invitePlusOne(ticketId, input): Promise<Ticket> {
+      const user = requireUser();
+      const ticket = ticketBelongsToUser(ticketId, user);
+      const invitation = state.invitations.get(ticketId);
+      const phoneE164 = normalizePhone(input.phoneNumber);
+      if (!phoneE164) {
+        throw new MockApiError('INVALID_PHONE_NUMBER', 'Invalid phone number', 400);
+      }
+      if (phoneE164 === user.phoneNumber) {
+        throw new MockApiError('PLUS_ONE_IS_SELF', "That's your own number.", 400);
+      }
+      if (!invitation?.plusOneAllowed || ticket.status !== 'active') {
+        throw new MockApiError('PLUS_ONE_NOT_ALLOWED', 'No plus one on this invitation.', 409);
+      }
+      if (livePlusOneOf(ticketId)) {
+        throw new MockApiError('PLUS_ONE_ALREADY_INVITED', 'Remove them first.', 409);
+      }
+      const holdsOne = state.tickets.some(
+        (candidate) =>
+          candidate.event.id === ticket.event.id &&
+          (candidate.status === 'active' || candidate.status === 'pending_claim') &&
+          state.ticketOwnerPhones.get(candidate.id) === phoneE164,
+      );
+      if (holdsOne) {
+        throw new MockApiError('ALREADY_HAS_TICKET', 'That number already has a ticket.', 409);
+      }
+      grantMockTicket({
+        phoneNumber: phoneE164,
+        holderName: input.name.trim(),
+        eventId: ticket.event.id,
+        tierId: ticket.tier.id,
+        plusOneOfTicketId: ticket.id,
+      });
+      return delay(withGuestContext(ticket), 0.6);
+    },
+
+    async removePlusOne(ticketId: string): Promise<Ticket> {
+      const user = requireUser();
+      const ticket = ticketBelongsToUser(ticketId, user);
+      const plusOne = livePlusOneOf(ticketId);
+      if (plusOne?.status === 'active') {
+        throw new MockApiError('PLUS_ONE_ALREADY_CLAIMED', 'They have claimed it.', 409);
+      }
+      if (plusOne) {
+        plusOne.status = 'voided';
+        plusOne.usageStatus = 'voided';
+        const invitation = state.invitations.get(plusOne.id);
+        if (invitation) invitation.removed = true;
+      }
+      return delay(withGuestContext(ticket), 0.5);
     },
 
     async entryPass(ticketId: string): Promise<EntryPass> {

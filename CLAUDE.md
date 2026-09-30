@@ -20,10 +20,23 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    can count granted against claimed. Builds from before the claim screen never offer to
    claim, so the backend claims for them: every request carries `X-Sukun-Client-Revision`
    (`MOBILE_CLIENT_REVISION` in `src/api/live/http.ts`), and one below 2, or none, has
-   granted tickets claimed on its behalf when it loads them.
-3. **The selfie is the anti-fraud control, and it is asked for once, at the QR.** A holder
-   meets the camera when they open an entry pass, on the ticket that needs it, and never
-   before: not to browse, not to register, not to pay. It is required for a *usable ticket*
+   granted tickets claimed on its behalf when it loads them, under the same rules below.
+   - **A granted ticket takes its seat when it is claimed, not when it is granted.** Sukun can
+     grant more than there are seats; claims compete for what is left. A claim is refused
+     while the shop could not sell the tier (`claimAvailability`: `sold_out` / `not_on_sale`),
+     and the UI says so on the button rather than offering it.
+   - **Claiming needs a complete profile, with no skip** (`readyToClaim` in
+     `src/stores/auth.ts`): the holder finishes it and the claim is made when they are back.
+   - **A holder can decline** ("I can't make it"), the RSVP no. The Tickets tab pulses while
+     any invitation waits for either answer.
+   - **An invitation may include a plus one.** Once they claim, the guest names someone by
+     number; that person gets an invitation of their own (same tier, no add-ons, no plus one of
+     their own) and a WhatsApp if the number has no account (rule 6).
+3. **The selfie is the anti-fraud control, and it is required only for the QR.** It is
+   demanded when a holder opens an entry pass whose QR is due (inside the 12 hours before the
+   event) and nowhere else: not to browse, register, claim or pay. It is *offered*, never
+   required, straight after the profile form and from Profile, with "Add the selfie later"
+   and the QR code named as the reason. It is required for a *usable ticket*
    (`usageStatus: selfie_required` until it exists), never for an account or an order.
 4. **The system acts, it never confirms.** No screen may reveal whether a phone number is
    registered. Registered and unregistered guests get identical UI, identical copy, identical

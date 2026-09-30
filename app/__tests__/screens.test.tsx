@@ -1425,24 +1425,50 @@ describe('14 Entry pass', () => {
    * The one place the selfie is asked for (CLAUDE.md rule 3). The ticket says why its QR is
    * not showing and hands over the camera; nothing earlier in the app does either.
    */
-  it('asks for the selfie here, and only here, when the QR needs one', async () => {
+  it('demands the selfie only once the QR it protects can open', async () => {
     await signInWithoutSelfie();
     const { data } = await mockApi.tickets.list();
     expect(data[0]!.usageStatus).toBe('selfie_required');
     mockParams.id = data[0]!.id;
+    // Inside the 12 hours before the first day of the seeded ticket (2026-10-23 13:00Z).
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-23T08:00:00.000Z'));
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    // The demand sits inside the QR panel, where the code would be, rather than replacing it.
-    await waitFor(() =>
-      expect(screen.getByText('Take a selfie to activate your QR Code')).toBeTruthy(),
-    );
-    expect(screen.getByText('Tulua · ticket status')).toBeTruthy();
-    expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
-    expect(screen.queryByText('QR Code will show here.')).toBeNull();
+      // The demand sits inside the QR panel, where the code would be, rather than replacing it.
+      await waitFor(() =>
+        expect(screen.getByText('Take a selfie to activate your QR Code')).toBeTruthy(),
+      );
+      expect(screen.getByText('Tulua · ticket status')).toBeTruthy();
+      expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
 
-    fireEvent.press(screen.getByText('Take selfie'));
-    expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');
+      fireEvent.press(screen.getByText('Take selfie'));
+      expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('only offers the selfie while the QR is still days away', async () => {
+    await signInWithoutSelfie();
+    const { data } = await mockApi.tickets.list();
+    mockParams.id = data[0]!.id;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-01T08:00:00.000Z'));
+
+    try {
+      renderWithProviders(<EntryPassScreen />);
+
+      await waitFor(() => expect(screen.getByText('QR Code will show here.')).toBeTruthy());
+      expect(screen.getByText(/It needs your selfie, so add it any time before then/)).toBeTruthy();
+      expect(screen.queryByText('Take a selfie to activate your QR Code')).toBeNull();
+
+      fireEvent.press(screen.getByText('Add selfie now'));
+      expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie?next=back');
+    } finally {
+      now.mockRestore();
+    }
   });
 
   // A pass that genuinely failed to load is still an error the holder can retry.
@@ -1525,7 +1551,7 @@ describe('15 Profile', () => {
    * Profile does not nag about the selfie. It is not an unfinished registration and it does
    * not gate anything this screen offers: the one ticket that needs it asks for it itself.
    */
-  it('says nothing about a missing selfie once the form is done', async () => {
+  it('offers a missing selfie as optional, for the QR code, not as unfinished setup', async () => {
     await signInAndComplete();
     useAuthStore.setState({
       user: { ...useAuthStore.getState().user!, selfieUploaded: false, selfieUrl: null },
@@ -1533,6 +1559,17 @@ describe('15 Profile', () => {
     renderWithProviders(<ProfileTabScreen />);
 
     expect(screen.queryByText(/Finish setup/)).toBeNull();
+    fireEvent.press(screen.getByText('Add your selfie for your QR code'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie?next=back');
+  });
+
+  it('says nothing about the selfie once there is one', async () => {
+    await signInAndComplete();
+    useAuthStore.setState({
+      user: { ...useAuthStore.getState().user!, selfieUploaded: true },
+    });
+    renderWithProviders(<ProfileTabScreen />);
+
     expect(screen.queryByText(/selfie/i)).toBeNull();
   });
 

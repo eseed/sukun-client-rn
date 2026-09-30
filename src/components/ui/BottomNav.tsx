@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/tokens';
 import { text } from '../../theme/typography';
+import { TicketsTabIcon } from '../tickets/TicketsTabIcon';
+import { useHasWaitingInvitation } from '../../hooks/useClaimableTickets';
 import { DiscoverIcon, ProfileIcon, TicketsIcon } from './icons';
 import { Text } from './Text';
 
@@ -38,6 +40,7 @@ export function BottomNav({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const invitationWaiting = useHasWaitingInvitation();
 
   const inverse = tone === 'inverse';
   const tint = inverse ? colors.creme : colors.textMuted;
@@ -55,11 +58,19 @@ export function BottomNav({
         <Pressable
           key={href}
           accessibilityRole="button"
-          accessibilityLabel={label}
+          accessibilityLabel={
+            Icon === TicketsIcon && invitationWaiting
+              ? `${label}, an invitation is waiting for you`
+              : label
+          }
           onPress={() => router.replace(href)}
           style={({ pressed }) => [styles.item, pressed && styles.pressed]}
         >
-          <Icon color={tint} />
+          {Icon === TicketsIcon ? (
+            <TicketsTabIcon color={tint} waiting={invitationWaiting} />
+          ) : (
+            <Icon color={tint} />
+          )}
           <Text style={[styles.label, { color: tint }]}>{label}</Text>
         </Pressable>
       ))}

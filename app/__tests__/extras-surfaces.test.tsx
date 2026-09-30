@@ -32,6 +32,7 @@ const mockRouter = {
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
+  useIsFocused: () => true,
   Redirect: () => null,
   Stack: Object.assign(() => null, { Screen: () => null }),
   Tabs: Object.assign(() => null, { Screen: () => null }),

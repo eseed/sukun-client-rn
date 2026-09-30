@@ -104,6 +104,13 @@ interface AuthState {
    * checkout they have long forgotten. Cleared when it is used, and on sign-out.
    */
   pendingCheckoutEventId: string | null;
+  /**
+   * A granted ticket the holder chose to claim before their profile was complete. Claiming needs
+   * a complete profile, so they are sent to finish it first, with no way to skip it, and the
+   * claim goes through when they come back. In memory, for the same reasons as
+   * `pendingCheckoutEventId`.
+   */
+  pendingClaimTicketId: string | null;
 
   restore: () => Promise<void>;
   setPendingPhone: (phone: string | null) => void;
@@ -111,6 +118,8 @@ interface AuthState {
   setPendingCheckoutEventId: (eventId: string | null) => void;
   /** The pending event, if any, cleared in the same breath so it is only ever used once. */
   takePendingCheckoutEventId: () => string | null;
+  setPendingClaimTicketId: (ticketId: string | null) => void;
+  takePendingClaimTicketId: () => string | null;
   deferSetup: () => Promise<void>;
   browseAsGuest: () => Promise<void>;
   signIn: (
@@ -127,6 +136,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setupDeferred: false,
   guestBrowsing: false,
   pendingCheckoutEventId: null,
+  pendingClaimTicketId: null,
   user: null,
   pendingPhone: null,
 
@@ -190,6 +200,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return eventId;
   },
 
+  setPendingClaimTicketId(ticketId) {
+    set({ pendingClaimTicketId: ticketId });
+  },
+
+  takePendingClaimTicketId() {
+    const ticketId = get().pendingClaimTicketId;
+    if (ticketId) set({ pendingClaimTicketId: null });
+    return ticketId;
+  },
+
   /**
    * Record that this user is browsing with an unfinished profile. The session is kept: the
    * number is already verified, and throwing it away would cost the signup this exit exists
@@ -249,6 +269,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       pendingPhone: null,
       setupDeferred: false,
       pendingCheckoutEventId: null,
+      pendingClaimTicketId: null,
     });
     resetAnalytics();
 
@@ -321,8 +342,9 @@ export const ONBOARDING_RESUME_ROUTE = '/(onboarding)/profile' as const;
 type Router = ReturnType<typeof useRouter>;
 
 /**
- * Where onboarding lets someone go once it has what it needs: back to the checkout that sent
- * them here, or to Discover when nothing did.
+ * Where onboarding lets someone go once it has what it needs: back to the ticket they were
+ * claiming, or the checkout, that sent them here, or to Discover when nothing did. The ticket
+ * opens with `claim=1`, which makes the claim they had asked for.
  *
  * Both exits from registration ask this, the one on the OTP screen for a returning account
  * whose profile is already complete and the one on the profile form for an account that has
@@ -333,7 +355,35 @@ type Router = ReturnType<typeof useRouter>;
  * (CLAUDE.md rule 8), so resuming a checkout there would only stop them again a screen later.
  */
 export function resumeAfterOnboarding(router: Router): void {
+  const pendingClaimTicketId = useAuthStore.getState().takePendingClaimTicketId();
+  if (pendingClaimTicketId) {
+    router.replace(`/ticket/${pendingClaimTicketId}?claim=1`);
+    return;
+  }
   const pendingEventId = useAuthStore.getState().takePendingCheckoutEventId();
   if (pendingEventId) router.replace(`/checkout/pass?eventId=${pendingEventId}`);
   else router.replace('/(tabs)/discover');
+}
+
+/**
+ * Where the profile form goes once it is saved. The selfie is offered here, as an optional
+ * step with "Add the selfie later", because the QR code will need it; nothing waits on it
+ * (CLAUDE.md rule 3), and someone who has one already goes straight on.
+ */
+export function continueAfterProfile(router: Router, user: CurrentUser | null): void {
+  if (user && !user.selfieUploaded) router.replace('/account/selfie?next=resume');
+  else resumeAfterOnboarding(router);
+}
+
+/**
+ * Starts a claim. A complete profile is needed first, and cannot be skipped once a claim is
+ * under way: someone without one is sent to finish it, and the claim is made when they are
+ * back (`resumeAfterOnboarding`). Answers whether the claim can go ahead right now.
+ */
+export function readyToClaim(router: Router, ticketId: string): boolean {
+  const user = useAuthStore.getState().user;
+  if (user?.profileComplete) return true;
+  useAuthStore.getState().setPendingClaimTicketId(ticketId);
+  router.push(ONBOARDING_RESUME_ROUTE);
+  return false;
 }

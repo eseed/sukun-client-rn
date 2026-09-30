@@ -1,7 +1,7 @@
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, AppState, StyleSheet, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import {
   BackButton,
@@ -13,9 +13,11 @@ import {
   Text,
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
+import { PlusOnePanel } from '../../src/components/tickets/PlusOnePanel';
 import {
   queryKeys,
   useClaimTicket,
+  useDeclineTicket,
   useEntryPass,
   useTicket,
   useTicketAddons,
@@ -33,6 +35,7 @@ import {
   isCurrentSignedInSession,
   missingProfileFields,
   ONBOARDING_RESUME_ROUTE,
+  readyToClaim,
   useAuthStore,
 } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
@@ -48,7 +51,8 @@ const QR_SIZE = 200;
  */
 export default function EntryPassScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `claim=1`: the holder asked to claim this ticket and was sent to finish their profile first.
+  const { id, claim } = useLocalSearchParams<{ id: string; claim?: string }>();
   const ticketId = typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id) ? id : undefined;
   const isFocused = useIsFocused();
   const [now, setNow] = useState(() => Date.now());
@@ -72,6 +76,8 @@ export default function EntryPassScreen() {
   const entryPassIsFetching = passQuery.isFetching;
   const refetchEntryPass = passQuery.refetch;
   const claimTicket = useClaimTicket();
+  const declineTicket = useDeclineTicket();
+  const resumedClaim = useRef(false);
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -96,8 +102,10 @@ export default function EntryPassScreen() {
     if (!isFocused || !isScreenClockCurrent) return;
 
     const deadlines: number[] = [];
-    if (entryPassOpensAt !== null && entryPassOpensAt > currentTime) deadlines.push(entryPassOpensAt);
-    if (Number.isFinite(passExpiresAt) && passExpiresAt > currentTime) deadlines.push(passExpiresAt);
+    if (entryPassOpensAt !== null && entryPassOpensAt > currentTime)
+      deadlines.push(entryPassOpensAt);
+    if (Number.isFinite(passExpiresAt) && passExpiresAt > currentTime)
+      deadlines.push(passExpiresAt);
     if (deadlines.length === 0) return;
 
     const timeout = setTimeout(
@@ -184,6 +192,28 @@ export default function EntryPassScreen() {
     refetchEntryPass,
   ]);
 
+  /*
+   * Back from the profile form with the claim they had asked for: make it, once. It is the only
+   * claim this screen makes without a tap, and only when it can go through.
+   */
+  const pendingTicket = ticketQuery.data;
+  const mutateClaim = claimTicket.mutateAsync;
+  useEffect(() => {
+    if (claim !== '1' || resumedClaim.current || !pendingTicket || !user?.profileComplete) return;
+    if (pendingTicket.usageStatus !== 'pending_claim') return;
+    if (pendingTicket.claimAvailability !== 'available') return;
+    resumedClaim.current = true;
+    mutateClaim(pendingTicket.id)
+      .then(() =>
+        track('ticket_claimed', {
+          ticket_id: pendingTicket.id,
+          event_id: pendingTicket.event.id,
+          source: pendingTicket.source,
+        }),
+      )
+      .catch((err: unknown) => setActionError(messageForError(err)));
+  }, [claim, mutateClaim, pendingTicket, user?.profileComplete]);
+
   const passErrorCode = codeForError(passQuery.error);
   useEffect(() => {
     if (passErrorCode !== 'TICKET_NOT_FOUND' && passErrorCode !== 'TICKET_NOT_ACTIVE') return;
@@ -245,6 +275,9 @@ export default function EntryPassScreen() {
   const needsClaim = usageStatus === 'pending_claim';
   // Granted by Sukun rather than bought for them: it is theirs to take, not waiting on anyone.
   const granted = ticket.source === 'invitation';
+  // A claim takes a seat, so it waits on the shop: none while sold out or off sale.
+  const soldOut = needsClaim && ticket.claimAvailability === 'sold_out';
+  const notOnSale = needsClaim && ticket.claimAvailability === 'not_on_sale';
   const needsSelfie = usageStatus === 'selfie_required';
   const needsProfile = usageStatus === 'profile_incomplete';
   const unusable = usageStatus === 'voided' || usageStatus === 'refunded';
@@ -254,10 +287,10 @@ export default function EntryPassScreen() {
     passErrorCode === 'TICKET_NOT_FOUND' || passErrorCode === 'TICKET_NOT_ACTIVE';
   const hasPass = Boolean(
     pass?.payload &&
-      Number.isFinite(passExpiresAt) &&
-      passExpiresAt > currentTime &&
-      isScreenClockCurrent &&
-      !ticketRefusedPass,
+    Number.isFinite(passExpiresAt) &&
+    passExpiresAt > currentTime &&
+    isScreenClockCurrent &&
+    !ticketRefusedPass,
   );
 
   /*
@@ -279,8 +312,10 @@ export default function EntryPassScreen() {
     { label: 'Venue', value: venue },
   ].filter((detail) => detail.value.length > 0);
 
+  /** Claiming needs a complete profile first, and cannot skip it (`readyToClaim`). */
   async function onClaim() {
     setActionError(null);
+    if (!readyToClaim(router, ticket.id)) return;
     try {
       await claimTicket.mutateAsync(ticket.id);
       track('ticket_claimed', {
@@ -289,14 +324,45 @@ export default function EntryPassScreen() {
         source: ticket.source,
       });
     } catch (err) {
+      if (codeForError(err) === 'PROFILE_INCOMPLETE') {
+        useAuthStore.getState().setPendingClaimTicketId(ticket.id);
+        router.push(ONBOARDING_RESUME_ROUTE);
+        return;
+      }
+      setActionError(messageForError(err));
+      // Sold out or off sale since it loaded: the panel should say so, not offer the claim.
+      void ticketQuery.refetch();
+    }
+  }
+
+  /** "I can't make it": the RSVP no. It cannot be taken back, so it is confirmed first. */
+  function confirmDecline() {
+    Alert.alert(
+      "Can't make it?",
+      "We'll let Sukun know and cancel this invitation. This can't be undone.",
+      [
+        { text: 'Keep my invitation', style: 'cancel' },
+        { text: "I can't make it", style: 'destructive', onPress: () => void onDecline() },
+      ],
+    );
+  }
+
+  async function onDecline() {
+    setActionError(null);
+    try {
+      await declineTicket.mutateAsync(ticket.id);
+      track('ticket_declined', { ticket_id: ticket.id, event_id: ticket.event.id });
+      router.replace('/(tabs)/tickets');
+    } catch (err) {
       setActionError(messageForError(err));
     }
   }
 
   function onRemediate() {
-    // The selfie is asked for here and nowhere earlier (CLAUDE.md rule 3): this screen is the
-    // first and only place it is needed, so this is the first and only place it is demanded.
-    if (needsSelfie) router.push('/account/selfie');
+    // The selfie is demanded here and nowhere else (CLAUDE.md rule 3), and only once the QR it
+    // protects can open. Before that it is offered, as it is after the profile form.
+    if (needsSelfie)
+      router.push(entryPassWindowOpen ? '/account/selfie' : '/account/selfie?next=back');
     else if (needsProfile || missingProfileFields(user).length > 0)
       router.push(ONBOARDING_RESUME_ROUTE);
   }
@@ -325,8 +391,14 @@ export default function EntryPassScreen() {
             <Text variant="titleSm" style={styles.statusTitle}>
               {needsClaim
                 ? granted
-                  ? 'This ticket is yours to claim'
-                  : 'This ticket is waiting to bind'
+                  ? soldOut
+                    ? 'This event is sold out'
+                    : notOnSale
+                      ? "Tickets aren't on sale right now"
+                      : ticket.invitedBy
+                        ? `${ticket.invitedBy.name} invited you as their plus one`
+                        : 'This ticket is yours to claim'
+                  : 'This ticket is on its way to you'
                 : needsProfile
                   ? 'Finish your profile to use this ticket'
                   : 'This ticket cannot be used'}
@@ -334,15 +406,35 @@ export default function EntryPassScreen() {
             <Text variant="bodyMuted" style={styles.statusCopy}>
               {needsClaim
                 ? granted
-                  ? 'Sukun has given you this ticket. Claim it to add it to your tickets.'
-                  : 'Claim it to attach the ticket to your phone number.'
+                  ? soldOut
+                    ? 'Every seat has been taken, so this ticket can no longer be claimed.'
+                    : notOnSale
+                      ? 'You can claim this ticket once tickets for this event are on sale.'
+                      : 'Claim it to add it to your tickets. Your seat is held once you claim.'
+                  : 'Open My tickets again in a moment to see it there.'
                 : needsProfile
                   ? 'Add the required profile details before opening the entry pass.'
                   : 'This ticket has been voided or refunded.'}
             </Text>
             {actionError ? <InlineError message={actionError} style={styles.actionError} /> : null}
-            {needsClaim ? (
-              <Button label="Claim ticket" onPress={onClaim} loading={claimTicket.isPending} />
+            {needsClaim && granted ? (
+              <View style={styles.claimActions}>
+                {/* A claim the event cannot take says why in its label, not by fading out. */}
+                <Button
+                  label={soldOut ? 'Sold out' : notOnSale ? 'Not on sale yet' : 'Claim ticket'}
+                  variant="accent"
+                  onPress={() => void onClaim()}
+                  loading={claimTicket.isPending}
+                  disabled={soldOut || notOnSale || declineTicket.isPending}
+                />
+                <Button
+                  label="I can't make it"
+                  variant="secondary"
+                  onPress={confirmDecline}
+                  loading={declineTicket.isPending}
+                  disabled={claimTicket.isPending}
+                />
+              </View>
             ) : null}
             {needsProfile ? <Button label="Complete profile" onPress={onRemediate} /> : null}
           </View>
@@ -356,12 +448,21 @@ export default function EntryPassScreen() {
         */}
         {!needsClaim && !needsProfile && !unusable ? (
           <View style={styles.qrPanel}>
-            {needsSelfie ? (
+            {needsSelfie && entryPassWindowOpen ? (
               <View style={styles.passPending}>
                 <ResourceState
                   status="empty"
                   emptyTitle="Take a selfie to activate your QR Code"
                   emptyMessage="Gate staff check it against your face at entry, so your code is only yours."
+                  style={styles.compactState}
+                />
+              </View>
+            ) : needsSelfie ? (
+              <View style={styles.passPending}>
+                <ResourceState
+                  status="empty"
+                  emptyTitle="QR Code will show here."
+                  emptyMessage="Your entry pass opens 12 hours before the event starts. It needs your selfie, so add it any time before then."
                   style={styles.compactState}
                 />
               </View>
@@ -418,7 +519,12 @@ export default function EntryPassScreen() {
             ) : null}
 
             {needsSelfie ? (
-              <Button label="Take selfie" onPress={onRemediate} style={styles.qrAction} />
+              <Button
+                label={entryPassWindowOpen ? 'Take selfie' : 'Add selfie now'}
+                variant={entryPassWindowOpen ? 'primary' : 'secondary'}
+                onPress={onRemediate}
+                style={styles.qrAction}
+              />
             ) : null}
 
             {hasPass && passQuery.error && !passNotIssued ? (
@@ -459,6 +565,8 @@ export default function EntryPassScreen() {
           </View>
         ))}
 
+        {ticket.plusOne && !needsClaim && !unusable ? <PlusOnePanel ticket={ticket} /> : null}
+
         {addons.length > 0 ? (
           <View style={styles.addons}>
             <Text style={styles.detailLabel}>Attached add-ons</Text>
@@ -475,7 +583,6 @@ export default function EntryPassScreen() {
             ))}
           </View>
         ) : null}
-
       </Screen>
       <BottomNav tone="inverse" />
     </View>
@@ -629,6 +736,9 @@ const styles = StyleSheet.create({
   },
   actionError: {
     marginBottom: 12,
+  },
+  claimActions: {
+    gap: 12,
   },
   refreshRow: {
     flexDirection: 'row',
