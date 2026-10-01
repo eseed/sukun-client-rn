@@ -197,17 +197,29 @@ it('surfaces a failure when the SDK reports FAIL and the server agrees', async (
  * closed the sheet with X, and were told nothing was charged over a payment the bank was still
  * confirming. The server still shows that attempt pending, so the screen says it is checking.
  */
-it('says it is checking with the bank, not that nothing was charged, after a cancel over a pending payment', async () => {
+it('never says nothing was charged after a cancel over a pending payment, and lets Pay reopen it', async () => {
   await openPaymentSheet();
 
   emitSdkResult(PaymentStatus.CANCELLED!);
 
-  await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
+  await waitFor(() =>
+    expect(
+      screen.getByText('If you already finished paying, this will update by itself.'),
+    ).toBeTruthy(),
+  );
   expect(screen.queryByText(/Nothing was charged/)).toBeNull();
   // No retry the backend would refuse, and no cancel it would refuse either.
   expect(screen.queryByText('Try payment again')).toBeNull();
   expect(screen.queryByText('Cancel this order')).toBeNull();
   expect(mockRouter.replace).not.toHaveBeenCalled();
+
+  // Pay reopens the same live intention: closing the sheet does not cost the rest of the hold.
+  mockPaymob.presentPayVC.mockClear();
+  const pay = screen.getAllByText('Pay 3,648.00 EGP')[1]!;
+  fireEvent.press(pay);
+  await waitFor(() =>
+    expect(mockPaymob.presentPayVC).toHaveBeenCalledWith('sec_mock_0000', 'pk_mock_0000'),
+  );
   expect(tracked('payment_failed')).toEqual([
     ['payment_failed', { order_id: mockParams.orderId, outcome: 'cancelled' }],
   ]);

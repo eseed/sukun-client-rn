@@ -167,6 +167,8 @@ interface MockState {
   settleAt: Map<string, number>;
   /** Orders whose latest attempt the simulated webhook declined, with the reason it gave. */
   failedAttempts: Map<string, PaymentFailureReason | null>;
+  /** The live intention of each order with a pending attempt, handed back by initiate. */
+  liveIntents: Map<string, PaymentIntent>;
   deletedAccounts: Map<string, DeletedAccount>;
   carts: MockCart[];
   /** Pricing tokens handed out by preview, with the total they were issued against. */
@@ -214,6 +216,7 @@ const state: MockState = {
   paidAt: new Map(),
   settleAt: new Map(),
   failedAttempts: new Map(),
+  liveIntents: new Map(),
   deletedAccounts: new Map(),
   carts: [],
   pricingTokens: new Map(),
@@ -238,6 +241,7 @@ export function resetMockState(): void {
   state.paidAt.clear();
   state.settleAt.clear();
   state.failedAttempts.clear();
+  state.liveIntents.clear();
   resetMockPaymentConfig();
   state.deletedAccounts.clear();
   state.carts = [];
@@ -1586,6 +1590,11 @@ export const mockApi: SukunApi = {
       if (order.status !== 'awaiting_payment') {
         throw new MockApiError('ORDER_NOT_PAYABLE', 'This order is no longer payable.', 409);
       }
+      // A pending attempt inside the hold is a live intention: initiate hands the same one back,
+      // as the backend does, so a sheet closed before a card was entered can simply reopen.
+      const live = state.settleAt.has(orderId) ? state.liveIntents.get(orderId) : undefined;
+      if (live) return delay(live);
+
       // Simulated provider webhook lands a few seconds after the sheet opens, or never, for a
       // bank check that does not come back.
       state.failedAttempts.delete(orderId);
@@ -1595,7 +1604,7 @@ export const mockApi: SukunApi = {
           ? Number.POSITIVE_INFINITY
           : mockConfig.now() + mockConfig.settleDelayMs,
       );
-      return delay({
+      const intent: PaymentIntent = {
         paymentId: `pay-${Date.now()}`,
         provider: 'paymob',
         presentationMode: 'mobile_sdk',
@@ -1606,7 +1615,9 @@ export const mockApi: SukunApi = {
         amountEgp: order.totalEgp,
         currency: 'EGP',
         expiresAt: iso(10 * 60 * 1000),
-      });
+      };
+      state.liveIntents.set(orderId, intent);
+      return delay(intent);
     },
 
     async status(orderId: string): Promise<PaymentStatus> {
@@ -1942,6 +1953,7 @@ export const mockApi: SukunApi = {
       state.paidAt.clear();
       state.settleAt.clear();
       state.failedAttempts.clear();
+      state.liveIntents.clear();
       return delay(undefined, 1.25);
     },
   },

@@ -1953,19 +1953,56 @@ describe('11 Payment after a declined card', () => {
   });
 
   /**
-   * Regression: a pending attempt was not counted as unsettled, so the screen offered a retry
-   * the backend answers with 409 PAYMENT_CONFIRMATION_PENDING for the rest of the hold.
+   * Inside the hold a pending attempt is a live intention, which initiate hands back. The buyer
+   * who closed the sheet before entering a card reopens it with Pay; retry and cancel, which the
+   * backend refuses over that attempt, are not offered.
    */
-  it('offers no retry over a pending attempt while the hold runs', async () => {
-    await placeTuluaOrder();
+  it('reopens a pending intention with Pay inside the hold, and offers no retry or cancel', async () => {
+    const order = await placeTuluaOrder();
     statusIs({ paymentStatus: 'pending' });
+    const initiate = jest.spyOn(mockApi.payments, 'initiate');
+    const retry = jest.spyOn(mockApi.payments, 'retry');
 
     renderWithProviders(<PaymentScreen />);
 
-    await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
+    await waitFor(() =>
+      expect(
+        screen.getByText('If you already finished paying, this will update by itself.'),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText(CHECKING_WITH_BANK)).toBeNull();
     expect(screen.queryByText('Try payment again')).toBeNull();
     expect(screen.queryByText('Cancel this order')).toBeNull();
+
+    const pay = screen.getAllByRole('button', { name: /Pay / }).at(-1)!;
+    expect(pay).not.toBeDisabled();
+    fireEvent.press(pay);
+
+    await waitFor(() => expect(initiate).toHaveBeenCalledWith(order.id));
+    await waitFor(() => expect(mockPaymob.presentPayVC).toHaveBeenCalled());
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it('shows the checking copy, with nothing to tap, when initiate answers 409', async () => {
+    await placeTuluaOrder();
+    statusIs({ paymentStatus: 'pending' });
+    jest.spyOn(mockApi.payments, 'initiate').mockRejectedValue(
+      Object.assign(new Error('pending'), {
+        code: 'PAYMENT_CONFIRMATION_PENDING',
+        status: 409,
+      }),
+    );
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /Pay / }).at(-1)).not.toBeDisabled(),
+    );
+    fireEvent.press(screen.getAllByRole('button', { name: /Pay / }).at(-1)!);
+
+    await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
     expect(screen.getAllByRole('button', { name: /Pay / }).at(-1)).toBeDisabled();
+    expect(screen.queryByText(/still confirming your last payment attempt/)).toBeNull();
   });
 
   it('offers the retry once the hold has run out over a pending attempt', async () => {

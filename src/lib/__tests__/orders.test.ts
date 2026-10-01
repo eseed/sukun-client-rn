@@ -1,4 +1,9 @@
-import { isOrderCancellable, isPaymentRetryable, isPaymentUnsettled } from '../orders';
+import {
+  isOrderCancellable,
+  isPaymentReopenable,
+  isPaymentRetryable,
+  isPaymentUnsettled,
+} from '../orders';
 import type { PaymentStatus } from '../../api/types';
 
 function status(partial: Partial<PaymentStatus>): PaymentStatus {
@@ -82,5 +87,22 @@ describe('isPaymentUnsettled', () => {
     expect(isPaymentUnsettled(status({ orderStatus: 'expired', paymentStatus: 'pending' }))).toBe(
       false,
     );
+  });
+});
+
+describe('isPaymentReopenable', () => {
+  it('reopens a pending attempt on an awaiting order while the hold runs', () => {
+    expect(isPaymentReopenable(status({ paymentStatus: 'pending' }))).toBe(true);
+  });
+
+  it('does not once the hold has run out, or for any other attempt', () => {
+    expect(isPaymentReopenable(status({ paymentStatus: 'pending' }), true)).toBe(false);
+    expect(isPaymentReopenable(status({ orderStatus: 'expired', paymentStatus: 'pending' }))).toBe(
+      false,
+    );
+    for (const paymentStatus of ['', 'creating', 'confirming', 'failed'] as const) {
+      expect(isPaymentReopenable(status({ paymentStatus }))).toBe(false);
+    }
+    expect(isPaymentReopenable(undefined)).toBe(false);
   });
 });

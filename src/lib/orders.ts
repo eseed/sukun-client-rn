@@ -58,6 +58,22 @@ export function isPaymentUnsettled(
   );
 }
 
+/**
+ * A pending attempt the buyer can simply reopen: the order still awaits payment and its hold
+ * runs, so `payments/initiate` hands back the same live intention and the sheet opens on it
+ * again. Closing the sheet before entering a card leaves exactly this, and it must not cost the
+ * buyer the rest of the hold. Retry and cancel are still refused over it
+ * (`PAYMENT_CONFIRMATION_PENDING`), which is what `isPaymentUnsettled` keeps them from.
+ */
+export function isPaymentReopenable(
+  status: PaymentStatus | undefined,
+  holdExpired = false,
+): boolean {
+  return (
+    status?.orderStatus === 'awaiting_payment' && status.paymentStatus === 'pending' && !holdExpired
+  );
+}
+
 /** What a declined payment says, by the backend's failure category when it sends one. */
 const FAILED_PAYMENT_COPY: Record<PaymentFailureReason, string> = {
   declined: 'Your bank declined the payment. Nothing was charged. Try again or use another card.',

@@ -452,6 +452,17 @@ describe('payment states', () => {
     });
   });
 
+  it('hands the same live intention back to initiate inside the hold', async () => {
+    const order = await initiatedOrder();
+    const first = (await mockApi.payments.status(order.id)).paymentStatus;
+    expect(first).toBe('pending');
+
+    const again = await mockApi.payments.initiate(order.id);
+    const once = await mockApi.payments.initiate(order.id);
+    expect(again.paymentId).toBe(once.paymentId);
+    expect(again.providerIntentionId).toBe(once.providerIntentionId);
+  });
+
   it('keeps a stuck bank check pending until the hold runs out, then retries it', async () => {
     mockConfig.paymentOutcome = 'stuck';
     const order = await initiatedOrder();

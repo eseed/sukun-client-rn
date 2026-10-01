@@ -21,6 +21,7 @@ import { HoldTimer } from '../../src/components/checkout/HoldTimer';
 import {
   failedPaymentMessage,
   isOrderCancellable,
+  isPaymentReopenable,
   isPaymentRetryable,
   isPaymentUnsettled,
 } from '../../src/lib/orders';
@@ -62,9 +63,14 @@ import { colors } from '../../src/theme/tokens';
  * A FAIL or CANCELLED from the sheet is only what the sheet saw. The bank may still be
  * confirming (the buyer closed a sheet stuck on its verification page), or the card may already
  * have been charged, so the screen asks the server again before it says anything, and while the
- * server still shows the attempt pending it says it is checking rather than "Nothing was
- * charged". The backend refuses a retry over that attempt (`PAYMENT_CONFIRMATION_PENDING`) until
- * the order's hold runs out, so the retry button waits for the same moment.
+ * server still shows the attempt pending it never says "Nothing was charged".
+ *
+ * Inside the hold a pending attempt is a live intention: Pay goes through `payments/initiate`,
+ * which hands the same intention back, so the buyer who closed the sheet before entering a card
+ * can open it again at once, with a note that a payment already made will show up by itself.
+ * Retry and cancel are refused over it (`PAYMENT_CONFIRMATION_PENDING`), so neither is offered
+ * until the hold runs out. An attempt the backend is still creating or confirming, and any 409,
+ * is the "checking with your bank" state, with nothing to tap.
  */
 export default function PaymentScreen() {
   const router = useRouter();
@@ -161,13 +167,19 @@ export default function PaymentScreen() {
    * and hid the cancel that would have freed the buyer.
    */
   const retryable = !settled && !closed && isPaymentRetryable(status);
+  /**
+   * A pending intention inside the hold, which Pay reopens. Not after the sheet itself said
+   * PENDING: that payment is being processed, so the screen waits on it instead.
+   */
+  const reopenable =
+    !settled && sdkResult !== 'pending' && isPaymentReopenable(status, holdExpired);
   /** The bank has not answered yet: the screen says it is checking and offers nothing to tap. */
   const confirming =
     !settled &&
     !closed &&
     !failed &&
     (sdkResult === 'pending' ||
-      unsettledAttempt ||
+      (unsettledAttempt && !reopenable) ||
       confirmationPending ||
       (sheetSaidNo && !verdictChecked));
 
@@ -387,6 +399,12 @@ export default function PaymentScreen() {
             : sheetSaidNo && !verdictChecked
               ? 'Checking your payment with your bank…'
               : "We're checking with your bank. If you were charged, your ticket will appear here automatically."}
+        </Text>
+      ) : null}
+
+      {reopenable && !awaitingVerdict && !confirming && !failed && !error ? (
+        <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
+          If you already finished paying, this will update by itself.
         </Text>
       ) : null}
 
