@@ -107,6 +107,21 @@ describe('live HTTP auth resilience', () => {
     expect(onAuthFailure).not.toHaveBeenCalled();
   });
 
+  it('tells the backend which contract revision it speaks, on every request', async () => {
+    const seen: Record<string, string>[] = [];
+    global.fetch = jest.fn(async (_input: unknown, init?: RequestInit) => {
+      seen.push(init?.headers as Record<string, string>);
+      return response(204);
+    }) as unknown as typeof fetch;
+
+    await http.request('mobile/tickets');
+    await http.request('mobile/tickets/t-1/claim', { method: 'POST' });
+
+    // Revision 2 claims granted tickets itself; without it the backend claims them for the app.
+    expect(http.MOBILE_CLIENT_REVISION).toBe(2);
+    expect(seen.map((headers) => headers['X-Sukun-Client-Revision'])).toEqual(['2', '2']);
+  });
+
   it('does not set JSON content type for multipart uploads', async () => {
     global.fetch = jest.fn(async (_input: unknown, init?: RequestInit) => {
       expect((init?.headers as Record<string, string>)['Content-Type']).toBeUndefined();

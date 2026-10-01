@@ -29,6 +29,15 @@ export type TicketUsageStatus =
 /** `modules/tickets/enums/ticket-source.enum.ts` */
 export type TicketSource = 'order' | 'invitation';
 
+/**
+ * `modules/tickets/enums/claim-availability.enum.ts`. A granted ticket takes its seat when it is
+ * claimed, so it can be claimed only while the shop could sell its tier.
+ */
+export type ClaimAvailability = 'available' | 'sold_out' | 'not_on_sale';
+
+/** `modules/invitations/types/guest-ticket-context.interface.ts` PlusOneGuestStatus */
+export type PlusOneGuestStatus = 'waiting' | 'claimed' | 'declined';
+
 /** `ListPublicEventsQueryDto` PUBLIC_STATE_VALUES */
 export type PublicEventState =
   | 'draft'
@@ -63,6 +72,21 @@ export interface AppConfig {
     ios: boolean;
     android: boolean;
   };
+  /**
+   * Per-platform force update, set by admins from the dashboard. Optional because a backend
+   * from before it existed does not send it, and that has to read as "nothing forced".
+   * See `src/lib/force-update.ts`.
+   */
+  forceUpdate?: {
+    ios: ForceUpdateRule;
+    android: ForceUpdateRule;
+  };
+}
+
+/** `ForceUpdateRuleDto`: `minimumVersion` is null whenever `enabled` is false. */
+export interface ForceUpdateRule {
+  enabled: boolean;
+  minimumVersion: string | null;
 }
 
 /** `AppUserAreaResponseDto` as returned by the mobile API. */
@@ -467,15 +491,34 @@ export interface Ticket {
   /** Live addons attached to this ticket, so a card can say "3 add-ons attached". */
   addonCount: number;
   issuedAt: string;
+  /** Set only on a granted ticket waiting to be claimed. */
+  claimAvailability: ClaimAvailability | null;
+  /** Set on a plus one's ticket: the first name of the guest bringing them. */
+  invitedBy: { name: string } | null;
+  /**
+   * Set when this invitation lets its guest bring someone, who they name once their own ticket
+   * is claimed. `guest` is who they named, or null while nobody is.
+   */
+  plusOne: { guest: PlusOneGuest | null } | null;
+}
+
+/** The person a guest named as their plus one. */
+export interface PlusOneGuest {
+  name: string;
+  /** E.164, as the guest entered it. */
+  phoneE164: string;
+  status: PlusOneGuestStatus;
+}
+
+/** `InvitePlusOneRequestDto` */
+export interface InvitePlusOneInput {
+  name: string;
+  /** E.164. */
+  phoneNumber: string;
 }
 
 /**
  * The rotating entry QR payload.
- *
- * PENDING BACKEND — there is no entry-pass endpoint on `staging` yet
- * (`MobileTicketsController` exposes list / detail / claim only). The mock issues a signed-
- * looking payload that rotates on `refreshAfterSeconds` so the screen, its timer, and its
- * rotation behaviour are all real. Wire to the endpoint when it lands.
  */
 export interface EntryPass {
   ticketId: string;
@@ -556,6 +599,10 @@ export interface LiveTicket {
   /** Optional on the wire: a backend with addons switched off omits it entirely. */
   addonCount?: number;
   issuedAt: string;
+  /** Optional on the wire: a backend from before claims competed for seats omits these. */
+  claimAvailability?: ClaimAvailability | null;
+  invitedBy?: { name: string } | null;
+  plusOne?: { guest: PlusOneGuest | null } | null;
 }
 
 /** `ConfirmAccountRestorationRequestDto` */

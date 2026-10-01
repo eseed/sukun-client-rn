@@ -28,6 +28,7 @@ import type {
   ReplaceCartTicketsInput,
   SessionTokens,
   SelfieResponse,
+  InvitePlusOneInput,
   Ticket,
   TicketAddon,
   TicketAddonContext,
@@ -166,8 +167,19 @@ export interface SukunApi {
       limit?: number;
     }): Promise<CursorPage<Ticket>>;
     detail(ticketId: string): Promise<Ticket>;
+    /**
+     * Claims a ticket waiting on the caller's number. Needs a complete profile
+     * (`PROFILE_INCOMPLETE`); a granted ticket takes its seat here, so it is refused while the
+     * event is sold out (`CLAIM_SOLD_OUT`) or not on sale (`CLAIM_NOT_ON_SALE`).
+     */
     claim(ticketId: string): Promise<Ticket>;
-    /** PENDING BACKEND — no entry-pass endpoint on staging yet. See `EntryPass`. */
+    /** "Sorry, can't make it": the RSVP no to a granted ticket not claimed yet. Voids it. */
+    decline(ticketId: string): Promise<void>;
+    /** Names the guest's plus one, who is sent an invitation of their own. */
+    invitePlusOne(ticketId: string, input: InvitePlusOneInput): Promise<Ticket>;
+    /** Takes back a plus one who has not claimed yet. */
+    removePlusOne(ticketId: string): Promise<Ticket>;
+    /** Current authenticated holder pass. See `EntryPass`. */
     entryPass(ticketId: string): Promise<EntryPass>;
     /** Addons attached to a ticket after fulfilment. */
     addons(ticketId: string, includeRefunded?: boolean): Promise<TicketAddon[]>;

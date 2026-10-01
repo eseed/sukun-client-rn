@@ -79,6 +79,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
   useIsFocused: () => true,
+  usePathname: () => '/discover',
   Redirect: () => null,
   Stack: Object.assign(() => null, { Screen: () => null }),
   Tabs: Object.assign(() => null, { Screen: () => null }),
@@ -1379,70 +1380,149 @@ describe('13 My tickets', () => {
 });
 
 describe('14 Entry pass', () => {
+  // Inside the 12 hours before the first day of the seeded ticket (2026-10-23 13:00Z), when the
+  // screen asks for a pass at all. Outside it, every ticket says the QR will show here later.
+  const insideEntryWindow = Date.parse('2026-10-23T08:00:00.000Z');
+
   it('renders the live pass, the rotation notice and the holder details', async () => {
     await signInAndComplete();
     const { data } = await mockApi.tickets.list();
     mockParams.id = data[0]!.id;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() => expect(screen.getByText('Tulua · live entry pass')).toBeTruthy());
-    expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
-    expect(screen.getByText('Holder')).toBeTruthy();
-    expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
-    expect(screen.getByText('Venue')).toBeTruthy();
-    // The pass shows the ticket's full venue string, as the design draws it.
-    expect(screen.getByText('Tunis Village, Fayoum')).toBeTruthy();
-    expect(screen.getByText(/This code regenerates every ~/)).toBeTruthy();
+      await waitFor(() => expect(screen.getByText('Tulua · live entry pass')).toBeTruthy());
+      expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
+      expect(screen.getByText('Holder')).toBeTruthy();
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+      expect(screen.getByText('Venue')).toBeTruthy();
+      // The pass shows the ticket's full venue string, as the design draws it.
+      expect(screen.getByText('Tunis Village, Fayoum')).toBeTruthy();
+      // The mock's pass lives 30s and is refetched 3s before it expires; the clock is frozen.
+      await waitFor(() => expect(screen.getByText('Refreshes in 27s')).toBeTruthy());
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
+    } finally {
+      now.mockRestore();
+    }
   });
 
   /*
-   * The entry-pass endpoint is not deployed, so the live api's request 404s. That is not
-   * something the holder can retry, and the panel must not claim a code is rotating when there
-   * is none. The same build renders the QR above as soon as the endpoint answers.
+   * Before the window, which is where a holder almost always is, the screen does not ask for a
+   * pass at all. It says when the code will appear instead of loading or failing.
+   */
+  it('does not ask for a pass before the window opens, and says when it will', async () => {
+    await signInAndComplete();
+    const { data } = await mockApi.tickets.list();
+    mockParams.id = data[0]!.id;
+    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass');
+    // One minute before the window opens, 12 hours ahead of the first day.
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-23T00:59:00.000Z'));
+
+    try {
+      renderWithProviders(<EntryPassScreen />);
+
+      await waitFor(() =>
+        expect(
+          screen.getByText('Your entry pass opens 12 hours before the event starts.'),
+        ).toBeTruthy(),
+      );
+      expect(screen.getByText('QR Code will show here.')).toBeTruthy();
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(entryPass).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
+  });
+
+  /*
+   * An endpoint that answers but does not issue passes yet (501, 405, or an ENTRY_PASS_NOT_*
+   * refusal) is not something the holder can retry, and the panel must not claim a code is
+   * rotating when there is none. The same build renders the QR above as soon as it answers.
    */
   it('says the code will appear later while the endpoint is not serving a pass', async () => {
     await signInAndComplete();
     const { data } = await mockApi.tickets.list();
     mockParams.id = data[0]!.id;
-    const notDeployed = Object.assign(new Error('Cannot GET'), { code: 'UNKNOWN', status: 404 });
-    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(notDeployed);
+    const notServing = Object.assign(new Error('Not implemented'), {
+      code: 'NOT_IMPLEMENTED',
+      status: 501,
+    });
+    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(notServing);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() => expect(screen.getByText('QR Code will show here.')).toBeTruthy());
-    expect(screen.getByText('Check back 2 days before the event.')).toBeTruthy();
-    expect(screen.queryByText('Try again')).toBeNull();
-    expect(screen.queryByText(/Refreshes in/)).toBeNull();
-    expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
-    // The ticket's own details still belong on the screen.
-    expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
-
-    entryPass.mockRestore();
+      await waitFor(() =>
+        expect(
+          screen.getByText('The entry pass is not available yet. Try again closer to the event.'),
+        ).toBeTruthy(),
+      );
+      expect(entryPass).toHaveBeenCalled();
+      expect(screen.getByText('QR Code will show here.')).toBeTruthy();
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+      // The ticket's own details still belong on the screen.
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
   });
 
   /**
    * The one place the selfie is asked for (CLAUDE.md rule 3). The ticket says why its QR is
    * not showing and hands over the camera; nothing earlier in the app does either.
    */
-  it('asks for the selfie here, and only here, when the QR needs one', async () => {
+  it('demands the selfie only once the QR it protects can open', async () => {
     await signInWithoutSelfie();
     const { data } = await mockApi.tickets.list();
     expect(data[0]!.usageStatus).toBe('selfie_required');
     mockParams.id = data[0]!.id;
+    // Inside the 12 hours before the first day of the seeded ticket (2026-10-23 13:00Z).
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-23T08:00:00.000Z'));
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    // The demand sits inside the QR panel, where the code would be, rather than replacing it.
-    await waitFor(() =>
-      expect(screen.getByText('Take a selfie to activate your QR Code')).toBeTruthy(),
-    );
-    expect(screen.getByText('Tulua · ticket status')).toBeTruthy();
-    expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
-    expect(screen.queryByText('QR Code will show here.')).toBeNull();
+      // The demand sits inside the QR panel, where the code would be, rather than replacing it.
+      await waitFor(() =>
+        expect(screen.getByText('Take a selfie to activate your QR Code')).toBeTruthy(),
+      );
+      expect(screen.getByText('Tulua · ticket status')).toBeTruthy();
+      expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
 
-    fireEvent.press(screen.getByText('Take selfie'));
-    expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');
+      fireEvent.press(screen.getByText('Take selfie'));
+      expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('only offers the selfie while the QR is still days away', async () => {
+    await signInWithoutSelfie();
+    const { data } = await mockApi.tickets.list();
+    mockParams.id = data[0]!.id;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-01T08:00:00.000Z'));
+
+    try {
+      renderWithProviders(<EntryPassScreen />);
+
+      await waitFor(() => expect(screen.getByText('QR Code will show here.')).toBeTruthy());
+      expect(screen.getByText(/It needs your selfie, so add it any time before then/)).toBeTruthy();
+      expect(screen.queryByText('Take a selfie to activate your QR Code')).toBeNull();
+
+      fireEvent.press(screen.getByText('Add selfie now'));
+      expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie?next=back');
+    } finally {
+      now.mockRestore();
+    }
   });
 
   // A pass that genuinely failed to load is still an error the holder can retry.
@@ -1455,18 +1535,23 @@ describe('14 Entry pass', () => {
       status: 500,
     });
     const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(serverError);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText('Something went wrong on our side. Try again in a moment.'),
-      ).toBeTruthy(),
-    );
-    expect(screen.getByText('Try again')).toBeTruthy();
-    expect(screen.queryByText('QR Code will show here.')).toBeNull();
-
-    entryPass.mockRestore();
+      await waitFor(() =>
+        expect(
+          screen.getByText('Something went wrong on our side. Try again in a moment.'),
+        ).toBeTruthy(),
+      );
+      expect(screen.getByText('Try again')).toBeTruthy();
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
   });
 });
 
@@ -1525,7 +1610,7 @@ describe('15 Profile', () => {
    * Profile does not nag about the selfie. It is not an unfinished registration and it does
    * not gate anything this screen offers: the one ticket that needs it asks for it itself.
    */
-  it('says nothing about a missing selfie once the form is done', async () => {
+  it('offers a missing selfie as optional, for the QR code, not as unfinished setup', async () => {
     await signInAndComplete();
     useAuthStore.setState({
       user: { ...useAuthStore.getState().user!, selfieUploaded: false, selfieUrl: null },
@@ -1533,6 +1618,17 @@ describe('15 Profile', () => {
     renderWithProviders(<ProfileTabScreen />);
 
     expect(screen.queryByText(/Finish setup/)).toBeNull();
+    fireEvent.press(screen.getByText('Add your selfie for your QR code'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie?next=back');
+  });
+
+  it('says nothing about the selfie once there is one', async () => {
+    await signInAndComplete();
+    useAuthStore.setState({
+      user: { ...useAuthStore.getState().user!, selfieUploaded: true },
+    });
+    renderWithProviders(<ProfileTabScreen />);
+
     expect(screen.queryByText(/selfie/i)).toBeNull();
   });
 

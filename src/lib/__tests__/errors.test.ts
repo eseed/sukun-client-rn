@@ -55,6 +55,29 @@ describe('messageForError', () => {
   });
 });
 
+describe('messageForError for OTP rate limits', () => {
+  const otp = (retryAfterSeconds?: number) => ({ code: 'OTP_RATE_LIMITED', retryAfterSeconds });
+
+  it('says how long to wait, the same way for every number', () => {
+    expect(messageForError(otp(45))).toBe(
+      'Too many code attempts for this number. Try again in 45 seconds.',
+    );
+    expect(messageForError(otp(90))).toBe(
+      'Too many code attempts for this number. Try again in 90 seconds.',
+    );
+    expect(messageForError(otp(600))).toBe(
+      'Too many code attempts for this number. Try again in 10 minutes.',
+    );
+    expect(messageForError(otp(86400))).toBe(
+      'Too many code attempts for this number. Try again in 24 hours.',
+    );
+  });
+
+  it('keeps the old copy when the refusal gives no wait', () => {
+    expect(messageForError(otp())).toBe('Give it a moment before asking for another code.');
+  });
+});
+
 describe('isCartNotEditableError', () => {
   it('reads the refusal off the api error', () => {
     expect(isCartNotEditableError(apiError('CART_NOT_EDITABLE'))).toBe(true);
@@ -109,5 +132,25 @@ describe('payment provider refusals', () => {
     expect(messageForError(apiError('PAYMENT_PROVIDER_UNAVAILABLE'))).toBe(
       "The payment provider couldn't be reached. Nothing was charged. Try again in a moment.",
     );
+  });
+});
+
+describe('checkout refusals raised in a race', () => {
+  it('says what happened instead of the generic fallback', () => {
+    const cases: [string, string][] = [
+      ['CAPACITY_NO_LONGER_AVAILABLE', 'This pass just sold out.'],
+      ['EVENT_NOT_ON_SALE', 'Tickets for this event are no longer on sale.'],
+      ['TIER_NOT_AVAILABLE', 'That pass is no longer on sale.'],
+      [
+        'ADDON_OPTION_NOT_AVAILABLE',
+        'One of your extras is no longer available. Go back and check your extras.',
+      ],
+      [
+        'ZERO_TOTAL_ORDER_NOT_ALLOWED',
+        "Free orders can't be placed here. If you used a promo code, remove it to continue.",
+      ],
+      ['PROMO_CODE_NOT_ELIGIBLE_FOR_TIER', 'That promo code does not apply to this pass.'],
+    ];
+    for (const [code, message] of cases) expect(messageForError(apiError(code))).toBe(message);
   });
 });

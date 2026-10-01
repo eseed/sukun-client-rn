@@ -53,12 +53,24 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "title",
-          "startsAt",
-          "ticketCount"
-        ],
+        "required": ["id", "title", "startsAt", "ticketCount"],
+        "type": "object"
+      },
+      "AppDeviceResponseDto": {
+        "properties": {
+          "attributionStatus": {
+            "enum": ["pending", "attributed", "organic", "unavailable"],
+            "type": "string"
+          },
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "hasFirstAttribution": {
+            "type": "boolean"
+          }
+        },
+        "required": ["deviceId", "attributionStatus", "hasFirstAttribution"],
         "type": "object"
       },
       "AppUserAreaResponseDto": {
@@ -79,11 +91,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "code",
-          "name"
-        ],
+        "required": ["id", "code", "name"],
         "type": "object"
       },
       "AppUserSelfieResponseDto": {
@@ -108,23 +116,12 @@
             "type": "string"
           },
           "status": {
-            "enum": [
-              "pending_profile",
-              "active",
-              "suspended",
-              "deleted"
-            ],
+            "enum": ["pending_profile", "active", "suspended", "deleted"],
             "example": "active",
             "type": "string"
           }
         },
-        "required": [
-          "selfieUrl",
-          "expiresAt",
-          "selfieUploaded",
-          "profileComplete",
-          "status"
-        ],
+        "required": ["selfieUrl", "expiresAt", "selfieUploaded", "profileComplete", "status"],
         "type": "object"
       },
       "ApplyCheckoutCartPromoRequestDto": {
@@ -134,9 +131,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "code"
-        ],
+        "required": ["code"],
         "type": "object"
       },
       "CartAddonAssignmentRequestDto": {
@@ -181,10 +176,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "optionId",
-          "quantity"
-        ],
+        "required": ["optionId", "quantity"],
         "type": "object"
       },
       "CartAddonRecipientRequestDto": {
@@ -210,9 +202,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "occupants"
-        ],
+        "required": ["occupants"],
         "type": "object"
       },
       "CartGuestDto": {
@@ -233,11 +223,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "phoneNumber",
-          "name",
-          "tierId"
-        ],
+        "required": ["phoneNumber", "name", "tierId"],
         "type": "object"
       },
       "CartRecipientLookupResponseDto": {
@@ -250,9 +236,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "results"
-        ],
+        "required": ["results"],
         "type": "object"
       },
       "CartRecipientLookupResultResponseDto": {
@@ -279,11 +263,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "phoneNumber",
-          "eligible",
-          "hasAccommodation"
-        ],
+        "required": ["phoneNumber", "eligible", "hasAccommodation"],
         "type": "object"
       },
       "CartTicketSelectionDto": {
@@ -297,10 +277,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "tierId",
-          "quantity"
-        ],
+        "required": ["tierId", "quantity"],
         "type": "object"
       },
       "CheckoutCartAddonAssignmentResponseDto": {
@@ -330,10 +307,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "quantity"
-        ],
+        "required": ["id", "quantity"],
         "type": "object"
       },
       "CheckoutCartAddonResponseDto": {
@@ -367,31 +341,18 @@
             "type": "object"
           },
           "type": {
-            "enum": [
-              "accommodation",
-              "meal",
-              "transport",
-              "other"
-            ],
+            "enum": ["accommodation", "meal", "transport", "other"],
             "nullable": true,
             "type": "string"
           }
         },
-        "required": [
-          "cartAddonItemId",
-          "optionId",
-          "quantity",
-          "assignments"
-        ],
+        "required": ["cartAddonItemId", "optionId", "quantity", "assignments"],
         "type": "object"
       },
       "CheckoutCartAttendeeResponseDto": {
         "properties": {
           "attendeeType": {
-            "enum": [
-              "buyer",
-              "guest"
-            ],
+            "enum": ["buyer", "guest"],
             "type": "string"
           },
           "cartAttendeeId": {
@@ -411,13 +372,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "cartAttendeeId",
-          "cartTicketItemId",
-          "attendeeType",
-          "name",
-          "phoneNumber"
-        ],
+        "required": ["cartAttendeeId", "cartTicketItemId", "attendeeType", "name", "phoneNumber"],
         "type": "object"
       },
       "CheckoutCartPreviewResponseDto": {
@@ -476,9 +431,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "code"
-        ],
+        "required": ["code"],
         "type": "object"
       },
       "CheckoutCartPricingLineResponseDto": {
@@ -517,9 +470,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "quantity"
-        ],
+        "required": ["quantity"],
         "type": "object"
       },
       "CheckoutCartPricingResponseDto": {
@@ -553,10 +504,7 @@
             "type": "object"
           },
           "status": {
-            "enum": [
-              "complete",
-              "unavailable"
-            ],
+            "enum": ["complete", "unavailable"],
             "type": "string"
           },
           "subtotalEgp": {
@@ -599,9 +547,7 @@
             "type": "string"
           },
           "reason": {
-            "enum": [
-              "PROMO_SCOPE_NO_LONGER_APPLICABLE"
-            ],
+            "enum": ["PROMO_SCOPE_NO_LONGER_APPLICABLE"],
             "type": "string"
           },
           "removed": {
@@ -609,11 +555,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "removed",
-          "reason",
-          "previousPromoCode"
-        ],
+        "required": ["removed", "reason", "previousPromoCode"],
         "type": "object"
       },
       "CheckoutCartPromoBreakdownResponseDto": {
@@ -636,11 +578,7 @@
             "type": "string"
           },
           "scope": {
-            "enum": [
-              "ticket_only",
-              "cart",
-              "addon_option"
-            ],
+            "enum": ["ticket_only", "cart", "addon_option"],
             "type": "string"
           },
           "tierId": {
@@ -686,12 +624,7 @@
             "$ref": "#/components/schemas/CheckoutCartPromoAdjustmentResponseDto"
           },
           "status": {
-            "enum": [
-              "draft",
-              "converted",
-              "abandoned",
-              "expired"
-            ],
+            "enum": ["draft", "converted", "abandoned", "expired"],
             "type": "string"
           },
           "tickets": {
@@ -738,11 +671,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "cartTicketItemId",
-          "tierId",
-          "quantity"
-        ],
+        "required": ["cartTicketItemId", "tierId", "quantity"],
         "type": "object"
       },
       "CheckoutCartValidationIssueResponseDto": {
@@ -755,10 +684,7 @@
             "type": "object"
           },
           "kind": {
-            "enum": [
-              "structural",
-              "commerce"
-            ],
+            "enum": ["structural", "commerce"],
             "type": "string"
           },
           "message": {
@@ -775,13 +701,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "code",
-          "kind",
-          "path",
-          "message",
-          "messageKey"
-        ],
+        "required": ["code", "kind", "path", "message", "messageKey"],
         "type": "object"
       },
       "CheckoutCartValidationResponseDto": {
@@ -800,11 +720,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "canPlaceOrder",
-          "validatedAt",
-          "issues"
-        ],
+        "required": ["canPlaceOrder", "validatedAt", "issues"],
         "type": "object"
       },
       "CreateCheckoutCartRequestDto": {
@@ -812,11 +728,65 @@
           "eventId": {
             "example": "f4d38f80-866c-4cdf-b507-7a2743e39f91",
             "type": "string"
+          },
+          "salesChannel": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeclaredSalesChannel"
+              }
+            ],
+            "description": "Client platform; browsers are always recorded as web."
           }
         },
-        "required": [
-          "eventId"
-        ],
+        "required": ["eventId"],
+        "type": "object"
+      },
+      "CreateDeviceAttributionRequestDto": {
+        "properties": {
+          "payload": {
+            "additionalProperties": true,
+            "description": "Raw Kochava SDK attribution callback object. Maximum encoded size is 32 KB.",
+            "example": {
+              "action": "get_attribution",
+              "data": {
+                "attribution": {
+                  "attribution_action": "install",
+                  "attribution_module": "kochava",
+                  "campaign": "Spring launch",
+                  "campaign_id": "campaign-123",
+                  "creative": "reel-1",
+                  "creative_id": "creative-1",
+                  "date_utc": "2026-09-21 12:00:00",
+                  "ko_click_id": "ko-click-123",
+                  "network": "Instagram",
+                  "site_id": "publisher-1"
+                },
+                "kochava_device_id": "kochava-installation-id",
+                "retry": -1
+              },
+              "success": 1
+            },
+            "type": "object"
+          },
+          "provider": {
+            "enum": ["kochava"],
+            "example": "kochava",
+            "type": "string"
+          },
+          "providerInstallationId": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "providerSchemaVersion": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "providerSdkVersion": {
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": ["provider", "payload"],
         "type": "object"
       },
       "CreateOrderGuestRequestDto": {
@@ -837,11 +807,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "phoneNumber",
-          "name",
-          "tierId"
-        ],
+        "required": ["phoneNumber", "name", "tierId"],
         "type": "object"
       },
       "CreateOrderItemRequestDto": {
@@ -858,10 +824,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "tierId",
-          "quantity"
-        ],
+        "required": ["tierId", "quantity"],
         "type": "object"
       },
       "CreateOrderRequestDto": {
@@ -896,11 +859,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "eventId",
-          "items",
-          "guests"
-        ],
+        "required": ["eventId", "items", "guests"],
         "type": "object"
       },
       "CursorPageMetaDto": {
@@ -919,12 +878,13 @@
             "type": "string"
           }
         },
-        "required": [
-          "limit",
-          "hasNextPage",
-          "nextCursor"
-        ],
+        "required": ["limit", "hasNextPage", "nextCursor"],
         "type": "object"
+      },
+      "DeclaredSalesChannel": {
+        "description": "Client platform; browsers are always recorded as web.",
+        "enum": ["web", "ios", "android"],
+        "type": "string"
       },
       "DeleteAppUserAccountRequestDto": {
         "properties": {
@@ -941,9 +901,51 @@
             "type": "string"
           }
         },
-        "required": [
-          "otpCode"
-        ],
+        "required": ["otpCode"],
+        "type": "object"
+      },
+      "DeviceAttributionResponseDto": {
+        "properties": {
+          "campaignName": {
+            "maxLength": 255,
+            "nullable": true,
+            "type": "string"
+          },
+          "creativeName": {
+            "maxLength": 255,
+            "nullable": true,
+            "type": "string"
+          },
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "isFirstAttribution": {
+            "type": "boolean"
+          },
+          "provider": {
+            "enum": ["kochava"],
+            "type": "string"
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 128,
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "enum": ["attributed", "organic", "unavailable"],
+            "type": "string"
+          }
+        },
+        "required": ["id", "deviceId", "provider", "status", "isFirstAttribution", "receivedAt"],
         "type": "object"
       },
       "DiscountedItemDto": {
@@ -958,10 +960,38 @@
             "type": "string"
           }
         },
-        "required": [
-          "tierId",
-          "discountAmountEgp"
-        ],
+        "required": ["tierId", "discountAmountEgp"],
+        "type": "object"
+      },
+      "EntryPassResponseDto": {
+        "properties": {
+          "expiresAt": {
+            "description": "Server-authoritative end of the current QR interval.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "issuedAt": {
+            "description": "Start of the signed QR interval.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "payload": {
+            "description": "Opaque rotating entry credential. Do not decode or modify it.",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…",
+            "type": "string"
+          },
+          "refreshAfterSeconds": {
+            "description": "Seconds until the client should refresh the entry pass.",
+            "minimum": 1,
+            "type": "number"
+          },
+          "ticketId": {
+            "description": "Ticket identifier for the issued entry pass.",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": ["ticketId", "payload", "issuedAt", "expiresAt", "refreshAfterSeconds"],
         "type": "object"
       },
       "ErrorDetailDto": {
@@ -975,10 +1005,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "field",
-          "issue"
-        ],
+        "required": ["field", "issue"],
         "type": "object"
       },
       "ErrorResponseDto": {
@@ -1016,14 +1043,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "statusCode",
-          "error",
-          "message",
-          "details",
-          "requestId",
-          "timestamp"
-        ],
+        "required": ["statusCode", "error", "message", "details", "requestId", "timestamp"],
         "type": "object"
       },
       "GuestValidationIssueResponseDto": {
@@ -1045,20 +1065,34 @@
             "type": "number"
           }
         },
-        "required": [
-          "guestIndex",
-          "error"
-        ],
+        "required": ["guestIndex", "error"],
+        "type": "object"
+      },
+      "InitiatePaymentRequestDto": {
+        "properties": {
+          "presentation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentPresentation"
+              }
+            ],
+            "default": "mobile_sdk",
+            "description": "mobile_sdk (default): the app opens the Paymob SDK sheet with clientSecret. web_redirect: the web client sends the browser to checkoutUrl (Paymob hosted checkout); Paymob then returns it to <returnOrigin>/checkout/return/<orderId>."
+          },
+          "returnOrigin": {
+            "description": "Required with web_redirect and refused with mobile_sdk. The exact origin of the web client page (scheme, host and port; no path, query or trailing slash), as location.origin gives it. It must be one of the configured web client origins.",
+            "example": "https://clientstaging.sukunwellness.co",
+            "maxLength": 255,
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "LookupCartRecipientsRequestDto": {
         "properties": {
           "phoneNumbers": {
             "description": "Phone numbers from the buyer's own contacts to test as addon recipients for this cart's event. Numbers are normalized server-side and echoed back in E.164 so the app can match them against what it sent.",
-            "example": [
-              "01012345678",
-              "+201098765432"
-            ],
+            "example": ["01012345678", "+201098765432"],
             "items": {
               "type": "string"
             },
@@ -1066,9 +1100,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "phoneNumbers"
-        ],
+        "required": ["phoneNumbers"],
         "type": "object"
       },
       "MobileAuthenticatedResponseDto": {
@@ -1138,11 +1170,7 @@
             "type": "string"
           },
           "gender": {
-            "enum": [
-              "male",
-              "female",
-              "prefer_not_to_say"
-            ],
+            "enum": ["male", "female", "prefer_not_to_say"],
             "example": null,
             "nullable": true,
             "type": "string"
@@ -1180,12 +1208,7 @@
             "type": "string"
           },
           "status": {
-            "enum": [
-              "pending_profile",
-              "active",
-              "suspended",
-              "deleted"
-            ],
+            "enum": ["pending_profile", "active", "suspended", "deleted"],
             "example": "pending_profile",
             "type": "string"
           }
@@ -1233,9 +1256,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "ticketId"
-        ],
+        "required": ["ticketId"],
         "type": "object"
       },
       "MobileOrderAddonResponseDto": {
@@ -1312,30 +1333,16 @@
             "type": "object"
           },
           "status": {
-            "enum": [
-              "active",
-              "pending_ticket_replacement",
-              "refunded",
-              "cancelled",
-              "voided"
-            ],
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
             "type": "string"
           },
           "transportDirection": {
-            "enum": [
-              "one_way",
-              "round_trip"
-            ],
+            "enum": ["one_way", "round_trip"],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": [
-              "accommodation",
-              "meal",
-              "transport",
-              "other"
-            ],
+            "enum": ["accommodation", "meal", "transport", "other"],
             "type": "string"
           },
           "unitPriceEgp": {
@@ -1393,12 +1400,7 @@
             "type": "string"
           },
           "status": {
-            "enum": [
-              "active",
-              "reassignment_required",
-              "cancelled",
-              "refunded"
-            ],
+            "enum": ["active", "reassignment_required", "cancelled", "refunded"],
             "type": "string"
           }
         },
@@ -1472,7 +1474,7 @@
             "type": "string"
           },
           "orderNumber": {
-            "example": "SKN-2026-000001",
+            "example": "SKN26-4827-1958",
             "type": "string"
           },
           "payment": {
@@ -1496,22 +1498,21 @@
             "type": "object"
           },
           "refundStatus": {
-            "enum": [
-              "none",
-              "full"
-            ],
+            "enum": ["none", "full"],
             "example": "none",
             "type": "string"
           },
-          "status": {
-            "enum": [
-              "awaiting_payment",
-              "paid",
-              "failed",
-              "expired",
-              "cancelled",
-              "refunded"
+          "salesChannel": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SalesChannel"
+              }
             ],
+            "description": "Where the order was placed. `app` is a mobile order whose platform was not identified, including every order placed before the channel was recorded. The web uses it to tell its own orders from orders started in the app.",
+            "example": "ios"
+          },
+          "status": {
+            "enum": ["awaiting_payment", "paid", "failed", "expired", "cancelled", "refunded"],
             "example": "awaiting_payment",
             "type": "string"
           },
@@ -1538,6 +1539,7 @@
           "eventId",
           "status",
           "refundStatus",
+          "salesChannel",
           "buyerTierId",
           "subtotalEgp",
           "discountEgp",
@@ -1570,11 +1572,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "phoneNumber",
-          "name",
-          "tierId"
-        ],
+        "required": ["phoneNumber", "name", "tierId"],
         "type": "object"
       },
       "MobileOrderItemResponseDto": {
@@ -1596,12 +1594,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "tierId",
-          "quantity",
-          "unitPriceEgp",
-          "lineTotalEgp"
-        ],
+        "required": ["tierId", "quantity", "unitPriceEgp", "lineTotalEgp"],
         "type": "object"
       },
       "MobileOrderPromoResponseDto": {
@@ -1633,11 +1626,7 @@
           },
           "scope": {
             "description": "The scope that determined which order lines the promo could discount.",
-            "enum": [
-              "ticket_only",
-              "cart",
-              "addon_option"
-            ],
+            "enum": ["ticket_only", "cart", "addon_option"],
             "example": "ticket_only",
             "type": "string"
           },
@@ -1683,26 +1672,16 @@
             "type": "string"
           },
           "orderNumber": {
-            "example": "SKN-2026-000001",
+            "example": "SKN26-4827-1958",
             "type": "string"
           },
           "refundStatus": {
-            "enum": [
-              "none",
-              "full"
-            ],
+            "enum": ["none", "full"],
             "example": "none",
             "type": "string"
           },
           "status": {
-            "enum": [
-              "awaiting_payment",
-              "paid",
-              "failed",
-              "expired",
-              "cancelled",
-              "refunded"
-            ],
+            "enum": ["awaiting_payment", "paid", "failed", "expired", "cancelled", "refunded"],
             "example": "awaiting_payment",
             "type": "string"
           },
@@ -1777,12 +1756,7 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": [
-              "active",
-              "cancelled",
-              "refunded",
-              "voided"
-            ],
+            "enum": ["active", "cancelled", "refunded", "voided"],
             "type": "string"
           },
           "label": {
@@ -1825,27 +1799,16 @@
             "type": "object"
           },
           "status": {
-            "enum": [
-              "active",
-              "pending_ticket_replacement",
-              "refunded",
-              "cancelled",
-              "voided"
-            ],
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
             "type": "string"
           },
           "transportDirection": {
-            "enum": [
-              "one_way",
-              "round_trip"
-            ],
+            "enum": ["one_way", "round_trip"],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": [
-              "accommodation"
-            ],
+            "enum": ["accommodation"],
             "type": "string"
           },
           "voidedQuantity": {
@@ -1882,10 +1845,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "addons",
-          "hasAccommodation"
-        ],
+        "required": ["addons", "hasAccommodation"],
         "type": "object"
       },
       "MobileTicketAddonContextResponseDto": {
@@ -1921,12 +1881,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "ticketId",
-          "eventId",
-          "existing",
-          "catalog"
-        ],
+        "required": ["ticketId", "eventId", "existing", "catalog"],
         "type": "object"
       },
       "MobileTicketAddonResponseDto": {
@@ -1955,12 +1910,7 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": [
-              "active",
-              "cancelled",
-              "refunded",
-              "voided"
-            ],
+            "enum": ["active", "cancelled", "refunded", "voided"],
             "type": "string"
           },
           "label": {
@@ -2003,30 +1953,16 @@
             "type": "object"
           },
           "status": {
-            "enum": [
-              "active",
-              "pending_ticket_replacement",
-              "refunded",
-              "cancelled",
-              "voided"
-            ],
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
             "type": "string"
           },
           "transportDirection": {
-            "enum": [
-              "one_way",
-              "round_trip"
-            ],
+            "enum": ["one_way", "round_trip"],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": [
-              "accommodation",
-              "meal",
-              "transport",
-              "other"
-            ],
+            "enum": ["accommodation", "meal", "transport", "other"],
             "type": "string"
           },
           "voidedQuantity": {
@@ -2079,12 +2015,7 @@
             "type": "string"
           },
           "status": {
-            "enum": [
-              "active",
-              "reassignment_required",
-              "cancelled",
-              "refunded"
-            ],
+            "enum": ["active", "reassignment_required", "cancelled", "refunded"],
             "type": "string"
           }
         },
@@ -2126,12 +2057,7 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": [
-              "active",
-              "cancelled",
-              "refunded",
-              "voided"
-            ],
+            "enum": ["active", "cancelled", "refunded", "voided"],
             "type": "string"
           },
           "label": {
@@ -2174,27 +2100,16 @@
             "type": "object"
           },
           "status": {
-            "enum": [
-              "active",
-              "pending_ticket_replacement",
-              "refunded",
-              "cancelled",
-              "voided"
-            ],
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
             "type": "string"
           },
           "transportDirection": {
-            "enum": [
-              "one_way",
-              "round_trip"
-            ],
+            "enum": ["one_way", "round_trip"],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": [
-              "meal"
-            ],
+            "enum": ["meal"],
             "type": "string"
           },
           "voidedQuantity": {
@@ -2245,12 +2160,7 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": [
-              "active",
-              "cancelled",
-              "refunded",
-              "voided"
-            ],
+            "enum": ["active", "cancelled", "refunded", "voided"],
             "type": "string"
           },
           "label": {
@@ -2293,27 +2203,16 @@
             "type": "object"
           },
           "status": {
-            "enum": [
-              "active",
-              "pending_ticket_replacement",
-              "refunded",
-              "cancelled",
-              "voided"
-            ],
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
             "type": "string"
           },
           "transportDirection": {
-            "enum": [
-              "one_way",
-              "round_trip"
-            ],
+            "enum": ["one_way", "round_trip"],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": [
-              "other"
-            ],
+            "enum": ["other"],
             "type": "string"
           },
           "voidedQuantity": {
@@ -2372,19 +2271,11 @@
             "$ref": "#/components/schemas/PurchasedByDto"
           },
           "source": {
-            "enum": [
-              "order",
-              "invitation"
-            ],
+            "enum": ["order", "invitation"],
             "type": "string"
           },
           "status": {
-            "enum": [
-              "pending_claim",
-              "active",
-              "voided",
-              "refunded"
-            ],
+            "enum": ["pending_claim", "active", "voided", "refunded"],
             "type": "string"
           },
           "ticketNumber": {
@@ -2446,12 +2337,7 @@
           },
           "issuedAddonStatus": {
             "description": "Persistence status of the source issued addon.",
-            "enum": [
-              "active",
-              "cancelled",
-              "refunded",
-              "voided"
-            ],
+            "enum": ["active", "cancelled", "refunded", "voided"],
             "type": "string"
           },
           "label": {
@@ -2494,27 +2380,16 @@
             "type": "object"
           },
           "status": {
-            "enum": [
-              "active",
-              "pending_ticket_replacement",
-              "refunded",
-              "cancelled",
-              "voided"
-            ],
+            "enum": ["active", "pending_ticket_replacement", "refunded", "cancelled", "voided"],
             "type": "string"
           },
           "transportDirection": {
-            "enum": [
-              "one_way",
-              "round_trip"
-            ],
+            "enum": ["one_way", "round_trip"],
             "nullable": true,
             "type": "string"
           },
           "type": {
-            "enum": [
-              "transport"
-            ],
+            "enum": ["transport"],
             "type": "string"
           },
           "voidedQuantity": {
@@ -2539,10 +2414,6 @@
         ],
         "type": "object"
       },
-      "Object": {
-        "properties": {},
-        "type": "object"
-      },
       "OtpRequestedResponseDto": {
         "properties": {
           "expiresInSeconds": {
@@ -2551,7 +2422,7 @@
             "type": "number"
           },
           "resendAfterSeconds": {
-            "description": "Minimum seconds before requesting a new code",
+            "description": "Minimum seconds before requesting a new code. Grows with each code sent to the number (30, 60, 120, then 300 by default); once the number has had its codes for the day, it is the time until one frees up.",
             "example": 30,
             "type": "number"
           },
@@ -2561,11 +2432,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "sent",
-          "expiresInSeconds",
-          "resendAfterSeconds"
-        ],
+        "required": ["sent", "expiresInSeconds", "resendAfterSeconds"],
         "type": "object"
       },
       "PaymentInitiateResponseDto": {
@@ -2573,6 +2440,11 @@
           "amountEgp": {
             "description": "Amount in EGP as decimal string",
             "example": "11400.00",
+            "type": "string"
+          },
+          "checkoutUrl": {
+            "description": "Paymob Unified Checkout URL; only for web_redirect. It carries the client secret: never log or render it.",
+            "example": "https://eg.checkout.paymob.com/?publicKey=egy_pk_test_x&clientSecret=egy_csk_test_x",
             "type": "string"
           },
           "clientSecret": {
@@ -2597,15 +2469,13 @@
             "type": "string"
           },
           "presentationMode": {
-            "description": "Presentation mode for the client SDK",
+            "description": "mobile_sdk (default) or web_redirect",
             "example": "mobile_sdk",
             "type": "string"
           },
           "provider": {
             "description": "Payment provider name",
-            "enum": [
-              "paymob"
-            ],
+            "enum": ["paymob"],
             "example": "paymob",
             "type": "string"
           },
@@ -2640,18 +2510,16 @@
         ],
         "type": "object"
       },
+      "PaymentPresentation": {
+        "description": "mobile_sdk (default): the app opens the Paymob SDK sheet with clientSecret. web_redirect: the web client sends the browser to checkoutUrl (Paymob hosted checkout); Paymob then returns it to <returnOrigin>/checkout/return/<orderId>.",
+        "enum": ["mobile_sdk", "web_redirect"],
+        "type": "string"
+      },
       "PaymentStatusResponseDto": {
         "properties": {
           "orderStatus": {
             "description": "Order status",
-            "enum": [
-              "awaiting_payment",
-              "paid",
-              "failed",
-              "expired",
-              "cancelled",
-              "refunded"
-            ],
+            "enum": ["awaiting_payment", "paid", "failed", "expired", "cancelled", "refunded"],
             "example": "awaiting_payment",
             "type": "string"
           },
@@ -2683,12 +2551,7 @@
             "type": "number"
           }
         },
-        "required": [
-          "orderStatus",
-          "paymentStatus",
-          "ticketsIssued",
-          "paidAt"
-        ],
+        "required": ["orderStatus", "paymentStatus", "ticketsIssued", "paidAt"],
         "type": "object"
       },
       "PlaceCheckoutCartOrderRequestDto": {
@@ -2696,20 +2559,23 @@
           "pricingConfirmationToken": {
             "description": "Latest server-issued pricing confirmation token from Cart preview.",
             "type": "string"
+          },
+          "salesChannel": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DeclaredSalesChannel"
+              }
+            ],
+            "description": "Client platform; browsers are always recorded as web."
           }
         },
-        "required": [
-          "pricingConfirmationToken"
-        ],
+        "required": ["pricingConfirmationToken"],
         "type": "object"
       },
       "PublicAccommodationAddonOptionResponseDto": {
         "properties": {
           "availability": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           },
@@ -2785,10 +2651,7 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           },
@@ -2844,20 +2707,12 @@
             "type": "array"
           },
           "type": {
-            "enum": [
-              "accommodation"
-            ],
+            "enum": ["accommodation"],
             "example": "accommodation",
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "type",
-          "name",
-          "featuredImageUrl",
-          "options"
-        ],
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
         "type": "object"
       },
       "PublicAddonNextPriceWindowResponseDto": {
@@ -2876,20 +2731,13 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "priceEgp",
-          "startsAt"
-        ],
+        "required": ["name", "priceEgp", "startsAt"],
         "type": "object"
       },
       "PublicAddonOptionBaseResponseDto": {
         "properties": {
           "availability": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           },
@@ -2937,10 +2785,7 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           }
@@ -2979,31 +2824,18 @@
             "type": "string"
           },
           "type": {
-            "enum": [
-              "accommodation",
-              "meal",
-              "transport",
-              "other"
-            ],
+            "enum": ["accommodation", "meal", "transport", "other"],
             "example": "accommodation",
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "type",
-          "name",
-          "featuredImageUrl"
-        ],
+        "required": ["id", "type", "name", "featuredImageUrl"],
         "type": "object"
       },
       "PublicMealAddonOptionResponseDto": {
         "properties": {
           "availability": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           },
@@ -3051,10 +2883,7 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           }
@@ -3099,29 +2928,18 @@
             "type": "array"
           },
           "type": {
-            "enum": [
-              "meal"
-            ],
+            "enum": ["meal"],
             "example": "meal",
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "type",
-          "name",
-          "featuredImageUrl",
-          "options"
-        ],
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
         "type": "object"
       },
       "PublicOtherAddonOptionResponseDto": {
         "properties": {
           "availability": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           },
@@ -3169,10 +2987,7 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           }
@@ -3217,29 +3032,18 @@
             "type": "array"
           },
           "type": {
-            "enum": [
-              "other"
-            ],
+            "enum": ["other"],
             "example": "other",
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "type",
-          "name",
-          "featuredImageUrl",
-          "options"
-        ],
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
         "type": "object"
       },
       "PublicTransportAddonOptionResponseDto": {
         "properties": {
           "availability": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           },
@@ -3297,10 +3101,7 @@
             "type": "string"
           },
           "priceWindowStatus": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
+            "enum": ["available", "unavailable"],
             "example": "available",
             "type": "string"
           },
@@ -3317,10 +3118,7 @@
             "type": "string"
           },
           "transportDirection": {
-            "enum": [
-              "one_way",
-              "round_trip"
-            ],
+            "enum": ["one_way", "round_trip"],
             "example": "one_way",
             "type": "string"
           }
@@ -3368,20 +3166,12 @@
             "type": "array"
           },
           "type": {
-            "enum": [
-              "transport"
-            ],
+            "enum": ["transport"],
             "example": "transport",
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "type",
-          "name",
-          "featuredImageUrl",
-          "options"
-        ],
+        "required": ["id", "type", "name", "featuredImageUrl", "options"],
         "type": "object"
       },
       "PurchasedByDto": {
@@ -3393,10 +3183,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "isSelf"
-        ],
+        "required": ["name", "isSelf"],
         "type": "object"
       },
       "RefreshMobileSessionRequestDto": {
@@ -3407,9 +3194,52 @@
             "type": "string"
           }
         },
-        "required": [
-          "refreshToken"
-        ],
+        "required": ["refreshToken"],
+        "type": "object"
+      },
+      "RegisterAppDeviceRequestDto": {
+        "properties": {
+          "appVersion": {
+            "example": "1.0.0",
+            "maxLength": 64,
+            "type": "string"
+          },
+          "deviceId": {
+            "example": "cfa8c18c-77c0-40f7-a366-9423036f0325",
+            "type": "string"
+          },
+          "platform": {
+            "enum": ["ios", "android"],
+            "example": "ios",
+            "type": "string"
+          }
+        },
+        "required": ["deviceId", "platform"],
+        "type": "object"
+      },
+      "RegisterPushTokenRequestDto": {
+        "properties": {
+          "appVersion": {
+            "example": "1.4.0",
+            "maxLength": 64,
+            "type": "string"
+          },
+          "deviceId": {
+            "example": "b6f8d6d0-0bc7-46b7-a6d8-3d1a2fbdbe2a",
+            "format": "uuid",
+            "type": "string"
+          },
+          "platform": {
+            "enum": ["ios", "android"],
+            "example": "android",
+            "type": "string"
+          },
+          "token": {
+            "example": "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]",
+            "type": "string"
+          }
+        },
+        "required": ["token", "platform", "deviceId"],
         "type": "object"
       },
       "ReplaceCartAddonsRequestDto": {
@@ -3421,9 +3251,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "addons"
-        ],
+        "required": ["addons"],
         "type": "object"
       },
       "ReplaceCartTicketsRequestDto": {
@@ -3446,10 +3274,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "items",
-          "guests"
-        ],
+        "required": ["items", "guests"],
         "type": "object"
       },
       "RequestOtpRequestDto": {
@@ -3460,10 +3285,24 @@
             "type": "string"
           }
         },
-        "required": [
-          "phoneNumber"
-        ],
+        "required": ["phoneNumber"],
         "type": "object"
+      },
+      "RevokePushTokenRequestDto": {
+        "properties": {
+          "deviceId": {
+            "example": "b6f8d6d0-0bc7-46b7-a6d8-3d1a2fbdbe2a",
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": ["deviceId"],
+        "type": "object"
+      },
+      "SalesChannel": {
+        "description": "Where the order was placed. `app` is a mobile order whose platform was not identified, including every order placed before the channel was recorded. The web uses it to tell its own orders from orders started in the app.",
+        "enum": ["web", "ios", "android", "app"],
+        "type": "string"
       },
       "SendEmailVerificationResponseDto": {
         "properties": {
@@ -3478,10 +3317,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "queued",
-          "expiresInSeconds"
-        ],
+        "required": ["queued", "expiresInSeconds"],
         "type": "object"
       },
       "TicketDayDto": {
@@ -3502,11 +3338,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "date",
-          "startsAt"
-        ],
+        "required": ["id", "date", "startsAt"],
         "type": "object"
       },
       "TicketEventDto": {
@@ -3533,11 +3365,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "slug",
-          "title"
-        ],
+        "required": ["id", "slug", "title"],
         "type": "object"
       },
       "TicketTierDto": {
@@ -3549,10 +3377,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "name"
-        ],
+        "required": ["id", "name"],
         "type": "object"
       },
       "UpdateAppUserProfileRequestDto": {
@@ -3586,11 +3411,7 @@
           },
           "gender": {
             "description": "Gender",
-            "enum": [
-              "male",
-              "female",
-              "prefer_not_to_say"
-            ],
+            "enum": ["male", "female", "prefer_not_to_say"],
             "example": "female",
             "type": "string"
           },
@@ -3621,23 +3442,12 @@
             "type": "boolean"
           },
           "status": {
-            "enum": [
-              "pending_profile",
-              "active",
-              "suspended",
-              "deleted"
-            ],
+            "enum": ["pending_profile", "active", "suspended", "deleted"],
             "example": "pending_profile",
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "phoneNumber",
-          "status",
-          "profileComplete",
-          "emailVerified"
-        ],
+        "required": ["id", "phoneNumber", "status", "profileComplete", "emailVerified"],
         "type": "object"
       },
       "ValidateGuestRequestDto": {
@@ -3648,9 +3458,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "phoneNumber"
-        ],
+        "required": ["phoneNumber"],
         "type": "object"
       },
       "ValidateGuestsRequestDto": {
@@ -3673,10 +3481,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "eventId",
-          "guests"
-        ],
+        "required": ["eventId", "guests"],
         "type": "object"
       },
       "ValidateGuestsResponseDto": {
@@ -3699,11 +3504,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "valid",
-          "issues",
-          "buyerAlreadyHasTicket"
-        ],
+        "required": ["valid", "issues", "buyerAlreadyHasTicket"],
         "type": "object"
       },
       "ValidatePromoCodeItemDto": {
@@ -3718,10 +3519,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "tierId",
-          "quantity"
-        ],
+        "required": ["tierId", "quantity"],
         "type": "object"
       },
       "ValidatePromoCodeRequestDto": {
@@ -3738,10 +3536,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "items",
-          "promoCode"
-        ],
+        "required": ["items", "promoCode"],
         "type": "object"
       },
       "ValidatePromoCodeResponseDto": {
@@ -3795,9 +3590,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "token"
-        ],
+        "required": ["token"],
         "type": "object"
       },
       "VerifyEmailResponseDto": {
@@ -3808,9 +3601,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "verified"
-        ],
+        "required": ["verified"],
         "type": "object"
       },
       "VerifyOtpRequestDto": {
@@ -3831,10 +3622,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "phoneNumber",
-          "code"
-        ],
+        "required": ["phoneNumber", "code"],
         "type": "object"
       }
     },
@@ -3864,9 +3652,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -3902,9 +3688,7 @@
           }
         ],
         "summary": "Logout current session",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/auth/logout-all": {
@@ -3917,9 +3701,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -3955,9 +3737,7 @@
           }
         ],
         "summary": "Logout all sessions",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/auth/me": {
@@ -3970,9 +3750,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4015,9 +3793,7 @@
           }
         ],
         "summary": "Get current authenticated user",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/auth/otp/request": {
@@ -4025,14 +3801,21 @@
         "operationId": "MobileAuthController_requestOtp_v1",
         "parameters": [
           {
+            "description": "Browsers only: the Cloudflare Turnstile token, one per request. Checked only when the request carries an Origin header and Turnstile is on for this environment. The app sends no Origin and never needs it.",
+            "in": "header",
+            "name": "CF-Turnstile-Token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "description": "Ignored. The API always returns English responses.",
             "in": "header",
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4068,6 +3851,16 @@
             },
             "description": "Validation error (INVALID_PHONE, INVALID_INPUT)"
           },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Browser security check failed (TURNSTILE_FAILED): the CF-Turnstile-Token header is missing, malformed, expired or already used. Browsers only."
+          },
           "409": {
             "content": {
               "application/json": {
@@ -4086,7 +3879,7 @@
                 }
               }
             },
-            "description": "Rate limited (OTP_RATE_LIMITED, retryAfterSeconds in body)"
+            "description": "Rate limited (OTP_RATE_LIMITED, retryAfterSeconds in body and a Retry-After header): too many requests, too soon after the last code, too many codes for this number today, or the number is locked after too many wrong codes. Identical for every number."
           },
           "503": {
             "content": {
@@ -4100,9 +3893,7 @@
           }
         },
         "summary": "Request OTP verification code",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/auth/otp/verify": {
@@ -4115,9 +3906,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4171,7 +3960,7 @@
                 }
               }
             },
-            "description": "Too many attempts (OTP_ATTEMPTS_EXCEEDED, OTP_RATE_LIMITED)"
+            "description": "Too many attempts (OTP_ATTEMPTS_EXCEEDED, OTP_RATE_LIMITED). OTP_RATE_LIMITED carries retryAfterSeconds and a Retry-After header, and is also the answer while the number is locked after too many wrong codes."
           },
           "503": {
             "content": {
@@ -4185,9 +3974,7 @@
           }
         },
         "summary": "Verify OTP code and authenticate",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/auth/refresh": {
@@ -4200,9 +3987,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4270,9 +4055,7 @@
           }
         },
         "summary": "Refresh access token",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/carts": {
@@ -4286,9 +4069,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4321,9 +4102,7 @@
           }
         ],
         "summary": "Create or reuse a draft checkout cart",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       }
     },
     "/api/v1/mobile/carts/{cartId}": {
@@ -4345,9 +4124,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4373,9 +4150,7 @@
           }
         ],
         "summary": "Abandon a draft cart",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       },
       "get": {
         "description": "Cart validation is advisory and non-reserving. Place Order revalidates authoritatively.",
@@ -4396,9 +4171,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4421,9 +4194,7 @@
           }
         ],
         "summary": "Get an owned checkout cart",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       }
     },
     "/api/v1/mobile/carts/{cartId}/addons": {
@@ -4446,9 +4217,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4474,6 +4243,9 @@
             },
             "description": ""
           },
+          "400": {
+            "description": "Web only: WEB_ADDON_ASSIGNMENT_NOT_ALLOWED, WEB_SHARED_ROOM_NOT_ALLOWED or PERSON_ALREADY_HAS_ACCOMMODATION (more than one room unit)"
+          },
           "409": {
             "description": "CART_NOT_EDITABLE — the cart is no longer draft; or ADDONS_FEATURE_DISABLED"
           }
@@ -4484,9 +4256,7 @@
           }
         ],
         "summary": "Replace addon selections and assignments",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       }
     },
     "/api/v1/mobile/carts/{cartId}/place-order": {
@@ -4509,9 +4279,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4537,8 +4305,11 @@
             },
             "description": ""
           },
+          "400": {
+            "description": "Web only: WEB_GUESTS_NOT_ALLOWED, WEB_SINGLE_TICKET_ONLY, WEB_ADDON_ASSIGNMENT_NOT_ALLOWED, WEB_SHARED_ROOM_NOT_ALLOWED or PERSON_ALREADY_HAS_ACCOMMODATION when the saved cart is not a buyer-only selection"
+          },
           "409": {
-            "description": "CART_NOT_EDITABLE (cart is converted, abandoned or expired), CART_PRICING_CHANGED, ZERO_TOTAL_ORDER_NOT_ALLOWED or CART_ACTIVE_ORDER_EXISTS"
+            "description": "CART_NOT_EDITABLE (cart is converted, abandoned or expired), CART_PRICING_CHANGED, ZERO_TOTAL_ORDER_NOT_ALLOWED or CART_ACTIVE_ORDER_EXISTS; web only: WEB_BUYER_ALREADY_HAS_TICKET"
           }
         },
         "security": [
@@ -4547,9 +4318,7 @@
           }
         ],
         "summary": "Authoritatively convert the draft cart into an awaiting-payment Order",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       }
     },
     "/api/v1/mobile/carts/{cartId}/preview": {
@@ -4572,9 +4341,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4597,9 +4364,7 @@
           }
         ],
         "summary": "Preview the current cart price",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       }
     },
     "/api/v1/mobile/carts/{cartId}/promo-code": {
@@ -4621,9 +4386,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4649,9 +4412,7 @@
           }
         ],
         "summary": "Remove the promo code from the draft cart",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       },
       "put": {
         "description": "Applying a promo code does not claim or consume it.",
@@ -4672,9 +4433,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4702,6 +4461,9 @@
           },
           "409": {
             "description": "CART_NOT_EDITABLE — the cart is no longer draft"
+          },
+          "429": {
+            "description": "Web only: PROMO_CODE_RATE_LIMITED — more than 10 different codes in 10 minutes, or 50 in a UTC day, for this account; carries retryAfterSeconds. Re-sending a code already accepted costs nothing."
           }
         },
         "security": [
@@ -4710,9 +4472,7 @@
           }
         ],
         "summary": "Apply a promo code to the draft cart",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       }
     },
     "/api/v1/mobile/carts/{cartId}/recipient-lookup": {
@@ -4735,9 +4495,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4763,6 +4521,9 @@
             },
             "description": ""
           },
+          "400": {
+            "description": "WEB_ADDON_ASSIGNMENT_NOT_ALLOWED — refused from browsers"
+          },
           "404": {
             "description": "CART_NOT_FOUND"
           }
@@ -4773,9 +4534,7 @@
           }
         ],
         "summary": "Check which phone numbers can receive an addon on this cart",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       }
     },
     "/api/v1/mobile/carts/{cartId}/tickets": {
@@ -4798,9 +4557,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4826,8 +4583,11 @@
             },
             "description": ""
           },
+          "400": {
+            "description": "Web only: WEB_GUESTS_NOT_ALLOWED or WEB_SINGLE_TICKET_ONLY"
+          },
           "409": {
-            "description": "CART_NOT_EDITABLE — the cart is no longer draft"
+            "description": "CART_NOT_EDITABLE — the cart is no longer draft; web only: WEB_BUYER_ALREADY_HAS_TICKET"
           }
         },
         "security": [
@@ -4836,9 +4596,7 @@
           }
         ],
         "summary": "Replace ticket selections and recipients",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
       }
     },
     "/api/v1/mobile/carts/{cartId}/validate-addons": {
@@ -4861,9 +4619,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4886,9 +4642,333 @@
           }
         ],
         "summary": "Revalidate persisted cart addon state",
-        "tags": [
-          "Mobile - Checkout Cart"
-        ]
+        "tags": ["Mobile - Checkout Cart"]
+      }
+    },
+    "/api/v1/mobile/devices": {
+      "post": {
+        "operationId": "MobileDevicesController_register_v1",
+        "parameters": [
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "examples": {
+                "ios": {
+                  "summary": "Register an iOS installation",
+                  "value": {
+                    "appVersion": "1.0.0",
+                    "deviceId": "cfa8c18c-77c0-40f7-a366-9423036f0325",
+                    "platform": "ios"
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/RegisterAppDeviceRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "attributionStatus": "pending",
+                  "deviceId": "cfa8c18c-77c0-40f7-a366-9423036f0325",
+                  "hasFirstAttribution": false
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/AppDeviceResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": [],
+                  "error": "VALIDATION_ERROR",
+                  "message": "Invalid data",
+                  "requestId": "qa-device-attribution-001",
+                  "statusCode": 400,
+                  "timestamp": "2026-09-21T12:00:00.000Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid device UUID or platform"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": [],
+                  "error": "DEVICE_PLATFORM_MISMATCH",
+                  "message": "Device platform does not match its original registration",
+                  "requestId": "qa-device-attribution-002",
+                  "statusCode": 409,
+                  "timestamp": "2026-09-21T12:00:00.000Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "The device UUID is already registered to another platform"
+          }
+        },
+        "summary": "Register or refresh an opaque mobile device installation",
+        "tags": ["Mobile Devices"]
+      }
+    },
+    "/api/v1/mobile/devices/push-token": {
+      "delete": {
+        "operationId": "MobileDevicePushTokenController_revoke_v1",
+        "parameters": [
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokePushTokenRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Push token revoked or already absent"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid or revoked token"
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Revoke the current device push token",
+        "tags": ["Mobile"]
+      },
+      "post": {
+        "operationId": "MobileDevicePushTokenController_register_v1",
+        "parameters": [
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPushTokenRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Push token registered"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid Expo push token"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid or revoked token"
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Register or refresh the current device push token",
+        "tags": ["Mobile"]
+      }
+    },
+    "/api/v1/mobile/devices/{deviceId}/attributions": {
+      "post": {
+        "operationId": "MobileDevicesController_submitAttribution_v1",
+        "parameters": [
+          {
+            "description": "Registered opaque device UUID",
+            "in": "path",
+            "name": "deviceId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "examples": {
+                "kochava": {
+                  "summary": "Submit a Kochava attribution observation",
+                  "value": {
+                    "payload": {
+                      "action": "get_attribution",
+                      "data": {
+                        "attribution": {
+                          "attribution_action": "install",
+                          "attribution_module": "kochava",
+                          "campaign": "campaign-name",
+                          "campaign_id": "campaign-id",
+                          "creative": "creative-1",
+                          "creative_id": "creative-id",
+                          "date_utc": "2026-09-21 12:00:00",
+                          "ko_click_id": "kochava-click-id",
+                          "network": "Instagram",
+                          "site_id": "publisher-id"
+                        },
+                        "kochava_device_id": "kochava-installation-id",
+                        "retry": -1
+                      },
+                      "success": 1
+                    },
+                    "provider": "kochava",
+                    "providerInstallationId": "kochava-installation-id",
+                    "providerSdkVersion": "1.0.0"
+                  }
+                }
+              },
+              "schema": {
+                "$ref": "#/components/schemas/CreateDeviceAttributionRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaignName": "campaign-name",
+                  "creativeName": "creative-1",
+                  "deviceId": "cfa8c18c-77c0-40f7-a366-9423036f0325",
+                  "id": "e4ac8f66-f2af-4b68-91a8-769953d6a47f",
+                  "isFirstAttribution": true,
+                  "provider": "kochava",
+                  "receivedAt": "2026-09-21T12:00:00.000Z",
+                  "source": "Instagram",
+                  "status": "attributed"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceAttributionResponseDto"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": [],
+                  "error": "INVALID_ATTRIBUTION_PAYLOAD",
+                  "message": "Attribution payload is invalid or too complex",
+                  "requestId": "qa-device-attribution-003",
+                  "statusCode": 400,
+                  "timestamp": "2026-09-21T12:00:00.000Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Invalid provider or attribution payload"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "details": [],
+                  "error": "DEVICE_NOT_FOUND",
+                  "message": "Device not found",
+                  "requestId": "qa-device-attribution-004",
+                  "statusCode": 404,
+                  "timestamp": "2026-09-21T12:00:00.000Z"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "Device is not registered"
+          }
+        },
+        "summary": "Submit a provider attribution observation for a device",
+        "tags": ["Mobile Devices"]
       }
     },
     "/api/v1/mobile/orders": {
@@ -4901,15 +4981,11 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 20,
               "example": 20,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
@@ -4927,9 +5003,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -4950,10 +5024,7 @@
                       "$ref": "#/components/schemas/CursorPageMetaDto"
                     }
                   },
-                  "required": [
-                    "data",
-                    "meta"
-                  ],
+                  "required": ["data", "meta"],
                   "type": "object"
                 }
               }
@@ -4987,9 +5058,7 @@
           }
         ],
         "summary": "List orders",
-        "tags": [
-          "Mobile - Orders"
-        ]
+        "tags": ["Mobile - Orders"]
       },
       "post": {
         "deprecated": true,
@@ -5002,9 +5071,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -5048,7 +5115,7 @@
                 }
               }
             },
-            "description": "VALIDATION_ERROR or guest allocation errors"
+            "description": "VALIDATION_ERROR or guest allocation errors; WEB_CART_CHECKOUT_REQUIRED from browsers"
           },
           "401": {
             "content": {
@@ -5097,9 +5164,7 @@
           }
         ],
         "summary": "Create an order (deprecated, use the Cart flow)",
-        "tags": [
-          "Mobile - Orders"
-        ]
+        "tags": ["Mobile - Orders"]
       }
     },
     "/api/v1/mobile/orders/validate-guests": {
@@ -5113,9 +5178,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -5149,7 +5212,7 @@
                 }
               }
             },
-            "description": "VALIDATION_ERROR or MAX_TICKETS_PER_ORDER_EXCEEDED or EVENT_NOT_PURCHASABLE"
+            "description": "VALIDATION_ERROR or MAX_TICKETS_PER_ORDER_EXCEEDED or EVENT_NOT_PURCHASABLE; WEB_GUESTS_NOT_ALLOWED from browsers sending guests"
           },
           "401": {
             "content": {
@@ -5198,9 +5261,7 @@
           }
         ],
         "summary": "Validate guest phone numbers for an order",
-        "tags": [
-          "Mobile - Orders"
-        ]
+        "tags": ["Mobile - Orders"]
       }
     },
     "/api/v1/mobile/orders/validate-promo-code": {
@@ -5214,9 +5275,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -5250,7 +5309,7 @@
                 }
               }
             },
-            "description": "PROMO_CODE_NOT_APPLICABLE_TO_TIER"
+            "description": "PROMO_CODE_NOT_APPLICABLE_TO_TIER; WEB_CART_CHECKOUT_REQUIRED from browsers"
           },
           "401": {
             "content": {
@@ -5299,9 +5358,7 @@
           }
         ],
         "summary": "Validate a promo code (read-only preview)",
-        "tags": [
-          "Mobile - Orders"
-        ]
+        "tags": ["Mobile - Orders"]
       }
     },
     "/api/v1/mobile/orders/{orderId}": {
@@ -5326,9 +5383,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -5371,9 +5426,7 @@
           }
         ],
         "summary": "Get order detail",
-        "tags": [
-          "Mobile - Orders"
-        ]
+        "tags": ["Mobile - Orders"]
       }
     },
     "/api/v1/mobile/orders/{orderId}/cancel": {
@@ -5398,9 +5451,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -5463,14 +5514,12 @@
           }
         ],
         "summary": "Cancel an order",
-        "tags": [
-          "Mobile - Orders"
-        ]
+        "tags": ["Mobile - Orders"]
       }
     },
     "/api/v1/mobile/orders/{orderId}/payment/initiate": {
       "post": {
-        "description": "Creates or reuses a Paymob Payment Intention for an awaiting-payment order. Requires a completed profile. Returns Paymob Mobile SDK initialization data. Never marks the order paid.",
+        "description": "Creates or reuses a Paymob Payment Intention for an awaiting-payment order. Requires a completed profile. Never marks the order paid. With no body (the app) it returns Paymob Mobile SDK initialization data, exactly as before. With {\"presentation\":\"web_redirect\",\"returnOrigin\":\"<web origin>\"} it also returns checkoutUrl for Paymob hosted checkout, which returns the browser to <returnOrigin>/checkout/return/<orderId>. The web may pay only orders placed on the web (ORDER_NOT_PAYABLE_ON_WEB). A live intention made for the other presentation is superseded by a new one, at most 3 times per order.",
         "operationId": "MobilePaymentsController_initiate_v1",
         "parameters": [
           {
@@ -5490,13 +5539,21 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiatePaymentRequestDto"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "200": {
             "content": {
@@ -5507,6 +5564,16 @@
               }
             },
             "description": "Payment initiated or existing intention reused"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "VALIDATION_ERROR, or PAYMENT_RETURN_ORIGIN_NOT_ALLOWED (returnOrigin missing, not an exact allowed origin, or sent with mobile_sdk)"
           },
           "401": {
             "content": {
@@ -5546,7 +5613,17 @@
                 }
               }
             },
-            "description": "ORDER_NOT_PAYABLE, ORDER_HOLD_EXPIRED, PAYMENT_ALREADY_COMPLETED, or PAYMENT_CONFIRMATION_PENDING"
+            "description": "ORDER_NOT_PAYABLE, ORDER_HOLD_EXPIRED, PAYMENT_ALREADY_COMPLETED, PAYMENT_CONFIRMATION_PENDING, DUPLICATE_HOLDER_PHONE, ORDER_NOT_PAYABLE_ON_WEB (web_redirect on an order placed in the app; carries orderId), or PAYMENT_PRESENTATION_SWITCH_LIMIT (web_redirect only)"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "PAYMENT_RATE_LIMITED (web_redirect only: more than 10 web initiations or retries a minute, or 30 an hour, for this account); carries retryAfterSeconds"
           },
           "500": {
             "content": {
@@ -5567,6 +5644,16 @@
               }
             },
             "description": "PAYMENT_PROVIDER_ERROR"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "PAYMENT_PROVIDER_UNAVAILABLE, or WEB_CHECKOUT_NOT_CONFIGURED (web_redirect while no web client origin is configured)"
           }
         },
         "security": [
@@ -5575,9 +5662,7 @@
           }
         ],
         "summary": "Initiate Paymob payment",
-        "tags": [
-          "Mobile - Payments"
-        ]
+        "tags": ["Mobile - Payments"]
       }
     },
     "/api/v1/mobile/orders/{orderId}/payment/status": {
@@ -5602,9 +5687,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -5647,13 +5730,12 @@
           }
         ],
         "summary": "Get payment status",
-        "tags": [
-          "Mobile - Payments"
-        ]
+        "tags": ["Mobile - Payments"]
       }
     },
     "/api/v1/mobile/orders/{orderId}/retry-payment": {
       "post": {
+        "description": "Accepts a failed, expired, or still-awaiting order. A failed or expired order is revived with a fresh hold; if Paymob then refuses the new intention, the revival is undone and the order is failed again, so the buyer can retry or start a new checkout. An awaiting order is handed to payment initiation as is. Takes the same optional body as payment/initiate: no body is the app (mobile_sdk); web_redirect with returnOrigin also returns checkoutUrl. The web may retry only orders placed on the web (ORDER_NOT_PAYABLE_ON_WEB), checked before anything is revived.",
         "operationId": "MobilePaymentRetriesController_retryPayment_v1",
         "parameters": [
           {
@@ -5662,6 +5744,7 @@
             "name": "orderId",
             "required": true,
             "schema": {
+              "example": "9b87fda2-2b61-445b-9101-1e99ef8b47b4",
               "format": "uuid",
               "type": "string"
             }
@@ -5672,13 +5755,21 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiatePaymentRequestDto"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "201": {
             "content": {
@@ -5698,7 +5789,7 @@
                 }
               }
             },
-            "description": "Invalid payment retry request"
+            "description": "VALIDATION_ERROR (including an orderId that is not a UUID), or PAYMENT_RETURN_ORIGIN_NOT_ALLOWED"
           },
           "401": {
             "content": {
@@ -5738,7 +5829,17 @@
                 }
               }
             },
-            "description": "ORDER_NOT_RETRYABLE"
+            "description": "ORDER_NOT_RETRYABLE (cancelled order), PAYMENT_ALREADY_COMPLETED, PAYMENT_CONFIRMATION_PENDING, ORDER_HOLD_EXPIRED, EVENT_NOT_ON_SALE, ORDER_NOT_PAYABLE_ON_WEB (web_redirect on an order placed in the app; carries orderId), or PAYMENT_PRESENTATION_SWITCH_LIMIT (web_redirect only)"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "PAYMENT_RATE_LIMITED (web_redirect only: more than 10 web initiations or retries a minute, or 30 an hour, for this account; shared with payment/initiate); carries retryAfterSeconds"
           },
           "502": {
             "content": {
@@ -5749,6 +5850,16 @@
               }
             },
             "description": "PAYMENT_PROVIDER_ERROR"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "PAYMENT_PROVIDER_UNAVAILABLE, or WEB_CHECKOUT_NOT_CONFIGURED"
           }
         },
         "security": [
@@ -5756,10 +5867,8 @@
             "mobile-bearer": []
           }
         ],
-        "summary": "Retry payment for a failed or expired order",
-        "tags": [
-          "Mobile"
-        ]
+        "summary": "Retry payment for an unpaid order",
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/reference/areas": {
@@ -5772,9 +5881,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -5805,9 +5912,7 @@
           }
         },
         "summary": "List active areas (public, no auth required)",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/tickets": {
@@ -5820,15 +5925,11 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ],
               "default": 20,
               "example": 20,
               "maximum": 100,
-              "minimum": 1
+              "minimum": 1,
+              "type": "number"
             }
           },
           {
@@ -5846,17 +5947,9 @@
             "name": "statuses",
             "required": false,
             "schema": {
-              "example": [
-                "active",
-                "pending_claim"
-              ],
+              "example": ["active", "pending_claim"],
               "items": {
-                "enum": [
-                  "pending_claim",
-                  "active",
-                  "voided",
-                  "refunded"
-                ],
+                "enum": ["pending_claim", "active", "voided", "refunded"],
                 "type": "string"
               },
               "type": "array"
@@ -5868,9 +5961,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -5891,10 +5982,7 @@
                       "$ref": "#/components/schemas/CursorPageMetaDto"
                     }
                   },
-                  "required": [
-                    "data",
-                    "meta"
-                  ],
+                  "required": ["data", "meta"],
                   "type": "object"
                 }
               }
@@ -5938,9 +6026,7 @@
           }
         ],
         "summary": "List authenticated holder Tickets",
-        "tags": [
-          "Mobile - Tickets"
-        ]
+        "tags": ["Mobile - Tickets"]
       }
     },
     "/api/v1/mobile/tickets/{ticketId}": {
@@ -5964,9 +6050,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6019,9 +6103,7 @@
           }
         ],
         "summary": "Get Ticket detail",
-        "tags": [
-          "Mobile - Tickets"
-        ]
+        "tags": ["Mobile - Tickets"]
       }
     },
     "/api/v1/mobile/tickets/{ticketId}/addon-context": {
@@ -6045,9 +6127,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6100,9 +6180,7 @@
           }
         ],
         "summary": "Get Ticket addon purchase context",
-        "tags": [
-          "Mobile - Tickets"
-        ]
+        "tags": ["Mobile - Tickets"]
       }
     },
     "/api/v1/mobile/tickets/{ticketId}/addons": {
@@ -6136,9 +6214,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6216,9 +6292,7 @@
           }
         ],
         "summary": "Get Addons attached to a Ticket",
-        "tags": [
-          "Mobile - Tickets"
-        ]
+        "tags": ["Mobile - Tickets"]
       }
     },
     "/api/v1/mobile/tickets/{ticketId}/claim": {
@@ -6242,9 +6316,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6297,9 +6369,84 @@
           }
         ],
         "summary": "Claim a pending Ticket",
-        "tags": [
-          "Mobile - Tickets"
-        ]
+        "tags": ["Mobile - Tickets"]
+      }
+    },
+    "/api/v1/mobile/tickets/{ticketId}/entry-pass": {
+      "get": {
+        "description": "Returns a deterministic, short-lived opaque QR credential for the authenticated holder of an active Ticket. The credential proves issuance only; admission remains authoritative downstream.",
+        "operationId": "MobileTicketsController_getEntryPass_v1",
+        "parameters": [
+          {
+            "description": "Ticket UUID",
+            "in": "path",
+            "name": "ticketId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ignored. The API always returns English responses.",
+            "in": "header",
+            "name": "Accept-Language",
+            "required": false,
+            "schema": {
+              "enum": ["en"],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntryPassResponseDto"
+                }
+              }
+            },
+            "description": "Current entry pass for the authenticated Ticket holder"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "UNAUTHORIZED"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "TICKET_NOT_FOUND"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            },
+            "description": "TICKET_NOT_ACTIVE"
+          }
+        },
+        "security": [
+          {
+            "mobile-bearer": []
+          }
+        ],
+        "summary": "Issue the current entry pass",
+        "tags": ["Mobile - Tickets"]
       }
     },
     "/api/v1/mobile/users/me": {
@@ -6312,9 +6459,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6361,7 +6506,7 @@
                 }
               }
             },
-            "description": "OTP_ATTEMPTS_EXCEEDED"
+            "description": "OTP_ATTEMPTS_EXCEEDED, or OTP_RATE_LIMITED with retryAfterSeconds and a Retry-After header when the number is locked after too many wrong codes"
           }
         },
         "security": [
@@ -6370,9 +6515,7 @@
           }
         ],
         "summary": "Delete account with OTP confirmation",
-        "tags": [
-          "Account Lifecycle"
-        ]
+        "tags": ["Account Lifecycle"]
       }
     },
     "/api/v1/mobile/users/me/deletion-preview": {
@@ -6385,9 +6528,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6430,9 +6571,7 @@
           }
         ],
         "summary": "Preview what account deletion will affect",
-        "tags": [
-          "Account Lifecycle"
-        ]
+        "tags": ["Account Lifecycle"]
       }
     },
     "/api/v1/mobile/users/me/deletion/otp/request": {
@@ -6445,9 +6584,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6494,7 +6631,7 @@
                 }
               }
             },
-            "description": "OTP_RATE_LIMITED"
+            "description": "OTP_RATE_LIMITED, with retryAfterSeconds and a Retry-After header: too soon after the last code, too many codes for this number today, or the number is locked after too many wrong codes"
           },
           "503": {
             "content": {
@@ -6513,9 +6650,7 @@
           }
         ],
         "summary": "Request a fresh account deletion OTP",
-        "tags": [
-          "Account Lifecycle"
-        ]
+        "tags": ["Account Lifecycle"]
       }
     },
     "/api/v1/mobile/users/me/email/send-verification": {
@@ -6529,9 +6664,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6604,9 +6737,7 @@
           }
         ],
         "summary": "Send an email verification link to the current user",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/users/me/email/verify": {
@@ -6620,9 +6751,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6695,9 +6824,7 @@
           }
         ],
         "summary": "Verify the current user email with a one-time token",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/users/me/profile": {
@@ -6710,9 +6837,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6785,9 +6910,7 @@
           }
         ],
         "summary": "Update current user profile (partial PATCH)",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     },
     "/api/v1/mobile/users/me/selfie": {
@@ -6800,9 +6923,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6855,9 +6976,7 @@
           }
         ],
         "summary": "Get current selfie signed URL",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       },
       "put": {
         "operationId": "MobileAppUserProfileController_uploadSelfie_v1",
@@ -6868,9 +6987,7 @@
             "name": "Accept-Language",
             "required": false,
             "schema": {
-              "enum": [
-                "en"
-              ],
+              "enum": ["en"],
               "type": "string"
             }
           }
@@ -6887,9 +7004,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "file"
-                ],
+                "required": ["file"],
                 "type": "object"
               }
             }
@@ -6944,9 +7059,7 @@
           }
         ],
         "summary": "Upload or replace selfie image",
-        "tags": [
-          "Mobile"
-        ]
+        "tags": ["Mobile"]
       }
     }
   },

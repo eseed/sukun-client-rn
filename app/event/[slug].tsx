@@ -1,6 +1,6 @@
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Modal,
@@ -25,11 +25,16 @@ import {
   YoutubeEmbed,
 } from '../../src/components/ui';
 import { useAddons, useEvent } from '../../src/hooks/queries';
-import { describeAddonKinds } from '../../src/lib/addons';
+import { AccommodationBox } from '../../src/components/events/AccommodationBox';
+import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
+import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
+import { availableStays, describeAddonKinds } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
+import { eventAvailabilityMessage } from '../../src/lib/event-availability';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
+import { trackMetaFindLocation, trackMetaViewContent } from '../../src/lib/meta-events';
 import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
@@ -57,10 +62,23 @@ export default function EventDetailScreen() {
     typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
+
+  // Meta's ViewContent, once per event shown, however often the event is refetched.
+  const viewedEventId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!event || viewedEventId.current === event.id) return;
+    viewedEventId.current = event.id;
+    trackMetaViewContent(event);
+  }, [event]);
   // The catalogue is public, so this needs no cart and no sign-in. A failed or still-loading
   // fetch reads as "no extras", which is the same silent state as a genuinely empty catalogue:
   // better to under-promise on the event page than to advertise extras that are not there.
   const addonsQuery = useAddons(eventSlug);
+  // An invitation waiting on this holder for this event: the bar offers to claim it instead of
+  // selling them a ticket. Nobody signed in has none.
+  const { tickets: waitingInvitations } = useClaimableTickets();
+  // A holder's own ticket takes a stay straight away ("Book your stay"). Nobody signed in has one.
+  const ownTicket = useOwnTicketForEvent(event?.id ?? null);
 
   // An admin can attach a video either in the dedicated links field or by pasting one into the
   // description, and the same video often arrives both ways. Collect them into one ordered,
@@ -97,17 +115,8 @@ export default function EventDetailScreen() {
   }
 
   const firstPurchasableTier = event.tiers.find((tier) => tier.isPurchasable);
-  const availability =
-    event.tiers.length === 0
-      ? 'Tickets are not available for this event.'
-      : firstPurchasableTier
-        ? 'Tickets are available now.'
-        : event.state === 'sold_out' ||
-            event.tiers.every((tier) => tier.availabilityStatus === 'sold_out')
-          ? 'This event is sold out.'
-          : event.state === 'sales_closed'
-            ? 'Sales for this event are closed.'
-            : 'Tickets are not on sale yet.';
+  const invitation = waitingInvitations.find((ticket) => ticket.event.id === event.id) ?? null;
+  const availability = eventAvailabilityMessage(event);
   const eventId = event.id;
 
   const mapUrl = venueMapUrl(event.venue);
@@ -119,10 +128,12 @@ export default function EventDetailScreen() {
 
   function onOpenVenue() {
     track('venue_map_opened', { event_id: eventId, event_slug: eventSlug ?? '' });
+    if (event) trackMetaFindLocation(event);
     void openVenueInMaps(event?.venue);
   }
 
   const addonKinds = describeAddonKinds(addonsQuery.data ?? []);
+  const stays = availableStays(addonsQuery.data ?? []);
 
   /**
    * Straight to the pass step, whoever is asking.
@@ -134,6 +145,11 @@ export default function EventDetailScreen() {
    * the one that lists the tiers, and the pass screen now carries it. See `useCheckoutAccess`.
    */
   function onGetTickets() {
+    if (invitation) {
+      track('claim_opened_from_event', { event_id: eventId, ticket_id: invitation.id });
+      router.push(`/ticket/${invitation.id}`);
+      return;
+    }
     if (!firstPurchasableTier) return;
     startCheckout(eventId, firstPurchasableTier.id);
     track('checkout_started', {
@@ -142,6 +158,35 @@ export default function EventDetailScreen() {
       tier_id: firstPurchasableTier.id,
     });
     router.push(`/checkout/pass?eventId=${eventId}`);
+  }
+
+  /**
+   * "Book your stay". A room attaches to a ticket, so where it leads depends on theirs: a holder
+   * adds it to their ticket now; a waiting invitee claims first, as "Claim ticket" does; anyone
+   * else starts the ticket checkout, whose pass step says why (`for=stay`) and whose add-ons step
+   * offers the room with the ticket.
+   */
+  function onBookStay() {
+    track('stay_box_opened', {
+      event_id: eventId,
+      has_ticket: ownTicket !== null,
+      invited: invitation !== null,
+    });
+    if (ownTicket) {
+      router.push(`/ticket/${ownTicket.id}/extras`);
+      return;
+    }
+    if (invitation || !firstPurchasableTier) {
+      onGetTickets();
+      return;
+    }
+    startCheckout(eventId, firstPurchasableTier.id);
+    track('checkout_started', {
+      event_id: eventId,
+      event_slug: eventSlug ?? '',
+      tier_id: firstPurchasableTier.id,
+    });
+    router.push(`/checkout/pass?eventId=${eventId}&for=stay`);
   }
 
   return (
@@ -250,7 +295,10 @@ export default function EventDetailScreen() {
             without a cart and cannot be bought without a ticket in it. A control that only
             repeated "Get tickets" would be a second CTA pretending to be a third thing.
           */}
-          {addonKinds ? (
+          {/* Somewhere to stay is worth more than a line: it gets its own box, which books it. */}
+          {stays.length > 0 ? (
+            <AccommodationBox stays={stays} onPress={onBookStay} />
+          ) : addonKinds ? (
             <View
               accessible
               accessibilityLabel={`Add-ons available: ${addonKinds}`}
@@ -309,6 +357,24 @@ export default function EventDetailScreen() {
               <Text variant="bodyMuted">{event.whatToBring}</Text>
             </>
           ) : null}
+
+          {/*
+            The event's own terms and cancellation policy, on the page as well as under a
+            picture, so an event without photos still shows them before anyone pays.
+          */}
+          {event.terms || event.cancellationPolicy ? (
+            <>
+              <Text variant="eyebrow" style={styles.sectionLabelSpaced}>
+                Before you book
+              </Text>
+              {event.terms ? <MarkdownText markdown={event.terms} variant="bodyMuted" /> : null}
+              {event.cancellationPolicy ? (
+                <Text variant="metaSm" style={styles.policy}>
+                  Cancellation: {event.cancellationPolicy}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -317,18 +383,24 @@ export default function EventDetailScreen() {
       )}
 
       <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.barPriceBlock}>
-          <Text style={styles.barLabel}>From</Text>
-          <Text style={styles.barPrice}>
-            {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
-          </Text>
-        </View>
+        {/* A holder with an invitation waiting is not buying, so no price is shown to them. */}
+        {invitation ? null : (
+          <View style={styles.barPriceBlock}>
+            <Text style={styles.barLabel}>From</Text>
+            <Text style={styles.barPrice}>
+              {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
+            </Text>
+          </View>
+        )}
         <Button
-          label={firstPurchasableTier ? 'Get tickets' : 'Not available'}
+          label={
+            invitation ? 'Claim ticket' : firstPurchasableTier ? 'Get tickets' : 'Not available'
+          }
           variant="accent"
           size="inline"
+          style={invitation ? styles.flex : undefined}
           onPress={onGetTickets}
-          disabled={!firstPurchasableTier}
+          disabled={!invitation && !firstPurchasableTier}
         />
       </View>
 

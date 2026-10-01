@@ -7,12 +7,14 @@ import {
 } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { api } from '../api';
+import { ENTRY_QR_REFRESH_INTERVAL_MS, isEntryPassResponseForTicket } from '../lib/entry-pass';
 import type {
   CartAddonInput,
   CurrentUser,
   EntryPass,
   EventListItem,
   GuestValidationInput,
+  InvitePlusOneInput,
   ListEventsQuery,
   PaymentStatus,
   ReplaceCartTicketsInput,
@@ -611,14 +613,42 @@ export function useClaimTicket() {
   });
 }
 
-/**
- * The rotating entry pass. Refetches on the cadence the server dictates, so a screenshot
- * goes stale (CLAUDE.md rule 3).
- *
- * PENDING BACKEND — the live route is wired but not deployed, so it answers 404 until the
- * backend adds it; the screen reads that as "not issued yet" and this build picks up the real
- * pass with no rebuild. See `EntryPass` in `src/api/types.ts`.
- */
+/** "Sorry, can't make it": the ticket is voided, so it drops out of every list and detail. */
+export function useDeclineTicket() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (ticketId: string) => api.tickets.decline(ticketId),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.ticketsRoot });
+      void client.invalidateQueries({ queryKey: queryKeys.ticketRoot });
+    },
+  });
+}
+
+export function useInvitePlusOne() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ticketId: string; plusOne: InvitePlusOneInput }) =>
+      api.tickets.invitePlusOne(input.ticketId, input.plusOne),
+    onSuccess: (ticket) => {
+      client.setQueryData(queryKeys.ticket(ticket.id), ticket);
+      void client.invalidateQueries({ queryKey: queryKeys.ticketsRoot });
+    },
+  });
+}
+
+export function useRemovePlusOne() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (ticketId: string) => api.tickets.removePlusOne(ticketId),
+    onSuccess: (ticket) => {
+      client.setQueryData(queryKeys.ticket(ticket.id), ticket);
+      void client.invalidateQueries({ queryKey: queryKeys.ticketsRoot });
+    },
+  });
+}
+
+/** The short-lived entry pass is cached in memory and refreshed by its active screen. */
 export function useEntryPass(
   ticketId: string | undefined,
   options?: Partial<UseQueryOptions<EntryPass>>,
@@ -626,11 +656,23 @@ export function useEntryPass(
   const signedIn = useAuthStore((s) => s.status === 'signed-in');
   return useQuery({
     queryKey: queryKeys.entryPass(ticketId ?? ''),
-    queryFn: () => api.tickets.entryPass(ticketId as string),
+    queryFn: async () => {
+      const requestedTicketId = ticketId as string;
+      const pass = await api.tickets.entryPass(requestedTicketId);
+      if (!isEntryPassResponseForTicket(pass, requestedTicketId)) {
+        throw new Error('The entry pass response was invalid.');
+      }
+      return pass;
+    },
     ...options,
     enabled: signedIn && Boolean(ticketId) && (options?.enabled ?? true),
-    refetchInterval: (query) =>
-      query.state.error ? false : (query.state.data?.refreshAfterSeconds ?? 30) * 1000,
+    // Keep passes in TanStack Query's in-memory cache only. The screen owns a deadline timer
+    // based on the response timestamp, server refresh cadence, and hard expiry.
+    staleTime: ENTRY_QR_REFRESH_INTERVAL_MS,
+    gcTime: ENTRY_QR_REFRESH_INTERVAL_MS,
+    refetchOnMount: false,
+    refetchInterval: false,
+    retry: false,
   });
 }
 

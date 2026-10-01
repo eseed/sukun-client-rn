@@ -55,6 +55,12 @@ export const SECURE_KEYS = {
    * feature's availability, the other is a person's choice within it. See `src/stores/flags.ts`.
    */
   allowGuestBrowsing: 'sukun.allowGuestBrowsing',
+  /**
+   * The last force update rule `public/app-config` gave for this platform, as JSON, so a device
+   * that was told to update stays blocked on a launch that cannot reach the backend. See
+   * `src/stores/flags.ts`.
+   */
+  forceUpdateRule: 'sukun.forceUpdateRule',
   acquisitionDeviceId: 'sukun.acquisition.deviceId',
   acquisitionDeviceIdentityInvalid: 'sukun.acquisition.deviceIdentityInvalid',
   acquisitionAttributionState: 'sukun.acquisition.attributionState',

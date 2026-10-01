@@ -6,6 +6,8 @@ import { BulletHeading, ResourceState, Screen } from '../../src/components/ui';
 import { SignInPrompt } from '../../src/components/SignInPrompt';
 import { TicketCard } from '../../src/components/tickets/TicketCard';
 import { useAddons, useTickets } from '../../src/hooks/queries';
+import { availableStays, stayPhotos } from '../../src/lib/addons';
+import { track } from '../../src/lib/analytics';
 import { useAuthStore } from '../../src/stores/auth';
 
 /**
@@ -125,6 +127,18 @@ function TicketGroupCard({
   const catalogue = useAddons(lead.event.id);
   // Nothing yet, an empty catalogue and a flag-off 404 all read the same way: no entry point.
   const sellsExtras = (catalogue.data?.length ?? 0) > 0;
+  const stays = availableStays(catalogue.data ?? []);
+
+  // A stay is an extra on this ticket, so booking one goes where the event page sends a holder.
+  function onBookStay() {
+    track('stay_box_opened', {
+      event_id: lead.event.id,
+      has_ticket: true,
+      invited: false,
+      source: 'tickets',
+    });
+    onAddExtras();
+  }
 
   return (
     <TicketCard
@@ -133,6 +147,11 @@ function TicketGroupCard({
       addonCount={addonCount}
       onPress={onPress}
       onAddExtras={sellsExtras ? onAddExtras : undefined}
+      stay={
+        stays.length > 0
+          ? { photoUrl: stayPhotos(stays, 1)[0]?.url ?? null, onBook: onBookStay }
+          : undefined
+      }
     />
   );
 }

@@ -76,6 +76,10 @@ describe('misc', () => {
     expect(formatCountdown(29)).toBe('0:29');
     expect(formatCountdown(90)).toBe('1:30');
     expect(formatCountdown(-5)).toBe('0:00');
+    expect(formatCountdown(3599)).toBe('59:59');
+    // An hour or more reads h:mm:ss.
+    expect(formatCountdown(3600)).toBe('1:00:00');
+    expect(formatCountdown(86370)).toBe('23:59:30');
   });
 
   it('builds a two-letter monogram', () => {

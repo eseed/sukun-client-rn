@@ -131,6 +131,16 @@ node "$ROOT/scripts/assert-bundle-env.mjs" "$EAS_PROFILE" ios "$EXPORT_DIR/Sukun
 node "$ROOT/scripts/assert-ios-scene-support.mjs" "$EXPORT_DIR/Sukun.ipa"
 
 APP="$ARCHIVE/Products/Applications/Sukun.app"
+
+# A build signed without aps-environment installs and runs, and simply never receives a push:
+# Expo's receipts come back DeviceNotRegistered or InvalidCredentials. Check what was signed.
+APS="$(codesign -d --entitlements - --xml "$APP" 2>/dev/null \
+  | plutil -extract aps-environment raw -o - - 2>/dev/null || true)"
+if grep -q '"expo-notifications"' "$ROOT/app.json" && [ "$APS" != "production" ]; then
+  echo "The app was signed with aps-environment \"${APS:-<none>}\", not \"production\"." >&2
+  exit 1
+fi
+
 echo
 echo "built: $EXPORT_DIR/Sukun.ipa"
 ls -lh "$EXPORT_DIR/Sukun.ipa" | awk '{print "size:  " $5}'

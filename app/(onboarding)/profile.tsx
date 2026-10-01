@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
@@ -21,12 +21,18 @@ import {
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { setUserProperties, track } from '../../src/lib/analytics';
+import { trackMetaCompleteRegistration } from '../../src/lib/meta-events';
 import { messageForError } from '../../src/lib/errors';
 import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
-import { missingProfileFields, resumeAfterOnboarding, useAuthStore } from '../../src/stores/auth';
+import {
+  continueAfterProfile,
+  missingProfileFields,
+  resumeAfterOnboarding,
+  useAuthStore,
+} from '../../src/stores/auth';
 import {
   countryRequiresLivingArea,
   DEFAULT_COUNTRY,
@@ -90,16 +96,27 @@ export default function ProfileFormScreen() {
   const updateProfile = useUpdateProfile();
   const schema = useMemo(() => buildSchema(areaRequired), [areaRequired]);
 
+  // A claim that was waiting on this form. It cannot be skipped then: the claim needs it.
+  const claiming = useAuthStore((state) => state.pendingClaimTicketId !== null);
+  // Set once this form saves, so the effect below leaves the way on to the save that did it.
+  const [saved, setSaved] = useState(false);
   const [sheet, setSheet] = useState<'gender' | 'area' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const flower = designAsset('decoFlower');
 
+  /*
+   * Only the form on screen moves on. Two can be stacked (the claim screen can open over sign-up,
+   * and a claim then asks for this form again), and both see the profile become complete when
+   * the top one saves. The one underneath once took the pending claim to the ticket, and the top
+   * one's own exit then replaced that ticket before the claim was made.
+   */
+  const isFocused = useIsFocused();
   useEffect(() => {
-    if (!user) return;
+    if (!user || saved || !isFocused) return;
     if (user.profileComplete || missingProfileFields(user).length === 0) {
       resumeAfterOnboarding(router);
     }
-  }, [router, user]);
+  }, [isFocused, router, saved, user]);
 
   const { control, handleSubmit, formState, reset } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -129,8 +146,9 @@ export default function ProfileFormScreen() {
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null);
+    setSaved(true);
     try {
-      await updateProfile.mutateAsync({
+      const updated = await updateProfile.mutateAsync({
         fullName: values.fullName,
         email: values.email,
         dateOfBirth: values.dateOfBirth,
@@ -152,10 +170,12 @@ export default function ProfileFormScreen() {
       // This is the end of registration now, so the signup event belongs here.
       if (useAuthStore.getState().isNewUser) {
         track('signup_completed');
+        trackMetaCompleteRegistration();
         useAuthStore.getState().setIsNewUser(false);
       }
-      resumeAfterOnboarding(router);
+      continueAfterProfile(router, updated);
     } catch (err) {
+      setSaved(false);
       setSubmitError(messageForError(err));
     }
   });
@@ -181,6 +201,13 @@ export default function ProfileFormScreen() {
    * screen means dropping the half-finished session, so it is confirmed first.
    */
   function confirmChangeNumber() {
+    // Here to claim a ticket: back is "not now" to the claim, not a different number.
+    if (claiming) {
+      useAuthStore.getState().setPendingClaimTicketId(null);
+      if (router.canGoBack()) router.back();
+      else router.replace('/(tabs)/tickets');
+      return;
+    }
     Alert.alert(
       'Use a different number?',
       "You'll go back to the start and verify the new number.",
@@ -192,7 +219,7 @@ export default function ProfileFormScreen() {
           onPress: () => {
             void useAuthStore
               .getState()
-              .signOut({ remote: false })
+              .signOut({ remote: false, revokePushToken: true })
               .then(() => router.replace('/(onboarding)/phone'));
           },
         },
@@ -228,10 +255,15 @@ export default function ProfileFormScreen() {
 
       <BackButton onPress={confirmChangeNumber} style={styles.back} />
 
-      <StepLabel>Step 2 of 2</StepLabel>
+      <StepLabel>{claiming ? 'Before you claim' : 'Step 2 of 2'}</StepLabel>
       <View style={styles.heading}>
         <BulletHeading title="A little about you" size="lg" />
       </View>
+      {claiming ? (
+        <Text variant="bodyMuted" style={styles.claimNote}>
+          Your ticket needs these details. Fill them in and we&apos;ll claim it for you.
+        </Text>
+      ) : null}
 
       <View style={styles.fields}>
         <Controller
@@ -367,7 +399,7 @@ export default function ProfileFormScreen() {
         phone field: a registered user three steps and a destructive confirmation away from
         public content.
       */}
-      {allowGuestBrowsing ? (
+      {allowGuestBrowsing && !claiming ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Browse events without finishing setup"
@@ -386,6 +418,9 @@ export default function ProfileFormScreen() {
 }
 
 const styles = StyleSheet.create({
+  claimNote: {
+    marginBottom: 20,
+  },
   defer: {
     alignSelf: 'center',
     marginTop: 16,

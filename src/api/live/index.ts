@@ -88,6 +88,13 @@ function normalizeTicket(ticket: LiveTicket): Ticket {
     // Absent on builds served by a backend that predates ticket addon counts, and on any build
     // running with addons switched off, where "no addons" is the honest answer.
     addonCount: ticket.addonCount ?? 0,
+    // Absent from a backend that predates claims taking seats. Treated as claimable: that
+    // backend lets every waiting grant be claimed.
+    claimAvailability:
+      ticket.claimAvailability ??
+      (ticket.source === 'invitation' && ticket.status === 'pending_claim' ? 'available' : null),
+    invitedBy: ticket.invitedBy ?? null,
+    plusOne: ticket.plusOne ?? null,
   };
 }
 
@@ -371,14 +378,24 @@ export const liveApi: SukunApi = {
         normalizeTicket,
       ),
 
-    /**
-     * PENDING BACKEND — `MobileTicketsController` exposes list / detail / claim only, so this
-     * route answers 404 today. It is wired anyway rather than thrown locally on purpose: the
-     * day the backend serves it at this path, installed apps start rendering real QRs with no
-     * new build. Until then the 404 reaches the screen as `isEntryPassNotIssued`, which shows
-     * the "check back" placeholder instead of an error. Response shape: `EntryPass` in
-     * `../types` — the endpoint must match that contract, path included.
-     */
+    /** Current authenticated holder pass, with a signed payload and server expiry. */
+    // POST mobile/tickets/:ticketId/decline — 204
+    decline: (ticketId) =>
+      request<void>(`mobile/tickets/${ticketId}/decline`, { method: 'POST' }).then(() => undefined),
+
+    // PUT mobile/tickets/:ticketId/plus-one
+    invitePlusOne: (ticketId, input) =>
+      request<LiveTicket>(`mobile/tickets/${ticketId}/plus-one`, {
+        method: 'PUT',
+        body: { name: input.name, phoneNumber: normalizePhoneForRequest(input.phoneNumber) },
+      }).then(normalizeTicket),
+
+    // DELETE mobile/tickets/:ticketId/plus-one
+    removePlusOne: (ticketId) =>
+      request<LiveTicket>(`mobile/tickets/${ticketId}/plus-one`, { method: 'DELETE' }).then(
+        normalizeTicket,
+      ),
+
     entryPass: (ticketId) => request<EntryPass>(`mobile/tickets/${ticketId}/entry-pass`),
 
     // GET mobile/tickets/:ticketId/addons

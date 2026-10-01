@@ -157,10 +157,16 @@ export function formatTagLabel(tag: string): string {
     .join(' ');
 }
 
-/** Seconds → `"0:29"`, for the resend and QR-rotation timers. */
+/**
+ * Seconds → `"0:29"`, for the resend, hold and QR-rotation timers. An hour or more reads
+ * `"23:59:30"` (h:mm:ss), so a long wait such as a number's next code after its daily limit
+ * never shows as `"1439:30"`.
+ */
 export function formatCountdown(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const seconds = String(s % 60).padStart(2, '0');
+  if (s < 3600) return `${Math.floor(s / 60)}:${seconds}`;
+  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${seconds}`;
 }
 
 /** Two-letter monogram for the avatar chip: `"Yasmin El Sayed"` → `"YE"`. */

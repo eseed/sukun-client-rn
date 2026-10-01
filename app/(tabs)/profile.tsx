@@ -138,6 +138,16 @@ export default function ProfileScreen() {
                 <ListRow label="Edit profile" />
               </Pressable>
 
+              {/* Optional here, as after the profile form: only the QR code needs it. */}
+              {!user.selfieUploaded ? (
+                <Pressable
+                  onPress={() => router.push('/account/selfie?next=back')}
+                  accessibilityRole="button"
+                >
+                  <ListRow label="Add your selfie for your QR code" />
+                </Pressable>
+              ) : null}
+
               <Pressable onPress={() => router.push('/orders')} accessibilityRole="button">
                 <ListRow label="Order history" />
               </Pressable>

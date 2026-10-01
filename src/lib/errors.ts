@@ -30,6 +30,20 @@ const MESSAGES: Record<string, string> = {
   ORDER_NOT_FOUND: "We couldn't find that order.",
   TICKET_NOT_FOUND: "We couldn't find that ticket.",
   TICKET_FORBIDDEN: 'That ticket is not yours.',
+  // A granted ticket revoked, or one already claimed on another account, before this claim.
+  TICKET_NOT_CLAIMABLE: 'This ticket can no longer be claimed.',
+  // A granted ticket takes its seat when it is claimed, so a full or closed event refuses it.
+  CLAIM_SOLD_OUT: 'This event is sold out, so this ticket can no longer be claimed.',
+  CLAIM_NOT_ON_SALE:
+    "Tickets for this event aren't on sale right now, so this one can't be claimed yet.",
+  TICKET_NOT_DECLINABLE: 'This ticket is already yours, so there is nothing to decline.',
+  PLUS_ONE_NOT_ALLOWED: 'This invitation does not include a plus one.',
+  PLUS_ONE_ALREADY_INVITED:
+    "You've already invited someone. Remove them first to invite someone else.",
+  PLUS_ONE_IS_SELF: "Enter your plus one's number, not yours.",
+  PLUS_ONE_ALREADY_CLAIMED: 'Your plus one has already claimed their ticket.',
+  ALREADY_HAS_TICKET: 'That number already has a ticket for this event.',
+  EVENT_NOT_INVITABLE: "This event isn't taking invitations right now.",
   TICKET_FILTER_INVALID: "We couldn't load your tickets. Try again.",
   BUYER_NOT_FOUND: 'Complete your profile before buying tickets.',
   SELFIE_NOT_FOUND: 'Add your selfie to use this ticket.',
@@ -126,6 +140,37 @@ const MESSAGES: Record<string, string> = {
   EMAIL_VERIFICATION_TOKEN_INVALID: 'That verification link is not valid. Send a new one.',
   EMAIL_VERIFICATION_TARGET_MISMATCH: 'That link was for a different email address.',
 
+  /*
+   * Cart and place-order refusals the backend sends in a race (a pass or an extra selling out
+   * between review and Pay, a code that stopped applying). Said plainly rather than falling back
+   * to "Something went wrong". The web client carries the same copy.
+   */
+  CART_EVENT_MISMATCH: 'That pass is no longer available.',
+  EVENT_NOT_ON_SALE: 'Tickets for this event are no longer on sale.',
+  TIER_NOT_AVAILABLE: 'That pass is no longer on sale.',
+  CAPACITY_NO_LONGER_AVAILABLE: 'This pass just sold out.',
+  // Test and real accounts cannot buy for each other.
+  ORDER_COMMERCE_MODE_MISMATCH: "This order can't be placed from this account.",
+  ZERO_TOTAL_ORDER_NOT_ALLOWED:
+    "Free orders can't be placed here. If you used a promo code, remove it to continue.",
+  ADDON_OPTION_NOT_FOUND:
+    'One of your extras is no longer available. Go back and check your extras.',
+  ADDON_OPTION_NOT_AVAILABLE:
+    'One of your extras is no longer available. Go back and check your extras.',
+  // The event takes no tickets per order right now.
+  CART_TICKET_ITEM_NOT_FOUND: "Tickets for this event can't be bought right now.",
+  CART_NOT_FOUND: 'This checkout is no longer available. Start again from the event.',
+  // An option twice, or a quantity out of bounds.
+  CART_LINE_PAYLOAD_INVALID:
+    "We can't take one of your extras as picked. Go back and check your extras.",
+  ADDONS_FEATURE_DISABLED:
+    "Extras can't be booked for this event right now. Go back and remove them to continue.",
+  // Disabled codes read exactly like unknown ones.
+  PROMO_CODE_DISABLED: 'That promo code is not valid.',
+  PROMO_NOT_APPLICABLE_TO_CART: 'That promo code does not apply to this order.',
+  // Order placement's spelling of the tier refusal.
+  PROMO_CODE_NOT_ELIGIBLE_FOR_TIER: 'That promo code does not apply to this pass.',
+
   VALIDATION_ERROR: 'Some of those details are not valid. Check and try again.',
   INTERNAL_SERVER_ERROR: 'Something went wrong on our side. Try again in a moment.',
 };
@@ -141,22 +186,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export function codeForError(error: unknown): string | undefined {
+  if (!isRecord(error) || typeof error.code !== 'string') return undefined;
+  return error.code;
+}
+
 /**
  * True when there is simply no entry pass to show yet, as opposed to one that failed to load.
  *
- * Two situations produce it and the screen treats them alike: the entry-pass route is not
- * deployed yet (it answers 404/405/501), or the backend has the route and declines to mint a
- * code this far out from the event. Neither is something the holder can retry, so the pass
- * panel shows its "check back" placeholder rather than an error. The `ENTRY_PASS_NOT_*` prefix
- * is here ahead of the backend on purpose: whatever it names that refusal, this build already
- * reads it as "not yet" instead of falling through to generic error copy.
+ * Legacy route-unavailable responses and explicit entry-window refusals are not retryable from
+ * the screen. A 404 by itself is deliberately excluded: the P1 route uses TICKET_NOT_FOUND for
+ * an unknown or unowned ticket, and that must refresh ticket state rather than look like a pass
+ * that is merely not ready yet.
  */
 export function isEntryPassNotIssued(error: unknown): boolean {
   if (!isRecord(error)) return false;
   const status = typeof error.status === 'number' ? error.status : 0;
-  const code = typeof error.code === 'string' ? error.code : '';
+  const code = codeForError(error) ?? '';
   return (
-    status === 404 ||
     status === 405 ||
     status === 501 ||
     code === 'NOT_IMPLEMENTED' ||
@@ -165,11 +212,44 @@ export function isEntryPassNotIssued(error: unknown): boolean {
 }
 
 /** Pulls a display message off whatever the api layer threw. */
+/**
+ * Refusals whose copy says how long to wait, from the error's `retryAfterSeconds`. One wording for
+ * every per-number OTP refusal (resend too soon, daily cap, lock after wrong codes), so it never
+ * hints at whether the number has an account. Without a wait they fall back to MESSAGES.
+ */
+const RATE_LIMIT_TEMPLATES: Record<string, string> = {
+  OTP_RATE_LIMITED: 'Too many code attempts for this number. Try again in {wait}.',
+};
+
+function unit(count: number, singular: string): string {
+  return `${count} ${count === 1 ? singular : `${singular}s`}`;
+}
+
+/**
+ * `retryAfterSeconds` as copy: seconds under two minutes (`"90 seconds"`, matching a 1:30
+ * countdown), whole minutes under two hours, then whole hours, always rounded up. `null` when
+ * the refusal gave no usable wait.
+ */
+function waitText(retryAfterSeconds: unknown): string | null {
+  if (typeof retryAfterSeconds !== 'number' || !Number.isFinite(retryAfterSeconds)) return null;
+  const seconds = Math.max(1, Math.ceil(retryAfterSeconds));
+  if (seconds < 120) return unit(seconds, 'second');
+  if (seconds < 7200) return unit(Math.ceil(seconds / 60), 'minute');
+  return unit(Math.ceil(seconds / 3600), 'hour');
+}
+
+function rateLimitMessage(code: string, retryAfterSeconds: unknown): string | null {
+  const template = RATE_LIMIT_TEMPLATES[code];
+  if (!template) return null;
+  const wait = waitText(retryAfterSeconds);
+  return wait ? template.replace('{wait}', wait) : null;
+}
+
 export function messageForError(error: unknown): string {
   if (isRecord(error)) {
     const code = error.code;
     if (typeof code === 'string') {
-      return messageForCode(code);
+      return rateLimitMessage(code, error.retryAfterSeconds) ?? messageForCode(code);
     }
     if (typeof error.message === 'string' && error.message.trim()) return error.message;
   }

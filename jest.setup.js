@@ -8,6 +8,7 @@ process.env.EXPO_PUBLIC_API_MODE = 'mock';
 process.env.EXPO_PUBLIC_ANALYTICS_ENV = 'test';
 process.env.EXPO_PUBLIC_MIXPANEL_TOKEN = 'test-mixpanel-token';
 process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID = 'test-clarity-id';
+process.env.EXPO_PUBLIC_META_APP_ID = 'test-meta-app-id';
 
 jest.mock('expo-secure-store', () => {
   const store = new Map();
@@ -112,6 +113,11 @@ jest.mock('@microsoft/react-native-clarity', () => ({
   LogLevel: { None: 'None', Verbose: 'Verbose' },
 }));
 
+jest.mock('react-native-fbsdk-next', () => ({
+  Settings: { initializeSDK: jest.fn(), setAutoLogAppEventsEnabled: jest.fn() },
+  AppEventsLogger: { logEvent: jest.fn(), logPurchase: jest.fn(), setFlushBehavior: jest.fn() },
+}));
+
 // `src/lib/nativeModules.ts` refuses to load a package whose native module is not in the
 // binary, and it reads the same registries at test time. So every package mocked here also
 // needs its native module registered, or the code under test will skip the mock as missing.
@@ -119,6 +125,8 @@ const { NativeModules } = require('react-native');
 NativeModules.Clarity = NativeModules.Clarity ?? {};
 NativeModules.ClarityEmitter = NativeModules.ClarityEmitter ?? {};
 NativeModules.MixpanelReactNative = NativeModules.MixpanelReactNative ?? {};
+NativeModules.FBSettings = NativeModules.FBSettings ?? {};
+NativeModules.FBAppEventsLogger = NativeModules.FBAppEventsLogger ?? {};
 if (globalThis.expo?.modules) {
   globalThis.expo.modules.ExpoLocalization = globalThis.expo.modules.ExpoLocalization ?? {};
 }

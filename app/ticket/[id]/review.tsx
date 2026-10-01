@@ -30,6 +30,7 @@ import { describeOption } from '../../../src/lib/addons';
 import { messageForError } from '../../../src/lib/errors';
 import { formatEgp } from '../../../src/lib/format';
 import { track } from '../../../src/lib/analytics';
+import { trackMetaAddPaymentInfo, trackMetaInitiateCheckout } from '../../../src/lib/meta-events';
 import { beginPaymentAttempt, trackPaymentFailed } from '../../../src/lib/purchase-analytics';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import { colors, fontFamily, space } from '../../../src/theme/tokens';
@@ -291,6 +292,8 @@ export default function TicketExtrasReviewScreen() {
       return;
     }
 
+    if (cart) trackMetaInitiateCheckout({ cart, totalEgp: pricing?.totalEgp });
+
     try {
       const placed =
         order ?? (await placeOrder.mutateAsync({ cartId, pricingConfirmationToken: token }));
@@ -314,6 +317,7 @@ export default function TicketExtrasReviewScreen() {
         currency: placed.currency,
       });
       beginPaymentAttempt(placed.id);
+      trackMetaAddPaymentInfo(placed);
       sheet.present(intent);
     } catch (err) {
       const code =

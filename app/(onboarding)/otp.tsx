@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import {
@@ -24,11 +24,28 @@ import {
 import { colors, fontFamily } from '../../src/theme/tokens';
 
 const CODE_LENGTH = 4;
+/** The resend wait when the server does not say (it normally does, and the wait grows). */
 const RESEND_SECONDS = 30;
+
+/** A wait the server gave, in whole seconds, or null when it is missing or not positive. */
+function positiveSeconds(value: unknown): number | null {
+  const seconds = typeof value === 'string' ? Number(value) : value;
+  return typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+    ? Math.ceil(seconds)
+    : null;
+}
+
+/** `retryAfterSeconds` off a refused request, when it carries one. */
+function retryAfterOf(error: unknown): number | null {
+  return typeof error === 'object' && error !== null && 'retryAfterSeconds' in error
+    ? positiveSeconds((error as { retryAfterSeconds?: unknown }).retryAfterSeconds)
+    : null;
+}
 
 /** Design screen 03 · Verify code. */
 export default function OtpScreen() {
   const router = useRouter();
+  const { resendAfter } = useLocalSearchParams<{ resendAfter?: string }>();
   const pendingPhone = useAuthStore((s) => s.pendingPhone);
   const status = useAuthStore((s) => s.status);
   const verifyOtp = useVerifyOtp();
@@ -39,7 +56,9 @@ export default function OtpScreen() {
   // per entered code and the Verify button can never double-post the same one.
   const submittedCode = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(
+    () => positiveSeconds(resendAfter) ?? RESEND_SECONDS,
+  );
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -123,10 +142,13 @@ export default function OtpScreen() {
     if (!pendingPhone || !isValidPhone(pendingPhone) || secondsLeft > 0) return;
     setError(null);
     try {
-      await requestOtp.mutateAsync(pendingPhone);
-      setSecondsLeft(RESEND_SECONDS);
+      const result = await requestOtp.mutateAsync(pendingPhone);
+      setSecondsLeft(positiveSeconds(result.resendAfterSeconds) ?? RESEND_SECONDS);
     } catch (err) {
       setError(messageForError(err));
+      // A refused resend says how long to wait: count down from that instead of reopening now.
+      const wait = retryAfterOf(err);
+      if (wait !== null) setSecondsLeft(wait);
     }
   }
 
@@ -172,7 +194,12 @@ export default function OtpScreen() {
 
       <View style={styles.spacer} />
 
-      <Button label="Verify" onPress={() => void onVerify()} disabled={!ready} loading={verifyOtp.isPending} />
+      <Button
+        label="Verify"
+        onPress={() => void onVerify()}
+        disabled={!ready}
+        loading={verifyOtp.isPending}
+      />
     </Screen>
   );
 }
