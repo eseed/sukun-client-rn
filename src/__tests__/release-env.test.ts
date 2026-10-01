@@ -105,4 +105,11 @@ describe('dev sign-in never reaches a store build', () => {
     expect(check).toContain("'mobile/auth/dev-sign-in'");
     expect(check).toContain("'Dev sign-in (test account)'");
   });
+
+  it('the finished-bundle check looks for the Meta warning the app actually logs', () => {
+    // The Meta app id folds away in a release bundle, so the check keys on this warning instead.
+    const warning = read('scripts/assert-bundle-env.mjs').match(/NO_META_APP_ID = '([^']+)'/)?.[1];
+    expect(warning).toBeTruthy();
+    expect(read('src/lib/analytics.ts')).toContain(warning);
+  });
 });
