@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "32",
+      "buildNumber": "33",
       "bundleIdentifier": "co.sukunwellness",
       "associatedDomains": [
         "applinks:book.sukunwellness.co",

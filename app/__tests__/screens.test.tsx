@@ -167,6 +167,18 @@ interface CartCheckoutInput {
  * without one, so a test that renders review has to arrive carrying a cart id exactly as the
  * real flow does.
  */
+/**
+ * Pays an order through the mock's simulated webhook, so the server says `paid`. The
+ * confirmation screen only says a ticket is ready once it does.
+ */
+async function payOrder(orderId: string) {
+  const settleDelay = mockConfig.settleDelayMs;
+  mockConfig.settleDelayMs = 0;
+  await mockApi.payments.initiate(orderId);
+  await mockApi.payments.status(orderId);
+  mockConfig.settleDelayMs = settleDelay;
+}
+
 async function startCartCheckout(input: CartCheckoutInput) {
   const cart = await mockApi.carts.create(input.eventId);
   await mockApi.carts.replaceTickets(cart.id, {
@@ -1212,6 +1224,11 @@ describe('10 Review & pay', () => {
     });
     useCheckoutStore.getState().setTermsAccepted(true);
 
+    // The bank declines it: the simulated webhook fails the order as soon as it is asked.
+    mockConfig.paymentOutcome = 'failed';
+    const settleDelay = mockConfig.settleDelayMs;
+    mockConfig.settleDelayMs = 0;
+
     renderWithProviders(<ReviewScreen />);
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
@@ -1221,14 +1238,61 @@ describe('10 Review & pay', () => {
     await waitFor(() => expect(useCheckoutStore.getState().orderId).toBeTruthy());
     const orderId = useCheckoutStore.getState().orderId!;
 
-    await mockApi.orders.cancel(orderId);
-
     const listener = mockPaymob.setSdkListener!.mock.calls.at(-1)?.[0] as (r: unknown) => void;
     act(() => listener({ status: 'Fail' }));
 
     await waitFor(() =>
       expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${orderId}`),
     );
+    mockConfig.settleDelayMs = settleDelay;
+  });
+
+  /**
+   * A buyer stuck on the bank's verification page closes the sheet with X, and the sheet says
+   * CANCELLED over a payment the bank may still confirm. Review must not tell them nothing was
+   * charged: it checks the server first, and hands the still-pending order to the payment
+   * screen, which says it is checking with the bank.
+   */
+  it('checks the server after a cancel, and never says nothing was charged over a pending payment', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(1);
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    useCheckoutStore.getState().addGuest({
+      phoneNumber: '+201022334455',
+      name: 'Nour Hassan',
+      fromContacts: false,
+    });
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    useCheckoutStore.getState().setTermsAccepted(true);
+    mockConfig.paymentOutcome = 'stuck';
+    const status = jest.spyOn(mockApi.payments, 'status');
+
+    renderWithProviders(<ReviewScreen />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
+    );
+
+    fireEvent.press(screen.getByText('Continue to payment'));
+    await waitFor(() => expect(useCheckoutStore.getState().orderId).toBeTruthy());
+    const orderId = useCheckoutStore.getState().orderId!;
+    const callsBeforeVerdict = status.mock.calls.length;
+
+    const listener = mockPaymob.setSdkListener!.mock.calls.at(-1)?.[0] as (r: unknown) => void;
+    act(() => listener({ status: 'Cancelled' }));
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${orderId}`),
+    );
+    expect(status.mock.calls.length).toBeGreaterThan(callsBeforeVerdict);
+    expect(screen.queryByText(/Nothing was charged/)).toBeNull();
+    status.mockRestore();
   });
 });
 
@@ -1275,6 +1339,7 @@ describe('12 Confirmation', () => {
         { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
       ],
     });
+    await payOrder(order.id);
     mockParams.orderId = order.id;
 
     renderWithProviders(<ConfirmationScreen />);
@@ -1299,6 +1364,7 @@ describe('12 Confirmation', () => {
       items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
       guests: [],
     });
+    await payOrder(order.id);
     mockParams.orderId = order.id;
 
     renderWithProviders(<ConfirmationScreen />);
@@ -1327,6 +1393,7 @@ describe('12 Confirmation', () => {
       items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
       guests: [],
     });
+    await payOrder(order.id);
     mockParams.orderId = order.id;
 
     renderWithProviders(<ConfirmationScreen />);
@@ -1334,6 +1401,52 @@ describe('12 Confirmation', () => {
     await waitFor(() => expect(screen.getByText('See my ticket')).toBeTruthy());
     expect(screen.queryByText('We need your selfie to admit you to the event.')).toBeNull();
     expect(screen.queryByText('Not now, see my ticket')).toBeNull();
+  });
+
+  /** "Your ticket is ready" is the server's to say: an unpaid order is still being confirmed. */
+  it('says it is confirming with the bank until the server says paid', async () => {
+    await signInAndComplete();
+    const order = await placeOrderViaCart({
+      eventId: SOUND_BATH_ID,
+      buyerTierId: TIER_SOUND_GA,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
+      guests: [],
+    });
+    mockConfig.paymentOutcome = 'stuck';
+    await mockApi.payments.initiate(order.id);
+    mockParams.orderId = order.id;
+
+    renderWithProviders(<ConfirmationScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText('Confirming your payment with your bank')).toBeTruthy(),
+    );
+    expect(screen.queryByText(/ticket is ready/)).toBeNull();
+    expect(screen.queryByText(/entry pass is ready/)).toBeNull();
+    expect(screen.queryByText('See my ticket')).toBeNull();
+  });
+
+  it('hands an order the server failed back to the payment screen', async () => {
+    await signInAndComplete();
+    const order = await placeOrderViaCart({
+      eventId: SOUND_BATH_ID,
+      buyerTierId: TIER_SOUND_GA,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
+      guests: [],
+    });
+    mockConfig.paymentOutcome = 'failed';
+    const settleDelay = mockConfig.settleDelayMs;
+    mockConfig.settleDelayMs = 0;
+    await mockApi.payments.initiate(order.id);
+    mockParams.orderId = order.id;
+
+    renderWithProviders(<ConfirmationScreen />);
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${order.id}`),
+    );
+    expect(screen.queryByText(/ticket is ready/)).toBeNull();
+    mockConfig.settleDelayMs = settleDelay;
   });
 });
 
@@ -1774,6 +1887,9 @@ describe('08 Choose your pass · the account gate', () => {
  * this screen counted as finished: Pay was disabled, "Try payment again" was sent to a refusal,
  * and the cancel that would have freed them was hidden.
  */
+const CHECKING_WITH_BANK =
+  "We're checking with your bank. If you were charged, your ticket will appear here automatically.";
+
 describe('11 Payment after a declined card', () => {
   const placeTuluaOrder = async () => {
     await signInAndComplete();
@@ -1831,13 +1947,110 @@ describe('11 Payment after a declined card', () => {
 
     renderWithProviders(<PaymentScreen />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText('Your payment is still being processed. This can take a moment…'),
-      ).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
     expect(screen.queryByText('Try payment again')).toBeNull();
     expect(screen.queryByText('Cancel this order')).toBeNull();
+  });
+
+  /**
+   * Inside the hold a pending attempt is a live intention, which initiate hands back. The buyer
+   * who closed the sheet before entering a card reopens it with Pay; retry and cancel, which the
+   * backend refuses over that attempt, are not offered.
+   */
+  it('reopens a pending intention with Pay inside the hold, and offers no retry or cancel', async () => {
+    const order = await placeTuluaOrder();
+    statusIs({ paymentStatus: 'pending' });
+    const initiate = jest.spyOn(mockApi.payments, 'initiate');
+    const retry = jest.spyOn(mockApi.payments, 'retry');
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('If you already finished paying, this will update by itself.'),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText(CHECKING_WITH_BANK)).toBeNull();
+    expect(screen.queryByText('Try payment again')).toBeNull();
+    expect(screen.queryByText('Cancel this order')).toBeNull();
+
+    const pay = screen.getAllByRole('button', { name: /Pay / }).at(-1)!;
+    expect(pay).not.toBeDisabled();
+    fireEvent.press(pay);
+
+    await waitFor(() => expect(initiate).toHaveBeenCalledWith(order.id));
+    await waitFor(() => expect(mockPaymob.presentPayVC).toHaveBeenCalled());
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it('shows the checking copy, with nothing to tap, when initiate answers 409', async () => {
+    await placeTuluaOrder();
+    statusIs({ paymentStatus: 'pending' });
+    jest.spyOn(mockApi.payments, 'initiate').mockRejectedValue(
+      Object.assign(new Error('pending'), {
+        code: 'PAYMENT_CONFIRMATION_PENDING',
+        status: 409,
+      }),
+    );
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /Pay / }).at(-1)).not.toBeDisabled(),
+    );
+    fireEvent.press(screen.getAllByRole('button', { name: /Pay / }).at(-1)!);
+
+    await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
+    expect(screen.getAllByRole('button', { name: /Pay / }).at(-1)).toBeDisabled();
+    expect(screen.queryByText(/still confirming your last payment attempt/)).toBeNull();
+  });
+
+  it('offers the retry once the hold has run out over a pending attempt', async () => {
+    const order = await placeTuluaOrder();
+    statusIs({ orderStatus: 'expired', paymentStatus: 'pending' });
+    const retry = jest.spyOn(mockApi.payments, 'retry');
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() => expect(screen.getByText('Try payment again')).toBeTruthy());
+    expect(screen.getByText('This payment hold expired. You can try again.')).toBeTruthy();
+    fireEvent.press(screen.getByText('Try payment again'));
+    await waitFor(() => expect(retry).toHaveBeenCalledWith(order.id));
+  });
+
+  it('reads a 409 PAYMENT_CONFIRMATION_PENDING as still confirming, not as an error', async () => {
+    await placeTuluaOrder();
+    statusIs({ orderStatus: 'failed' });
+    jest.spyOn(mockApi.payments, 'retry').mockRejectedValue(
+      Object.assign(new Error('pending'), {
+        code: 'PAYMENT_CONFIRMATION_PENDING',
+        status: 409,
+      }),
+    );
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() => expect(screen.getByText('Try payment again')).toBeTruthy());
+    fireEvent.press(screen.getByText('Try payment again'));
+
+    await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
+    expect(screen.queryByText(/still confirming your last payment attempt/)).toBeNull();
+    expect(screen.queryByText('Try payment again')).toBeNull();
+  });
+
+  it("names the bank's reason when the server gives one", async () => {
+    await placeTuluaOrder();
+    statusIs({ orderStatus: 'failed', failureReason: 'insufficient_funds' });
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "The card didn't have enough funds for this payment. Nothing was charged. Try another card.",
+        ),
+      ).toBeTruthy(),
+    );
   });
 
   it('offers nothing for an order that was cancelled', async () => {

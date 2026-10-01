@@ -306,6 +306,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await deleteSecureItem(SECURE_KEYS.accessToken);
       await deleteSecureItem(SECURE_KEYS.refreshToken);
       await deleteSecureItem(SECURE_KEYS.setupDeferred);
+      // The remembered payment is this account's order; the next one to sign in cannot read it.
+      await deleteSecureItem(SECURE_KEYS.pendingPayment);
     });
 
     // A newer sign-in owns the state and tokens now. Never let an older sign-out write it back.

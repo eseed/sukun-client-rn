@@ -562,7 +562,17 @@ export interface PaymentStatus {
     | 'voided';
   ticketsIssued: number;
   paidAt: string | null;
+  /**
+   * Why the last attempt failed, as a category, when the backend knows. Optional and nullable:
+   * backends before it send nothing, and the screen falls back to its general copy. The name and
+   * values are the backend's proposal and not final yet.
+   */
+  failureReason?: PaymentFailureReason | null;
 }
+
+/** See `PaymentStatus.failureReason`. Unknown values are read as `unknown`. */
+export type PaymentFailureReason =
+  'declined' | 'insufficient_funds' | 'authentication_failed' | 'expired_card' | 'unknown';
 
 /* ----------------------------------------------------- account lifecycle */
 

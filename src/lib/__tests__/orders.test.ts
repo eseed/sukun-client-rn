@@ -1,4 +1,9 @@
-import { isOrderCancellable, isPaymentRetryable, isPaymentUnsettled } from '../orders';
+import {
+  isOrderCancellable,
+  isPaymentReopenable,
+  isPaymentRetryable,
+  isPaymentUnsettled,
+} from '../orders';
 import type { PaymentStatus } from '../../api/types';
 
 function status(partial: Partial<PaymentStatus>): PaymentStatus {
@@ -62,9 +67,42 @@ describe('isPaymentUnsettled', () => {
     }
   });
 
-  it('does not wait on a settled attempt, or on a pending one a new try reuses', () => {
-    for (const paymentStatus of ['', 'pending', 'failed', 'expired'] as const) {
+  it('does not wait on a settled attempt', () => {
+    for (const paymentStatus of ['', 'failed', 'expired', 'captured'] as const) {
       expect(isPaymentUnsettled(status({ paymentStatus }))).toBe(false);
     }
+  });
+
+  /**
+   * Regression: `pending` used to be left out, so the screen offered "Try payment again" over an
+   * attempt the backend was still confirming, and the retry came back 409.
+   */
+  it('waits on a pending attempt while the hold runs', () => {
+    expect(isPaymentUnsettled(status({ paymentStatus: 'pending' }))).toBe(true);
+    expect(isPaymentUnsettled(status({ paymentStatus: 'pending' }), false)).toBe(true);
+  });
+
+  it('lets a pending attempt be retried once the hold has run out', () => {
+    expect(isPaymentUnsettled(status({ paymentStatus: 'pending' }), true)).toBe(false);
+    expect(isPaymentUnsettled(status({ orderStatus: 'expired', paymentStatus: 'pending' }))).toBe(
+      false,
+    );
+  });
+});
+
+describe('isPaymentReopenable', () => {
+  it('reopens a pending attempt on an awaiting order while the hold runs', () => {
+    expect(isPaymentReopenable(status({ paymentStatus: 'pending' }))).toBe(true);
+  });
+
+  it('does not once the hold has run out, or for any other attempt', () => {
+    expect(isPaymentReopenable(status({ paymentStatus: 'pending' }), true)).toBe(false);
+    expect(isPaymentReopenable(status({ orderStatus: 'expired', paymentStatus: 'pending' }))).toBe(
+      false,
+    );
+    for (const paymentStatus of ['', 'creating', 'confirming', 'failed'] as const) {
+      expect(isPaymentReopenable(status({ paymentStatus }))).toBe(false);
+    }
+    expect(isPaymentReopenable(undefined)).toBe(false);
   });
 });

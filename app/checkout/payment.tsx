@@ -18,7 +18,15 @@ import {
   useRetryPayment,
 } from '../../src/hooks/queries';
 import { HoldTimer } from '../../src/components/checkout/HoldTimer';
-import { isOrderCancellable, isPaymentRetryable, isPaymentUnsettled } from '../../src/lib/orders';
+import {
+  failedPaymentMessage,
+  isOrderCancellable,
+  isPaymentReopenable,
+  isPaymentRetryable,
+  isPaymentUnsettled,
+} from '../../src/lib/orders';
+import { clearPendingPayment } from '../../src/lib/pending-payment';
+import { useHoldCountdown } from '../../src/hooks/useHoldCountdown';
 import { track } from '../../src/lib/analytics';
 import { trackMetaAddPaymentInfo } from '../../src/lib/meta-events';
 import { beginPaymentAttempt, trackPaymentFailed } from '../../src/lib/purchase-analytics';
@@ -51,6 +59,18 @@ import { colors } from '../../src/theme/tokens';
  * customisation before `presentPayVC`). The order status query still runs so a PENDING
  * transaction can resolve and so the screen reflects orders that settled elsewhere. Paid is the
  * server's word alone: `orderStatus === 'paid'`, never a client redirect.
+ *
+ * A FAIL or CANCELLED from the sheet is only what the sheet saw. The bank may still be
+ * confirming (the buyer closed a sheet stuck on its verification page), or the card may already
+ * have been charged, so the screen asks the server again before it says anything, and while the
+ * server still shows the attempt pending it never says "Nothing was charged".
+ *
+ * Inside the hold a pending attempt is a live intention: Pay goes through `payments/initiate`,
+ * which hands the same intention back, so the buyer who closed the sheet before entering a card
+ * can open it again at once, with a note that a payment already made will show up by itself.
+ * Retry and cancel are refused over it (`PAYMENT_CONFIRMATION_PENDING`), so neither is offered
+ * until the hold runs out. An attempt the backend is still creating or confirming, and any 409,
+ * is the "checking with your bank" state, with nothing to tap.
  */
 export default function PaymentScreen() {
   const router = useRouter();
@@ -77,6 +97,12 @@ export default function PaymentScreen() {
    */
   const sheet = usePaymobSheet();
   const sdkResult = sheet.outcome;
+  const { expired: holdExpired } = useHoldCountdown(order?.holdExpiresAt);
+  /**
+   * The server refused a new attempt with PAYMENT_CONFIRMATION_PENDING. That is the "still
+   * confirming" state, not an error, and it lasts until the attempt settles or the hold runs out.
+   */
+  const [refusedOver, setRefusedOver] = useState<string | null>(null);
 
   // Polls from mount and stops on its own at a terminal state. Gating this on a sheet *this*
   // screen had opened meant arriving here after a PENDING verdict — the one route in — began no
@@ -87,7 +113,17 @@ export default function PaymentScreen() {
     poll: true,
     watchUntil: order?.holdExpiresAt ?? null,
   });
-  const { data: status } = statusQuery;
+  const { data: status, dataUpdatedAt: statusUpdatedAt, refetch: refetchStatus } = statusQuery;
+
+  // Every verdict from the sheet is checked with the server before the screen acts on it.
+  const verdictAt = sheet.outcomeAt;
+  useEffect(() => {
+    if (verdictAt !== null) void refetchStatus();
+  }, [refetchStatus, verdictAt]);
+
+  const sheetSaidNo = sdkResult === 'fail' || sdkResult === 'cancelled';
+  /** No verdict to check, or the status on screen was fetched after it arrived. */
+  const verdictChecked = verdictAt === null || statusUpdatedAt >= verdictAt;
 
   const settled = sdkResult === 'success' || status?.orderStatus === 'paid';
   const terminal = Boolean(
@@ -96,16 +132,33 @@ export default function PaymentScreen() {
       (['paid', 'failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
         ['captured', 'failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus))),
   );
-  const failed = Boolean(
-    !settled &&
-    (sdkResult === 'fail' ||
-      sdkResult === 'cancelled' ||
-      (status &&
-        (['failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
-          ['failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)))),
+  /** The server has said this attempt did not pay. */
+  const serverFailed = Boolean(
+    status &&
+    (['failed', 'expired', 'cancelled', 'refunded'].includes(status.orderStatus) ||
+      ['failed', 'expired', 'refunded', 'voided'].includes(status.paymentStatus)),
   );
-  /** SDK reported PENDING: the transaction is still being processed on Paymob's side. */
-  const pending = sdkResult === 'pending' && !settled && !failed;
+  /**
+   * Pending at Paymob, which the backend will not let a new attempt replace while the hold runs.
+   * Includes the PENDING the sheet itself reports.
+   */
+  const unsettledAttempt = isPaymentUnsettled(status, holdExpired);
+  /**
+   * The refusal stands while the server still reports what it did when it refused, and until
+   * the hold it was refused under runs out. Any change in the status means the attempt moved.
+   */
+  const confirmationPending =
+    refusedOver !== null && refusedOver === statusKey(status) && !settled && !holdExpired;
+  /**
+   * Not paid, on the server's word. A closed or declined sheet counts only once the server has
+   * been asked since, and only if it has nothing pending: a cancel over an attempt the bank is
+   * still confirming is not a failure yet.
+   */
+  const failed =
+    !settled &&
+    verdictChecked &&
+    !confirmationPending &&
+    (serverFailed || (sheetSaidNo && !unsettledAttempt));
   /** Nothing can pay this order any more. */
   const closed = status?.orderStatus === 'cancelled' || status?.orderStatus === 'refunded';
   /**
@@ -114,7 +167,26 @@ export default function PaymentScreen() {
    * and hid the cancel that would have freed the buyer.
    */
   const retryable = !settled && !closed && isPaymentRetryable(status);
-  const unsettledAttempt = isPaymentUnsettled(status);
+  /**
+   * A pending intention inside the hold, which Pay reopens. Not after the sheet itself said
+   * PENDING: that payment is being processed, so the screen waits on it instead.
+   */
+  const reopenable =
+    !settled && sdkResult !== 'pending' && isPaymentReopenable(status, holdExpired);
+  /** The bank has not answered yet: the screen says it is checking and offers nothing to tap. */
+  const confirming =
+    !settled &&
+    !closed &&
+    !failed &&
+    (sdkResult === 'pending' ||
+      (unsettledAttempt && !reopenable) ||
+      confirmationPending ||
+      (sheetSaidNo && !verdictChecked));
+
+  // A cancelled or refunded order has nothing left to recover on the next launch.
+  useEffect(() => {
+    if (closed && validOrderId) void clearPendingPayment(validOrderId);
+  }, [closed, validOrderId]);
 
   useEffect(() => {
     if (!settled) return;
@@ -124,14 +196,33 @@ export default function PaymentScreen() {
     router.replace(`/checkout/confirmation?orderId=${validOrderId}`);
   }, [reset, router, settled, validOrderId]);
 
+  // The sheet's own FAIL or CANCELLED is counted as it arrives, whatever the server goes on to
+  // say; a failure the server reports without one is counted as a fail. One per attempt.
   useEffect(() => {
-    if (!failed || !validOrderId) return;
-    trackPaymentFailed(validOrderId, sdkResult === 'cancelled' ? 'cancelled' : 'fail');
+    if (!validOrderId) return;
+    if (sdkResult === 'fail' || sdkResult === 'cancelled') {
+      trackPaymentFailed(validOrderId, sdkResult);
+    } else if (failed) {
+      trackPaymentFailed(validOrderId, 'fail');
+    }
   }, [failed, sdkResult, validOrderId]);
+
+  /**
+   * PAYMENT_CONFIRMATION_PENDING means an attempt is still with the bank. Say so, and keep
+   * watching, rather than showing it as an error.
+   */
+  function stillConfirming(err: unknown): boolean {
+    if (errorCodeOf(err) !== 'PAYMENT_CONFIRMATION_PENDING') return false;
+    setError(null);
+    setRefusedOver(statusKey(status));
+    void refetchStatus();
+    return true;
+  }
 
   async function onPay() {
     if (!validOrderId) return;
     setError(null);
+    setRefusedOver(null);
 
     if (!sheet.available) {
       setError('Payment needs the Sukun app. It isn’t available here.');
@@ -151,8 +242,9 @@ export default function PaymentScreen() {
     } catch (err) {
       setSheetPresented(false);
       track('payment_error', { order_id: validOrderId, step: 'initiate', code: errorCodeOf(err) });
+      if (stillConfirming(err)) return;
       if (errorCodeOf(err) === 'PAYMENT_ALREADY_COMPLETED') {
-        void statusQuery.refetch();
+        void refetchStatus();
       }
       setError(messageForError(err));
     }
@@ -161,6 +253,7 @@ export default function PaymentScreen() {
   async function onRetry() {
     if (!validOrderId || !retryable) return;
     setError(null);
+    setRefusedOver(null);
 
     if (!sheet.available) {
       setError('Payment needs the Sukun app. It isn’t available here.');
@@ -176,9 +269,10 @@ export default function PaymentScreen() {
     } catch (err) {
       setSheetPresented(false);
       track('payment_error', { order_id: validOrderId, step: 'retry', code: errorCodeOf(err) });
+      if (stillConfirming(err)) return;
       // A try that went through after all: the refetch sends the buyer to confirmation.
       if (errorCodeOf(err) === 'PAYMENT_ALREADY_COMPLETED') {
-        void statusQuery.refetch();
+        void refetchStatus();
       }
       setError(messageForError(err));
     }
@@ -194,17 +288,19 @@ export default function PaymentScreen() {
     try {
       await cancel.mutateAsync(validOrderId);
       track('order_cancelled', { order_id: validOrderId });
+      void clearPendingPayment(validOrderId);
       const eventId = order?.eventId;
       reset();
       router.replace(eventId ? (`/event/${eventId}` as never) : ('/(tabs)/discover' as never));
     } catch (err) {
+      if (stillConfirming(err)) return;
       setError(messageForError(err));
     }
   }
 
-  function presentPaymob(intent: { clientSecret: string; publicKey: string }) {
-    if (!sheet.available) return;
-    sheet.present(intent);
+  function presentPaymob(intent: { clientSecret: string; publicKey: string; paymentId?: string }) {
+    if (!sheet.available || !validOrderId) return;
+    sheet.present(intent, validOrderId);
     setSheetPresented(true);
   }
 
@@ -259,9 +355,9 @@ export default function PaymentScreen() {
    * reconciliation sweep fails it, and cancelling before then is refused outright. Showing the
    * button only when it would work is better than handing people a button that 409s.
    */
-  const cancellable = !busy && !settled && isOrderCancellable(status);
+  const cancellable = !busy && !settled && !confirming && isOrderCancellable(status);
   /** A try the buyer can make right now, as opposed to one still settling at Paymob. */
-  const canRetry = failed && retryable && !unsettledAttempt;
+  const canRetry = failed && retryable && !unsettledAttempt && !confirmationPending;
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -283,23 +379,40 @@ export default function PaymentScreen() {
       <Text variant="metaSm" style={styles.note}>
         Tapping pay opens Paymob&apos;s secure sheet, where you enter your card.
       </Text>
+      {/*
+        Paymob's sheet has no timeout the app can set and no way for the app to close it, so
+        the buyer is told the one exit there is before they need it.
+      */}
+      <Text variant="metaSm" style={styles.note}>
+        If your bank&apos;s verification page doesn&apos;t load, close the sheet with X. We&apos;ll
+        check with your bank and update this order.
+      </Text>
 
       {status?.orderStatus === 'awaiting_payment' && !settled ? (
         <HoldTimer holdExpiresAt={order.holdExpiresAt} />
       ) : null}
 
-      {(awaitingVerdict || pending || unsettledAttempt) && !settled && !closed ? (
+      {(awaitingVerdict || confirming) && !settled && !closed ? (
         <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
-          {pending || unsettledAttempt
-            ? 'Your payment is still being processed. This can take a moment…'
-            : 'Waiting for the payment to complete…'}
+          {awaitingVerdict
+            ? 'Waiting for the payment to complete…'
+            : sheetSaidNo && !verdictChecked
+              ? 'Checking your payment with your bank…'
+              : "We're checking with your bank. If you were charged, your ticket will appear here automatically."}
+        </Text>
+      ) : null}
+
+      {reopenable && !awaitingVerdict && !confirming && !failed && !error ? (
+        <Text variant="metaSm" color={colors.accentSky} style={styles.note}>
+          If you already finished paying, this will update by itself.
         </Text>
       ) : null}
 
       {failed || error ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.note}>
           {error ??
-            (sdkResult === 'cancelled'
+            // "Nothing was charged" after a cancel only once the server shows nothing pending.
+            (sdkResult === 'cancelled' && !serverFailed
               ? 'Payment was cancelled. Nothing was charged.'
               : status?.orderStatus === 'expired'
                 ? 'This payment hold expired. You can try again.'
@@ -307,7 +420,7 @@ export default function PaymentScreen() {
                   ? 'This order was cancelled and cannot be paid.'
                   : status?.orderStatus === 'refunded'
                     ? 'This order has been refunded and cannot be paid.'
-                    : 'The payment did not go through. Nothing was charged.')}
+                    : failedPaymentMessage(status?.failureReason))}
         </Text>
       ) : null}
 
@@ -327,7 +440,7 @@ export default function PaymentScreen() {
           variant="accent"
           onPress={onPay}
           loading={busy}
-          disabled={terminal || unsettledAttempt}
+          disabled={terminal || confirming}
         />
       )}
 
@@ -343,6 +456,11 @@ export default function PaymentScreen() {
       ) : null}
     </Screen>
   );
+}
+
+/** The status as one comparable value, to tell when the server's answer has moved. */
+function statusKey(status: { orderStatus: string; paymentStatus: string } | undefined): string {
+  return status ? `${status.orderStatus}/${status.paymentStatus}` : '';
 }
 
 /** The server's error code, for analytics. Codes only: never the message, which can carry input. */

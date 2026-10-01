@@ -31,6 +31,7 @@ import type {
   OtpRequested,
   OrderAddon,
   PaymentIntent,
+  PaymentFailureReason,
   PaymentStatus,
   ReplaceCartTicketsInput,
   SessionTokens,
@@ -50,7 +51,7 @@ import {
   VAT_RATE,
 } from './fixtures';
 import { multiply, toEgp, toPiastres } from './money';
-import { mockConfig } from './config';
+import { mockConfig, resetMockPaymentConfig } from './config';
 import {
   buildAddonDetail,
   findOption,
@@ -164,6 +165,10 @@ interface MockState {
   paidAt: Map<string, string>;
   /** Wall-clock at which an initiated payment auto-settles, simulating the webhook. */
   settleAt: Map<string, number>;
+  /** Orders whose latest attempt the simulated webhook declined, with the reason it gave. */
+  failedAttempts: Map<string, PaymentFailureReason | null>;
+  /** The live intention of each order with a pending attempt, handed back by initiate. */
+  liveIntents: Map<string, PaymentIntent>;
   deletedAccounts: Map<string, DeletedAccount>;
   carts: MockCart[];
   /** Pricing tokens handed out by preview, with the total they were issued against. */
@@ -210,6 +215,8 @@ const state: MockState = {
   paidOrderIds: new Set(),
   paidAt: new Map(),
   settleAt: new Map(),
+  failedAttempts: new Map(),
+  liveIntents: new Map(),
   deletedAccounts: new Map(),
   carts: [],
   pricingTokens: new Map(),
@@ -233,6 +240,9 @@ export function resetMockState(): void {
   state.paidOrderIds.clear();
   state.paidAt.clear();
   state.settleAt.clear();
+  state.failedAttempts.clear();
+  state.liveIntents.clear();
+  resetMockPaymentConfig();
   state.deletedAccounts.clear();
   state.carts = [];
   state.pricingTokens.clear();
@@ -552,6 +562,13 @@ function settleDuePayments(): void {
   for (const [orderId, due] of state.settleAt.entries()) {
     if (now < due) continue;
     state.settleAt.delete(orderId);
+    if (mockConfig.paymentOutcome === 'failed') {
+      // A decline fails the order, as the backend's webhook handling does; retry revives it.
+      state.failedAttempts.set(orderId, mockConfig.paymentFailureReason);
+      const declined = state.orders.find((o) => o.id === orderId);
+      if (declined && declined.status === 'awaiting_payment') declined.status = 'failed';
+      continue;
+    }
     state.paidOrderIds.add(orderId);
     state.paidAt.set(orderId, iso());
     const order = state.orders.find((o) => o.id === orderId);
@@ -1544,8 +1561,19 @@ export const mockApi: SukunApi = {
       if (state.orderBuyerPhones.get(orderId) !== user.phoneNumber) {
         throw new MockApiError('ORDER_FORBIDDEN', 'That order is not yours.', 403);
       }
-      if (order.status === 'awaiting_payment') order.status = 'cancelled';
-      state.settleAt.delete(orderId);
+      // The backend refuses while an attempt may still settle: cancelling then could leave a
+      // charge with nothing to fulfil it.
+      if (order.status === 'awaiting_payment' && state.settleAt.has(orderId)) {
+        throw new MockApiError(
+          'PAYMENT_CONFIRMATION_PENDING',
+          'A payment for this order is still being confirmed.',
+          409,
+        );
+      }
+      if (['awaiting_payment', 'failed', 'expired'].includes(order.status)) {
+        order.status = 'cancelled';
+      }
+      state.failedAttempts.delete(orderId);
       return delay(order, 0.6);
     },
   },
@@ -1562,9 +1590,21 @@ export const mockApi: SukunApi = {
       if (order.status !== 'awaiting_payment') {
         throw new MockApiError('ORDER_NOT_PAYABLE', 'This order is no longer payable.', 409);
       }
-      // Simulated provider webhook lands a few seconds after the sheet opens.
-      state.settleAt.set(orderId, mockConfig.now() + mockConfig.settleDelayMs);
-      return delay({
+      // A pending attempt inside the hold is a live intention: initiate hands the same one back,
+      // as the backend does, so a sheet closed before a card was entered can simply reopen.
+      const live = state.settleAt.has(orderId) ? state.liveIntents.get(orderId) : undefined;
+      if (live) return delay(live);
+
+      // Simulated provider webhook lands a few seconds after the sheet opens, or never, for a
+      // bank check that does not come back.
+      state.failedAttempts.delete(orderId);
+      state.settleAt.set(
+        orderId,
+        mockConfig.paymentOutcome === 'stuck'
+          ? Number.POSITIVE_INFINITY
+          : mockConfig.now() + mockConfig.settleDelayMs,
+      );
+      const intent: PaymentIntent = {
         paymentId: `pay-${Date.now()}`,
         provider: 'paymob',
         presentationMode: 'mobile_sdk',
@@ -1575,7 +1615,9 @@ export const mockApi: SukunApi = {
         amountEgp: order.totalEgp,
         currency: 'EGP',
         expiresAt: iso(10 * 60 * 1000),
-      });
+      };
+      state.liveIntents.set(orderId, intent);
+      return delay(intent);
     },
 
     async status(orderId: string): Promise<PaymentStatus> {
@@ -1591,18 +1633,21 @@ export const mockApi: SukunApi = {
           orderStatus: order.status,
           paymentStatus: paid
             ? 'captured'
-            : order.status === 'expired'
-              ? 'expired'
-              : order.status === 'cancelled'
-                ? 'voided'
-                : // No attempt has been opened yet, which the backend reports as an empty
-                  // status. Only a live intention counts as pending, and only that blocks a
-                  // cancel - see `isOrderCancellable`.
-                  state.settleAt.has(orderId)
-                  ? 'pending'
-                  : '',
+            : state.failedAttempts.has(orderId)
+              ? 'failed'
+              : order.status === 'expired'
+                ? 'expired'
+                : order.status === 'cancelled'
+                  ? 'voided'
+                  : // No attempt has been opened yet, which the backend reports as an empty
+                    // status. Only a live intention counts as pending, and only that blocks a
+                    // cancel - see `isOrderCancellable`.
+                    state.settleAt.has(orderId)
+                    ? 'pending'
+                    : '',
           ticketsIssued: paid ? order.items.reduce((acc, i) => acc + i.quantity, 0) : 0,
           paidAt: paid ? (state.paidAt.get(orderId) ?? null) : null,
+          failureReason: paid ? null : (state.failedAttempts.get(orderId) ?? null),
         },
         0.5,
       );
@@ -1613,10 +1658,22 @@ export const mockApi: SukunApi = {
      * part of why no test ever saw the live refusals. A paid or refunded order is complete, a
      * cancelled one cannot be paid, a failed or expired one is revived with a fresh hold, and
      * one still awaiting payment goes straight to initiate.
+     *
+     * An attempt still pending inside the order's hold is refused with
+     * PAYMENT_CONFIRMATION_PENDING: Paymob may yet settle it. Once the hold has run out the
+     * order expires, and the retry takes it with a fresh intention.
      */
     async retry(orderId: string): Promise<PaymentIntent> {
+      transitionExpiredOrders();
       const order = state.orders.find((item) => item.id === orderId);
       if (!order) throw new MockApiError('ORDER_NOT_FOUND', 'Order not found', 404);
+      if (order.status === 'awaiting_payment' && state.settleAt.has(orderId)) {
+        throw new MockApiError(
+          'PAYMENT_CONFIRMATION_PENDING',
+          'A payment for this order is still being confirmed.',
+          409,
+        );
+      }
       if (order.status === 'paid' || order.status === 'refunded') {
         throw new MockApiError('PAYMENT_ALREADY_COMPLETED', 'This order is already paid.', 409);
       }
@@ -1895,6 +1952,8 @@ export const mockApi: SukunApi = {
       state.paidOrderIds.clear();
       state.paidAt.clear();
       state.settleAt.clear();
+      state.failedAttempts.clear();
+      state.liveIntents.clear();
       return delay(undefined, 1.25);
     },
   },
