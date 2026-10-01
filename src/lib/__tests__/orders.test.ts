@@ -62,9 +62,25 @@ describe('isPaymentUnsettled', () => {
     }
   });
 
-  it('does not wait on a settled attempt, or on a pending one a new try reuses', () => {
-    for (const paymentStatus of ['', 'pending', 'failed', 'expired'] as const) {
+  it('does not wait on a settled attempt', () => {
+    for (const paymentStatus of ['', 'failed', 'expired', 'captured'] as const) {
       expect(isPaymentUnsettled(status({ paymentStatus }))).toBe(false);
     }
+  });
+
+  /**
+   * Regression: `pending` used to be left out, so the screen offered "Try payment again" over an
+   * attempt the backend was still confirming, and the retry came back 409.
+   */
+  it('waits on a pending attempt while the hold runs', () => {
+    expect(isPaymentUnsettled(status({ paymentStatus: 'pending' }))).toBe(true);
+    expect(isPaymentUnsettled(status({ paymentStatus: 'pending' }), false)).toBe(true);
+  });
+
+  it('lets a pending attempt be retried once the hold has run out', () => {
+    expect(isPaymentUnsettled(status({ paymentStatus: 'pending' }), true)).toBe(false);
+    expect(isPaymentUnsettled(status({ orderStatus: 'expired', paymentStatus: 'pending' }))).toBe(
+      false,
+    );
   });
 });

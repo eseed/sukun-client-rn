@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Button, ResourceState, Screen, Text } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
 import { useEvent, useOrder, usePaymentStatus, useTickets } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
+import { clearPendingPayment } from '../../src/lib/pending-payment';
 import { trackPurchaseCompleted } from '../../src/lib/purchase-analytics';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily, fontSize, space } from '../../src/theme/tokens';
@@ -17,6 +18,11 @@ import { useAuthStore } from '../../src/stores/auth';
  * The guest line is deliberately unconditional on whether the guest has an account: the copy
  * is the same either way, and the WhatsApp message is sent by the backend, not the app
  * (CLAUDE.md rules 4 and 6).
+ *
+ * Nothing here says the ticket is ready until the server says the order is paid. The sheet's
+ * SUCCESS brings the buyer here, sometimes before the webhook has landed, so until then the
+ * screen says it is confirming the payment with the bank and keeps asking. An order the server
+ * fails instead goes back to the payment screen, which owns retrying.
  *
  * It is also where `purchase_completed` is sent. Every paid order comes through here, whether
  * the review screen or the payment screen watched it settle, so this is the one screen that can
@@ -101,11 +107,29 @@ export default function ConfirmationScreen() {
    * server says paid: the sheet's verdict alone is not proof of payment.
    */
   const paid = orderQuery.data?.status === 'paid';
-  usePaymentStatus(validOrderId, { poll: Boolean(orderQuery.data) && !paid });
+  const statusQuery = usePaymentStatus(validOrderId, { poll: Boolean(orderQuery.data) && !paid });
+  const serverStatus = statusQuery.data?.orderStatus;
+  /** The server has failed the order or its attempt: retrying belongs to the payment screen. */
+  const notPaid =
+    !paid &&
+    (serverStatus === 'failed' ||
+      serverStatus === 'expired' ||
+      (serverStatus === 'awaiting_payment' && statusQuery.data?.paymentStatus === 'failed'));
+  /** Cancelled or refunded: nothing left to confirm or retry. */
+  const closed = !paid && (serverStatus === 'cancelled' || serverStatus === 'refunded');
 
   useEffect(() => {
     if (paid && orderQuery.data) void trackPurchaseCompleted(orderQuery.data);
   }, [orderQuery.data, paid]);
+
+  // Settled one way or the other, so a relaunch has nothing left to recover for this order.
+  useEffect(() => {
+    if ((paid || closed) && validOrderId) void clearPendingPayment(validOrderId);
+  }, [closed, paid, validOrderId]);
+
+  useEffect(() => {
+    if (notPaid && validOrderId) router.replace(`/checkout/payment?orderId=${validOrderId}`);
+  }, [notPaid, router, validOrderId]);
 
   if (!validOrderId) {
     return (
@@ -141,6 +165,42 @@ export default function ConfirmationScreen() {
 
   const order = orderQuery.data;
   const event = eventQuery.data;
+
+  if (!paid) {
+    return (
+      <View style={styles.root}>
+        <Screen scroll edges={{ bottom: false }} contentStyle={styles.content}>
+          <View style={[styles.group, styles.panel]}>
+            {closed ? (
+              <>
+                <Text style={styles.headline}>This order was not paid.</Text>
+                <Text style={styles.blurb}>
+                  {serverStatus === 'refunded'
+                    ? `Order ${order.orderNumber} has been refunded.`
+                    : `Order ${order.orderNumber} was cancelled.`}
+                </Text>
+                <Button
+                  label="See my orders"
+                  size="inline"
+                  onPress={() => router.replace('/orders' as never)}
+                />
+              </>
+            ) : (
+              <View accessible accessibilityRole="progressbar" style={styles.panel}>
+                <ActivityIndicator color={colors.accentGold} style={styles.spinner} />
+                <Text style={styles.headline}>Confirming your payment with your bank</Text>
+                <Text style={styles.blurb}>
+                  This usually takes a moment. If you were charged, your ticket will appear here
+                  automatically. You can leave this screen: your ticket will also be in Tickets.
+                </Text>
+              </View>
+            )}
+          </View>
+        </Screen>
+        <BottomNav />
+      </View>
+    );
+  }
   if (eventQuery.isError || ticketsQuery.isError) {
     return (
       <View style={styles.resourceRoot}>
@@ -311,6 +371,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.textMuted,
     marginBottom: 24,
+  },
+  spinner: {
+    marginBottom: space.s4,
   },
   /** The design tightens this gap when the attached-extras line follows. */
   blurbAboveAttached: {

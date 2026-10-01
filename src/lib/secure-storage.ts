@@ -66,4 +66,6 @@ export const SECURE_KEYS = {
   acquisitionAttributionState: 'sukun.acquisition.attributionState',
   /** Order ids already sent as `purchase_completed`. See `src/lib/purchase-analytics.ts`. */
   reportedPurchases: 'sukun.analytics.reportedPurchases',
+  /** The payment last handed to Paymob's sheet, as JSON. See `src/lib/pending-payment.ts`. */
+  pendingPayment: 'sukun.checkout.pendingPayment',
 } as const;

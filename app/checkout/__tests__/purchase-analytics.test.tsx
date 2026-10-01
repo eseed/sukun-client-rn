@@ -185,7 +185,11 @@ describe('Confirmation', () => {
     mockParams.orderId = order.id;
 
     renderWithProviders(<ConfirmationScreen />);
-    await waitFor(() => expect(screen.getByText('See my ticket')).toBeTruthy());
+    // Nothing says the ticket is ready until the server says paid.
+    await waitFor(() =>
+      expect(screen.getByText('Confirming your payment with your bank')).toBeTruthy(),
+    );
+    expect(screen.queryByText('See my ticket')).toBeNull();
     expect(tracked('purchase_completed')).toHaveLength(0);
 
     // The webhook lands.
@@ -195,6 +199,7 @@ describe('Confirmation', () => {
       timeout: 8000,
     });
     expect(tracked('purchase_completed')[0]![1]).toMatchObject({ order_id: order.id });
+    await waitFor(() => expect(screen.getByText('See my ticket')).toBeTruthy());
   });
 });
 

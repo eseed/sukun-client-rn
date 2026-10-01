@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnalyticsConsentScreen } from '../src/components/AnalyticsConsentScreen';
 import { ForceUpdateScreen } from '../src/components/ForceUpdateScreen';
+import { PendingPaymentRecovery } from '../src/components/checkout/PendingPaymentRecovery';
 import { initializeAcquisitionAttribution } from '../src/services/attribution/acquisition-attribution';
 import { QueryProvider } from '../src/providers/QueryProvider';
 import { useAuthStore } from '../src/stores/auth';
@@ -139,6 +140,8 @@ export default function RootLayout() {
             <Stack.Screen name="account/delete" />
             <Stack.Screen name="legal/terms" />
           </Stack>
+          {/* A payment the app lost track of, re-checked on launch and on every return. */}
+          <PendingPaymentRecovery />
         </QueryProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
