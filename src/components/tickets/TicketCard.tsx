@@ -3,7 +3,9 @@ import type { Ticket } from '../../api/types';
 import { formatDateRangeShort } from '../../lib/format';
 import { designAsset } from '../../theme/assets';
 import { colors, fontFamily, shadow } from '../../theme/tokens';
-import { Badge, type BadgeTone, ImageSlot, Text } from '../ui';
+import { Badge, type BadgeTone, Button, ImageSlot, Text } from '../ui';
+
+const STAY_PHOTO_SIZE = 72;
 
 /**
  * The ticket card from design screen 20 · My tickets: a 130px image with a status badge, a
@@ -76,6 +78,7 @@ export function TicketCard({
   addonCount = 0,
   onPress,
   onAddExtras,
+  stay,
 }: {
   ticket: Ticket;
   ticketCount?: number;
@@ -88,11 +91,20 @@ export function TicketCard({
    * ticket itself carries no signal for it.
    */
   onAddExtras?: () => void;
+  /**
+   * The event's somewhere-to-stay offer, the event page's "Accommodation available" box in
+   * short. Omitted when the event has no stay on sale, which hides it the same silent way.
+   * `photoUrl` is one stay's photo, or `null` when none has one.
+   */
+  stay?: { photoUrl: string | null; onBook: () => void };
 }) {
   const badge = statusBadge(ticket);
   const first = ticket.days[0]?.date ?? '';
   const last = ticket.days[ticket.days.length - 1]?.date ?? first;
   const usable = ticket.usageStatus === 'usable';
+  // The holder's own ticket (`active`, selfie or not), as on the event page, whose "Book your
+  // stay" leads a holder to this ticket's extras. One still waiting to be claimed is claimed first.
+  const offersStay = ticket.status === 'active' && stay !== undefined;
   const cta = callToAction(ticket);
 
   return (
@@ -127,9 +139,29 @@ export function TicketCard({
           </Text>
         ) : null}
         <Text style={[styles.cta, cta.muted && styles.ctaMuted]}>{cta.label}</Text>
+        {offersStay ? (
+          <View style={styles.stay}>
+            <ImageSlot
+              source={stay.photoUrl ? { uri: stay.photoUrl } : null}
+              height={STAY_PHOTO_SIZE}
+              style={styles.stayPhoto}
+            />
+            <View style={styles.stayBody}>
+              <Text style={styles.tier}>Accommodation Available</Text>
+              <Button
+                label="Book your stay"
+                variant="accent"
+                size="inline"
+                onPress={stay.onBook}
+                style={styles.stayButton}
+              />
+            </View>
+          </View>
+        ) : null}
         {/* Only a usable ticket can take extras: they attach to a ticket, and one that has not
-            bound to its holder yet has nothing to attach them to. */}
-        {usable && onAddExtras ? (
+            bound to its holder yet has nothing to attach them to. The stay section's button leads
+            to the same screen, so the row gives way to it rather than offering it twice. */}
+        {usable && onAddExtras && !offersStay ? (
           <Pressable accessibilityRole="button" onPress={onAddExtras} style={styles.extrasRow}>
             <Text style={styles.extrasLabel}>Add extras to this ticket</Text>
             <Text style={styles.extrasChevron}>›</Text>
@@ -141,6 +173,31 @@ export function TicketCard({
 }
 
 const styles = StyleSheet.create({
+  /* Set off from the ticket above by the same hairline as the extras row. */
+  stay: {
+    alignItems: 'flex-start',
+    borderTopColor: colors.borderDefault,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 14,
+    marginTop: 12,
+    paddingTop: 16,
+  },
+  /* The 10px radius the add-on thumbnails use. */
+  stayPhoto: {
+    width: STAY_PHOTO_SIZE,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  stayBody: {
+    flex: 1,
+    gap: 12,
+  },
+  stayButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+  },
   extrasRow: {
     alignItems: 'center',
     borderTopColor: colors.borderDefault,

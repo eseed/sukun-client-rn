@@ -2,7 +2,7 @@ import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/ap
 import { TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
 import type { OrderAddon, TicketAddon, TicketAddonStatus } from '../../src/api/types';
 import { useAuthStore } from '../../src/stores/auth';
-import { renderWithProviders, screen, waitFor } from '../../src/test-utils';
+import { fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
 
 import TicketsScreen from '../(tabs)/tickets';
 import EntryPassScreen from '../ticket/[id]';
@@ -121,10 +121,7 @@ async function buyTheDesignsExtras() {
 
   const preview = await mockApi.carts.preview(cart.id);
   expect(preview.issues).toEqual([]);
-  const placed = await mockApi.carts.placeOrder(
-    cart.id,
-    preview.pricing.pricingConfirmationToken!,
-  );
+  const placed = await mockApi.carts.placeOrder(cart.id, preview.pricing.pricingConfirmationToken!);
 
   // place-order opens no intention of its own, so payment is initiated separately and the
   // simulated webhook is what marks the order paid and issues the extras.
@@ -138,7 +135,7 @@ async function buyTheDesignsExtras() {
 }
 
 describe('20 · My tickets, extras on the card', () => {
-  it('counts the attached extras and offers the extras row', async () => {
+  it('counts the attached extras and offers a way to add more', async () => {
     await signInAndComplete();
     await buyTheDesignsExtras();
 
@@ -146,7 +143,9 @@ describe('20 · My tickets, extras on the card', () => {
 
     // Room, dinner voucher and shuttle all landed on the buyer's own ticket.
     await waitFor(() => expect(screen.getByText('3 add-ons attached')).toBeTruthy());
-    await waitFor(() => expect(screen.getByText('Add extras to this ticket')).toBeTruthy());
+    // The event still sells rooms, so the stay section is the way in, not the extras row.
+    await waitFor(() => expect(screen.getByText('Book your stay')).toBeTruthy());
+    expect(screen.queryByText('Add extras to this ticket')).toBeNull();
   });
 
   it('says nothing about extras on a ticket that has none', async () => {
@@ -174,6 +173,42 @@ describe('20 · My tickets, extras on the card', () => {
     expect(screen.getByText('View entry pass →')).toBeTruthy();
     expect(screen.queryByText('Add extras to this ticket')).toBeNull();
     expect(screen.queryAllByText(/extras/i)).toHaveLength(0);
+    expect(screen.queryByText('Accommodation Available')).toBeNull();
+
+    catalogue.mockRestore();
+  });
+
+  it('offers somewhere to stay, and books it as an extra on this ticket', async () => {
+    await signInAndComplete();
+    const ticketId = await seedTicketId();
+
+    renderWithProviders(<TicketsScreen />);
+
+    await waitFor(() => expect(screen.getByText('Accommodation Available')).toBeTruthy());
+    // The row would lead to the same screen, so it gives way to the stay section.
+    expect(screen.queryByText('Add extras to this ticket')).toBeNull();
+    fireEvent.press(screen.getByText('Book your stay'));
+    expect(mockRouter.push).toHaveBeenCalledWith(`/ticket/${ticketId}/extras`);
+  });
+
+  it('offers the extras row instead when no stay is on sale', async () => {
+    await signInAndComplete();
+    const all = await mockApi.addons.list(TULUA_ID);
+    const catalogue = jest
+      .spyOn(mockApi.addons, 'list')
+      .mockResolvedValue(
+        all.map((addon) =>
+          addon.type === 'accommodation'
+            ? { ...addon, availability: 'unavailable' as const }
+            : addon,
+        ),
+      );
+
+    renderWithProviders(<TicketsScreen />);
+
+    await waitFor(() => expect(screen.getByText('Add extras to this ticket')).toBeTruthy());
+    expect(screen.queryByText('Accommodation Available')).toBeNull();
+    expect(screen.queryByText('Book your stay')).toBeNull();
 
     catalogue.mockRestore();
   });
