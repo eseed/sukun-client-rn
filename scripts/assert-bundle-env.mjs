@@ -13,6 +13,12 @@
  * is missing and another profile's is there instead. Booleans and short words like
  * "production" are not checked because minification folds them away.
  *
+ * The Meta app id is one of those folded values: the JS only asks whether it is set
+ * (`src/lib/analytics.ts`), so a release with the id compiles the check to false and keeps no
+ * trace of the id itself. What it does keep, or drop, is the warning on the branch for a build
+ * without one, so that is what is checked: absent when the profile sets the id, present when
+ * it does not.
+ *
  *   node scripts/assert-bundle-env.mjs production android path/to/app-release.aab
  */
 import { execFileSync } from 'node:child_process';
@@ -35,8 +41,10 @@ const CHECKED = [
   'EXPO_PUBLIC_API_BASE_URL',
   'EXPO_PUBLIC_MIXPANEL_TOKEN',
   'EXPO_PUBLIC_CLARITY_PROJECT_ID',
-  'EXPO_PUBLIC_META_APP_ID',
 ];
+
+/** The warning `src/lib/analytics.ts` logs on a build without a Meta app id. */
+const NO_META_APP_ID = 'no Meta app id configured';
 
 const eas = JSON.parse(fs.readFileSync(path.join(ROOT, 'eas.json'), 'utf8'));
 const envFor = (profile, forPlatform) => ({
@@ -86,6 +94,17 @@ for (const name of CHECKED) {
 if (wanted.size === 0) {
   console.error(`Profile "${profileName}" sets none of: ${CHECKED.join(', ')}`);
   process.exit(1);
+}
+
+// 1b. The Meta app id arrived exactly when the profile sets one (see the header).
+const metaInBundle = !bundle.includes(NO_META_APP_ID);
+if (expected.EXPO_PUBLIC_META_APP_ID && !metaInBundle) {
+  problems.push(
+    'EXPO_PUBLIC_META_APP_ID is set in the profile but the bundle was built without it',
+  );
+}
+if (!expected.EXPO_PUBLIC_META_APP_ID && metaInBundle) {
+  problems.push('the bundle has a Meta app id, but the profile sets none');
 }
 
 // 2. No other profile's values are. This is what an unexported environment looks like: the
