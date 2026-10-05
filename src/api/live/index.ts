@@ -88,6 +88,13 @@ function normalizeTicket(ticket: LiveTicket): Ticket {
     // Absent on builds served by a backend that predates ticket addon counts, and on any build
     // running with addons switched off, where "no addons" is the honest answer.
     addonCount: ticket.addonCount ?? 0,
+    // Absent from a backend that predates claims taking seats. Treated as claimable: that
+    // backend lets every waiting grant be claimed.
+    claimAvailability:
+      ticket.claimAvailability ??
+      (ticket.source === 'invitation' && ticket.status === 'pending_claim' ? 'available' : null),
+    invitedBy: ticket.invitedBy ?? null,
+    plusOne: ticket.plusOne ?? null,
   };
 }
 
@@ -372,6 +379,23 @@ export const liveApi: SukunApi = {
       ),
 
     /** Current authenticated holder pass, with a signed payload and server expiry. */
+    // POST mobile/tickets/:ticketId/decline — 204
+    decline: (ticketId) =>
+      request<void>(`mobile/tickets/${ticketId}/decline`, { method: 'POST' }).then(() => undefined),
+
+    // PUT mobile/tickets/:ticketId/plus-one
+    invitePlusOne: (ticketId, input) =>
+      request<LiveTicket>(`mobile/tickets/${ticketId}/plus-one`, {
+        method: 'PUT',
+        body: { name: input.name, phoneNumber: normalizePhoneForRequest(input.phoneNumber) },
+      }).then(normalizeTicket),
+
+    // DELETE mobile/tickets/:ticketId/plus-one
+    removePlusOne: (ticketId) =>
+      request<LiveTicket>(`mobile/tickets/${ticketId}/plus-one`, { method: 'DELETE' }).then(
+        normalizeTicket,
+      ),
+
     entryPass: (ticketId) => request<EntryPass>(`mobile/tickets/${ticketId}/entry-pass`),
 
     // GET mobile/tickets/:ticketId/addons

@@ -80,6 +80,8 @@ export default function ReviewScreen() {
   const [promoDraft, setPromoDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [repriced, setRepriced] = useState(false);
+  /** A sheet has been presented for this order, so its payment status is worth watching. */
+  const [sheetPresented, setSheetPresented] = useState(false);
 
   const cart = cartQuery.data;
   /** Placed state is commercial state, never advisory `canPlaceOrder`. */
@@ -89,20 +91,30 @@ export default function ReviewScreen() {
 
   /**
    * The sheet's verdict is a hint, not the truth. Paymob's own SDK reports CANCELLED when the
-   * buyer closes a sheet that has already charged the card, so trusting it outright told people
-   * "Nothing was charged" over a completed payment. The server is the authority, since the
-   * webhook settles the order, so a non-success verdict is checked against payment status
-   * before any such claim is made.
+   * buyer closes a sheet that has already charged the card, and a buyer stuck on the bank's
+   * verification page closes it with the payment still pending, so trusting either outright told
+   * people "Nothing was charged" over money that had moved or might yet. The server is the
+   * authority, since the webhook settles the order, so every verdict is checked against a payment
+   * status fetched after it arrived, and the payment screen, which knows how to say "still
+   * confirming", owns everything short of paid.
+   *
+   * The status is watched from the moment the sheet opens, not only once it answers: a webhook
+   * that lands while the sheet is stuck still takes the buyer to their confirmation.
    *
    * This block was lost in the move to the cart flow, which left the screen presenting the
    * sheet and then doing nothing at all with the result: the buyer paid and stayed on review.
    */
-  const awaitingVerdict = sheet.outcome !== null && sheet.outcome !== 'pending';
-  const paymentStatusQuery = usePaymentStatus(order?.id, { poll: awaitingVerdict });
+  const paymentStatusQuery = usePaymentStatus(order?.id, { poll: sheetPresented });
+  const { refetch: refetchPaymentStatus, dataUpdatedAt: paymentStatusUpdatedAt } =
+    paymentStatusQuery;
   const serverSaysPaid = paymentStatusQuery.data?.orderStatus === 'paid';
-  const rejectedByServer =
-    paymentStatusQuery.data != null &&
-    ['failed', 'expired', 'cancelled', 'refunded'].includes(paymentStatusQuery.data.orderStatus);
+
+  const verdictAt = sheet.outcomeAt;
+  useEffect(() => {
+    if (verdictAt !== null) void refetchPaymentStatus();
+  }, [refetchPaymentStatus, verdictAt]);
+
+  const verdictChecked = verdictAt !== null && paymentStatusUpdatedAt >= verdictAt;
 
   useEffect(() => {
     if (!order) return;
@@ -112,14 +124,12 @@ export default function ReviewScreen() {
     } else if (sheet.outcome === 'pending') {
       // Still settling on Paymob's side. The payment screen polls until the order resolves.
       router.replace(`/checkout/payment?orderId=${order.id}`);
-    } else if (
-      (sheet.outcome === 'fail' || sheet.outcome === 'cancelled') &&
-      rejectedByServer
-    ) {
-      // The server has resolved it as not paid; the payment screen owns retrying from here.
+    } else if ((sheet.outcome === 'fail' || sheet.outcome === 'cancelled') && verdictChecked) {
+      // Not paid yet, on the server's word. Declined, cancelled with nothing charged, or still
+      // with the bank: the payment screen says which, and owns retrying from here.
       router.replace(`/checkout/payment?orderId=${order.id}`);
     }
-  }, [order, rejectedByServer, resetCheckout, router, serverSaysPaid, sheet.outcome]);
+  }, [order, resetCheckout, router, serverSaysPaid, sheet.outcome, verdictChecked]);
 
   /**
    * A remount with an order already in the store goes straight to payment, which resolves a paid
@@ -141,14 +151,6 @@ export default function ReviewScreen() {
     if (!order || (sheet.outcome !== 'fail' && sheet.outcome !== 'cancelled')) return;
     trackPaymentFailed(order.id, sheet.outcome);
   }, [order, sheet.outcome]);
-
-  // Only claim nothing was charged once the server has actually said so.
-  const sheetError =
-    !awaitingVerdict || serverSaysPaid || !rejectedByServer
-      ? null
-      : sheet.outcome === 'fail'
-        ? 'The payment did not go through. Nothing was charged.'
-        : 'Payment was cancelled. Nothing was charged.';
 
   /** Takes a fresh price. Any edit invalidates the token, so the screen re-asks rather than reuses. */
   const refresh = async () => {
@@ -308,7 +310,8 @@ export default function ReviewScreen() {
       });
       beginPaymentAttempt(placed.id);
       trackMetaAddPaymentInfo(placed);
-      sheet.present(intent);
+      sheet.present(intent, placed.id);
+      setSheetPresented(true);
     } catch (err) {
       const code =
         typeof err === 'object' && err !== null && 'code' in err
@@ -536,7 +539,16 @@ export default function ReviewScreen() {
         label="I understand tickets and add-ons are non-refundable and non-transferable."
       />
 
-      {(error ?? sheetError) ? <InlineError message={(error ?? sheetError) as string} /> : null}
+      {error ? <InlineError message={error} /> : null}
+
+      {/*
+        Paymob's sheet has no timeout the app can set and no way for the app to close it, so
+        the buyer is told the one exit there is before they need it.
+      */}
+      <Text variant="metaSm" color={colors.textMuted} style={styles.notice}>
+        If your bank&apos;s verification page doesn&apos;t load, close the sheet with X.
+        We&apos;ll check with your bank and update your order.
+      </Text>
 
       <View style={styles.spacer} />
 

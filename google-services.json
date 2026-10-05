@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "851791322404",
-    "project_id": "sukun-3aff4",
-    "storage_bucket": "sukun-3aff4.firebasestorage.app"
+    "project_number": "758716239873",
+    "project_id": "sukun-prod",
+    "storage_bucket": "sukun-prod.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:851791322404:android:88aa938eb2eaafbb80e7b1",
+        "mobilesdk_app_id": "1:758716239873:android:82b324bc20ad25a1c2b000",
         "android_client_info": {
           "package_name": "co.sukunwellness"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCPJhjx0SWVOW-80zBqBgwd3aRzvn9jgKw"
+          "current_key": "AIzaSyDqdQur0gFt8-E-eu93dLYW3dLUhVV5eLk"
         }
       ],
       "services": {

@@ -1,5 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
 import {
@@ -16,7 +16,7 @@ import { useUploadSelfie } from '../../src/hooks/queries';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { colors, fontFamily } from '../../src/theme/tokens';
-import { useAuthStore } from '../../src/stores/auth';
+import { resumeAfterOnboarding, useAuthStore } from '../../src/stores/auth';
 
 const RING_SIZE = 236;
 
@@ -32,12 +32,20 @@ const RING_SIZE = 236;
  * Reached from `app/ticket/[id].tsx` when the ticket reports `selfie_required`. On success the
  * upload invalidates that ticket and its pass, so going back lands on a QR rather than on the
  * same demand.
+ *
+ * It is also offered, never required, in two other places, with "Add the selfie later" beside
+ * it and the QR code named as the reason:
+ * - `next=resume`: straight after the profile form is saved. Later, or done, carries on where
+ *   registration was going (`resumeAfterOnboarding`).
+ * - `next=back`: from Profile, and from a ticket whose entry pass has not opened yet.
  */
 export default function SelfieScreen() {
   const router = useRouter();
   const authStatus = useAuthStore((state) => state.status);
   const user = useAuthStore((state) => state.user);
   const uploadSelfie = useUploadSelfie();
+  const { next } = useLocalSearchParams<{ next?: string }>();
+  const optional = next === 'resume' || next === 'back';
 
   const [uri, setUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,10 +115,19 @@ export default function SelfieScreen() {
     }
   }
 
-  /** Back to whatever asked for the selfie, which is the ticket in every case today. */
+  /** Back to whatever asked for the selfie, or on with registration after the profile form. */
   function leave() {
+    if (next === 'resume') {
+      resumeAfterOnboarding(router);
+      return;
+    }
     if (router.canGoBack()) router.back();
     else router.replace('/(tabs)/tickets');
+  }
+
+  function later() {
+    track('selfie_deferred');
+    leave();
   }
 
   async function onContinue() {
@@ -135,14 +152,18 @@ export default function SelfieScreen() {
     <Screen contentStyle={styles.content}>
       <BackButton onPress={leave} style={styles.back} />
 
-      <StepLabel>Entry pass</StepLabel>
+      <StepLabel>{optional ? 'Optional' : 'Entry pass'}</StepLabel>
       <View style={styles.heading}>
-        <BulletHeading title="One thing before your QR" size="lg" />
+        <BulletHeading
+          title={optional ? 'Add your selfie' : 'One thing before your QR'}
+          size="lg"
+        />
       </View>
 
       <Text variant="bodyMuted" style={styles.blurb}>
-        Gate staff compare this to your face at entry, so a screenshotted ticket can&apos;t get
-        anyone else in. It&apos;s private, only shown at admission, and you only do this once.
+        {optional
+          ? "Your QR code needs it. Gate staff compare it to your face at entry, so a screenshotted ticket can't get anyone else in. Add it now, or any time before your QR code opens."
+          : "Gate staff compare this to your face at entry, so a screenshotted ticket can't get anyone else in. It's private, only shown at admission, and you only do this once."}
       </Text>
 
       <View style={styles.ringWrap}>
@@ -197,10 +218,24 @@ export default function SelfieScreen() {
       ) : null}
 
       <Button
-        label={uri ? 'Use this photo' : 'Take selfie & open pass'}
+        label={uri ? 'Use this photo' : optional ? 'Take selfie' : 'Take selfie & open pass'}
         onPress={onContinue}
         loading={uploadSelfie.isPending}
       />
+
+      {optional ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={later}
+          disabled={uploadSelfie.isPending}
+          hitSlop={{ top: 13, bottom: 13, left: 24, right: 24 }}
+          style={styles.later}
+        >
+          <Text variant="meta" color={colors.textPrimary} style={styles.laterLabel}>
+            Add the selfie later
+          </Text>
+        </Pressable>
+      ) : null}
 
       {uri ? (
         <Button
@@ -216,6 +251,13 @@ export default function SelfieScreen() {
 }
 
 const styles = StyleSheet.create({
+  later: {
+    alignSelf: 'center',
+    marginTop: 16,
+  },
+  laterLabel: {
+    textDecorationLine: 'underline',
+  },
   content: {
     paddingHorizontal: 28,
   },

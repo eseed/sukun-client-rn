@@ -5,6 +5,7 @@ import { useAuthStore } from '../../../src/stores/auth';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import { track } from '../../../src/lib/analytics';
 import { resetPurchaseAnalyticsForTests } from '../../../src/lib/purchase-analytics';
+import { loadPendingPayment } from '../../../src/lib/pending-payment';
 
 import PaymentScreen from '../payment';
 
@@ -13,6 +14,9 @@ jest.mock('../../../src/lib/analytics', () => ({
   track: jest.fn(),
 }));
 const mockTrack = track as jest.Mock;
+
+const CHECKING_WITH_BANK =
+  "We're checking with your bank. If you were charged, your ticket will appear here automatically.";
 
 /** Every call for one event name, so an assertion reads the properties it was sent with. */
 function tracked(event: string) {
@@ -171,7 +175,10 @@ it('goes to the confirmation when the SDK reports SUCCESS', async () => {
   expect(tracked('payment_failed')).toHaveLength(0);
 });
 
-it('surfaces a failure when the SDK reports FAIL', async () => {
+it('surfaces a failure when the SDK reports FAIL and the server agrees', async () => {
+  // The bank declines it: the simulated webhook fails the order as soon as it is asked.
+  mockConfig.paymentOutcome = 'failed';
+  mockConfig.settleDelayMs = 0;
   await openPaymentSheet();
 
   emitSdkResult(PaymentStatus.FAIL!);
@@ -185,15 +192,34 @@ it('surfaces a failure when the SDK reports FAIL', async () => {
   ]);
 });
 
-it('surfaces a cancellation when the SDK reports CANCELLED', async () => {
+/**
+ * Production, 30 Sep 2026: buyers stuck on "Redirecting you to your bank for verification"
+ * closed the sheet with X, and were told nothing was charged over a payment the bank was still
+ * confirming. The server still shows that attempt pending, so the screen says it is checking.
+ */
+it('never says nothing was charged after a cancel over a pending payment, and lets Pay reopen it', async () => {
   await openPaymentSheet();
 
   emitSdkResult(PaymentStatus.CANCELLED!);
 
   await waitFor(() =>
-    expect(screen.getByText('Payment was cancelled. Nothing was charged.')).toBeTruthy(),
+    expect(
+      screen.getByText('If you already finished paying, this will update by itself.'),
+    ).toBeTruthy(),
   );
+  expect(screen.queryByText(/Nothing was charged/)).toBeNull();
+  // No retry the backend would refuse, and no cancel it would refuse either.
+  expect(screen.queryByText('Try payment again')).toBeNull();
+  expect(screen.queryByText('Cancel this order')).toBeNull();
   expect(mockRouter.replace).not.toHaveBeenCalled();
+
+  // Pay reopens the same live intention: closing the sheet does not cost the rest of the hold.
+  mockPaymob.presentPayVC.mockClear();
+  const pay = screen.getAllByText('Pay 3,648.00 EGP')[1]!;
+  fireEvent.press(pay);
+  await waitFor(() =>
+    expect(mockPaymob.presentPayVC).toHaveBeenCalledWith('sec_mock_0000', 'pk_mock_0000'),
+  );
   expect(tracked('payment_failed')).toEqual([
     ['payment_failed', { order_id: mockParams.orderId, outcome: 'cancelled' }],
   ]);
@@ -204,12 +230,41 @@ it('keeps waiting when the SDK reports PENDING', async () => {
 
   emitSdkResult(PaymentStatus.PENDING!);
 
-  await waitFor(() =>
-    expect(
-      screen.getByText('Your payment is still being processed. This can take a moment…'),
-    ).toBeTruthy(),
-  );
+  await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
   expect(mockRouter.replace).not.toHaveBeenCalled();
+});
+
+it('goes to the confirmation when the bank confirms a payment the sheet left pending', async () => {
+  mockConfig.settleDelayMs = 0;
+  const order = await openPaymentSheet();
+
+  emitSdkResult(PaymentStatus.CANCELLED!);
+
+  await waitFor(() =>
+    expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/confirmation?orderId=${order.id}`),
+  );
+});
+
+it('remembers the order it opened the sheet for, so a killed app can recover it', async () => {
+  const order = await openPaymentSheet();
+
+  await waitFor(async () =>
+    expect(await loadPendingPayment()).toEqual({
+      orderId: order.id,
+      attemptId: expect.stringMatching(/^pay-/),
+      startedAt: expect.any(Number),
+    }),
+  );
+});
+
+it('tells the buyer how to leave a bank page that does not load', async () => {
+  await openPaymentSheet();
+
+  expect(
+    screen.getByText(
+      "If your bank's verification page doesn't load, close the sheet with X. We'll check with your bank and update this order.",
+    ),
+  ).toBeTruthy();
 });
 
 /** Cancelling clears the stale checkout and returns to the event, never back a screen. */

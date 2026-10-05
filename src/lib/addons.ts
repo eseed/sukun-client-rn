@@ -1,6 +1,7 @@
 import type {
   AccommodationAddonOption,
   AddonOption,
+  AddonSummary,
   AddonType,
   OrderAddon,
   TicketAddon,
@@ -106,7 +107,9 @@ export function ticketAddonStatusLabel(addon: TicketAddon | OrderAddon): string 
  * says how many rather than inventing labels.
  */
 export function describeOrderAddonRecipients(addon: OrderAddon): string {
-  const named = [...new Set(addon.recipients.map((r) => r.displayName).filter(Boolean))] as string[];
+  const named = [
+    ...new Set(addon.recipients.map((r) => r.displayName).filter(Boolean)),
+  ] as string[];
   const anonymous = addon.recipients.filter((r) => r.displayName === null).length;
 
   if (named.length === 0 && anonymous === 0) return '';
@@ -147,9 +150,37 @@ export function describeAddonKinds(addons: readonly { type: AddonType }[]): stri
 
   // "&" rather than "and", as the design writes it.
   const sentence =
-    words.length === 1 ? words[0]! : `${words.slice(0, -1).join(', ')} & ${words[words.length - 1]!}`;
+    words.length === 1
+      ? words[0]!
+      : `${words.slice(0, -1).join(', ')} & ${words[words.length - 1]!}`;
 
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}`;
+}
+
+/**
+ * The accommodation an event sells right now, in catalogue order: what the "Accommodation
+ * available" box on the event page stands for. Sold-out stays are left out, so the box never
+ * sends anyone to book a room there is none of.
+ */
+export function availableStays<T extends Pick<AddonSummary, 'type' | 'availability'>>(
+  addons: readonly T[],
+): T[] {
+  return addons.filter(
+    (addon) => addon.type === 'accommodation' && addon.availability === 'available',
+  );
+}
+
+/** Up to `max` photos for the box, one per stay, skipping stays without one. */
+export function stayPhotos(
+  stays: readonly Pick<AddonSummary, 'id' | 'featuredImageUrl'>[],
+  max = 2,
+): { id: string; url: string }[] {
+  return stays
+    .filter((stay): stay is typeof stay & { featuredImageUrl: string } =>
+      Boolean(stay.featuredImageUrl),
+    )
+    .slice(0, max)
+    .map((stay) => ({ id: stay.id, url: stay.featuredImageUrl }));
 }
 
 /**

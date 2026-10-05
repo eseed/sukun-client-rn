@@ -1,5 +1,6 @@
-import { act, renderHook } from '@testing-library/react-native';
-import { usePaymobSheet } from '../usePaymobSheet';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { isPaymobSheetOpen, usePaymobSheet } from '../usePaymobSheet';
+import { clearPendingPayment, loadPendingPayment } from '../../lib/pending-payment';
 
 const mockPaymob = jest.requireMock('paymob-reactnative').default as Record<string, jest.Mock>;
 
@@ -108,5 +109,73 @@ describe('usePaymobSheet', () => {
       result.current.present(intent);
     });
     expect(result.current.outcome).toBeNull();
+  });
+
+  it('stamps each verdict with when it arrived, so screens can check it with the server', () => {
+    const { result } = renderHook(() => usePaymobSheet());
+
+    act(() => {
+      result.current.present(intent);
+    });
+    expect(result.current.outcomeAt).toBeNull();
+
+    const before = Date.now();
+    emit('Cancelled');
+    expect(result.current.outcomeAt).toBeGreaterThanOrEqual(before);
+  });
+
+  it('knows a sheet is open until it reports back', () => {
+    const { result, unmount } = renderHook(() => usePaymobSheet());
+
+    act(() => {
+      result.current.present(intent);
+    });
+    expect(isPaymobSheetOpen()).toBe(true);
+
+    emit('Pending');
+    expect(isPaymobSheetOpen()).toBe(false);
+
+    act(() => {
+      result.current.present(intent);
+    });
+    unmount();
+    expect(isPaymobSheetOpen()).toBe(false);
+  });
+
+  it('remembers the order before the sheet opens, so a killed app can recover it', async () => {
+    await clearPendingPayment();
+    const { result } = renderHook(() => usePaymobSheet());
+
+    act(() => {
+      result.current.present({ ...intent, paymentId: 'pay-7' }, 'order-7');
+    });
+
+    await waitFor(async () =>
+      expect(await loadPendingPayment()).toMatchObject({ orderId: 'order-7', attemptId: 'pay-7' }),
+    );
+  });
+
+  /** The SDK documents no timeout and no dismiss, so the hook must not reach for either. */
+  it('calls nothing on the SDK beyond its documented surface', () => {
+    const { result } = renderHook(() => usePaymobSheet());
+
+    act(() => {
+      result.current.present(intent);
+    });
+    emit('Cancelled');
+
+    const documented = new Set([
+      'setAppName',
+      'setButtonBackgroundColor',
+      'setButtonTextColor',
+      'setShowSaveCard',
+      'setSaveCardDefault',
+      'setKeyboardHandlingEnabled',
+      'setSdkListener',
+      'presentPayVC',
+    ]);
+    for (const [name, fn] of Object.entries(mockPaymob)) {
+      if (!documented.has(name)) expect(fn).not.toHaveBeenCalled();
+    }
   });
 });

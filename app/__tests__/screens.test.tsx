@@ -79,6 +79,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
   useIsFocused: () => true,
+  usePathname: () => '/discover',
   Redirect: () => null,
   Stack: Object.assign(() => null, { Screen: () => null }),
   Tabs: Object.assign(() => null, { Screen: () => null }),
@@ -166,6 +167,18 @@ interface CartCheckoutInput {
  * without one, so a test that renders review has to arrive carrying a cart id exactly as the
  * real flow does.
  */
+/**
+ * Pays an order through the mock's simulated webhook, so the server says `paid`. The
+ * confirmation screen only says a ticket is ready once it does.
+ */
+async function payOrder(orderId: string) {
+  const settleDelay = mockConfig.settleDelayMs;
+  mockConfig.settleDelayMs = 0;
+  await mockApi.payments.initiate(orderId);
+  await mockApi.payments.status(orderId);
+  mockConfig.settleDelayMs = settleDelay;
+}
+
 async function startCartCheckout(input: CartCheckoutInput) {
   const cart = await mockApi.carts.create(input.eventId);
   await mockApi.carts.replaceTickets(cart.id, {
@@ -1211,6 +1224,11 @@ describe('10 Review & pay', () => {
     });
     useCheckoutStore.getState().setTermsAccepted(true);
 
+    // The bank declines it: the simulated webhook fails the order as soon as it is asked.
+    mockConfig.paymentOutcome = 'failed';
+    const settleDelay = mockConfig.settleDelayMs;
+    mockConfig.settleDelayMs = 0;
+
     renderWithProviders(<ReviewScreen />);
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
@@ -1220,14 +1238,61 @@ describe('10 Review & pay', () => {
     await waitFor(() => expect(useCheckoutStore.getState().orderId).toBeTruthy());
     const orderId = useCheckoutStore.getState().orderId!;
 
-    await mockApi.orders.cancel(orderId);
-
     const listener = mockPaymob.setSdkListener!.mock.calls.at(-1)?.[0] as (r: unknown) => void;
     act(() => listener({ status: 'Fail' }));
 
     await waitFor(() =>
       expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${orderId}`),
     );
+    mockConfig.settleDelayMs = settleDelay;
+  });
+
+  /**
+   * A buyer stuck on the bank's verification page closes the sheet with X, and the sheet says
+   * CANCELLED over a payment the bank may still confirm. Review must not tell them nothing was
+   * charged: it checks the server first, and hands the still-pending order to the payment
+   * screen, which says it is checking with the bank.
+   */
+  it('checks the server after a cancel, and never says nothing was charged over a pending payment', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(1);
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    useCheckoutStore.getState().addGuest({
+      phoneNumber: '+201022334455',
+      name: 'Nour Hassan',
+      fromContacts: false,
+    });
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    useCheckoutStore.getState().setTermsAccepted(true);
+    mockConfig.paymentOutcome = 'stuck';
+    const status = jest.spyOn(mockApi.payments, 'status');
+
+    renderWithProviders(<ReviewScreen />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
+    );
+
+    fireEvent.press(screen.getByText('Continue to payment'));
+    await waitFor(() => expect(useCheckoutStore.getState().orderId).toBeTruthy());
+    const orderId = useCheckoutStore.getState().orderId!;
+    const callsBeforeVerdict = status.mock.calls.length;
+
+    const listener = mockPaymob.setSdkListener!.mock.calls.at(-1)?.[0] as (r: unknown) => void;
+    act(() => listener({ status: 'Cancelled' }));
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${orderId}`),
+    );
+    expect(status.mock.calls.length).toBeGreaterThan(callsBeforeVerdict);
+    expect(screen.queryByText(/Nothing was charged/)).toBeNull();
+    status.mockRestore();
   });
 });
 
@@ -1274,6 +1339,7 @@ describe('12 Confirmation', () => {
         { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
       ],
     });
+    await payOrder(order.id);
     mockParams.orderId = order.id;
 
     renderWithProviders(<ConfirmationScreen />);
@@ -1298,6 +1364,7 @@ describe('12 Confirmation', () => {
       items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
       guests: [],
     });
+    await payOrder(order.id);
     mockParams.orderId = order.id;
 
     renderWithProviders(<ConfirmationScreen />);
@@ -1326,6 +1393,7 @@ describe('12 Confirmation', () => {
       items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
       guests: [],
     });
+    await payOrder(order.id);
     mockParams.orderId = order.id;
 
     renderWithProviders(<ConfirmationScreen />);
@@ -1333,6 +1401,52 @@ describe('12 Confirmation', () => {
     await waitFor(() => expect(screen.getByText('See my ticket')).toBeTruthy());
     expect(screen.queryByText('We need your selfie to admit you to the event.')).toBeNull();
     expect(screen.queryByText('Not now, see my ticket')).toBeNull();
+  });
+
+  /** "Your ticket is ready" is the server's to say: an unpaid order is still being confirmed. */
+  it('says it is confirming with the bank until the server says paid', async () => {
+    await signInAndComplete();
+    const order = await placeOrderViaCart({
+      eventId: SOUND_BATH_ID,
+      buyerTierId: TIER_SOUND_GA,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
+      guests: [],
+    });
+    mockConfig.paymentOutcome = 'stuck';
+    await mockApi.payments.initiate(order.id);
+    mockParams.orderId = order.id;
+
+    renderWithProviders(<ConfirmationScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText('Confirming your payment with your bank')).toBeTruthy(),
+    );
+    expect(screen.queryByText(/ticket is ready/)).toBeNull();
+    expect(screen.queryByText(/entry pass is ready/)).toBeNull();
+    expect(screen.queryByText('See my ticket')).toBeNull();
+  });
+
+  it('hands an order the server failed back to the payment screen', async () => {
+    await signInAndComplete();
+    const order = await placeOrderViaCart({
+      eventId: SOUND_BATH_ID,
+      buyerTierId: TIER_SOUND_GA,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
+      guests: [],
+    });
+    mockConfig.paymentOutcome = 'failed';
+    const settleDelay = mockConfig.settleDelayMs;
+    mockConfig.settleDelayMs = 0;
+    await mockApi.payments.initiate(order.id);
+    mockParams.orderId = order.id;
+
+    renderWithProviders(<ConfirmationScreen />);
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${order.id}`),
+    );
+    expect(screen.queryByText(/ticket is ready/)).toBeNull();
+    mockConfig.settleDelayMs = settleDelay;
   });
 });
 
@@ -1379,70 +1493,149 @@ describe('13 My tickets', () => {
 });
 
 describe('14 Entry pass', () => {
+  // Inside the 12 hours before the first day of the seeded ticket (2026-10-23 13:00Z), when the
+  // screen asks for a pass at all. Outside it, every ticket says the QR will show here later.
+  const insideEntryWindow = Date.parse('2026-10-23T08:00:00.000Z');
+
   it('renders the live pass, the rotation notice and the holder details', async () => {
     await signInAndComplete();
     const { data } = await mockApi.tickets.list();
     mockParams.id = data[0]!.id;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() => expect(screen.getByText('Tulua · live entry pass')).toBeTruthy());
-    expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
-    expect(screen.getByText('Holder')).toBeTruthy();
-    expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
-    expect(screen.getByText('Venue')).toBeTruthy();
-    // The pass shows the ticket's full venue string, as the design draws it.
-    expect(screen.getByText('Tunis Village, Fayoum')).toBeTruthy();
-    expect(screen.getByText(/This code regenerates every ~/)).toBeTruthy();
+      await waitFor(() => expect(screen.getByText('Tulua · live entry pass')).toBeTruthy());
+      expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
+      expect(screen.getByText('Holder')).toBeTruthy();
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+      expect(screen.getByText('Venue')).toBeTruthy();
+      // The pass shows the ticket's full venue string, as the design draws it.
+      expect(screen.getByText('Tunis Village, Fayoum')).toBeTruthy();
+      // The mock's pass lives 30s and is refetched 3s before it expires; the clock is frozen.
+      await waitFor(() => expect(screen.getByText('Refreshes in 27s')).toBeTruthy());
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
+    } finally {
+      now.mockRestore();
+    }
   });
 
   /*
-   * The entry-pass endpoint is not deployed, so the live api's request 404s. That is not
-   * something the holder can retry, and the panel must not claim a code is rotating when there
-   * is none. The same build renders the QR above as soon as the endpoint answers.
+   * Before the window, which is where a holder almost always is, the screen does not ask for a
+   * pass at all. It says when the code will appear instead of loading or failing.
+   */
+  it('does not ask for a pass before the window opens, and says when it will', async () => {
+    await signInAndComplete();
+    const { data } = await mockApi.tickets.list();
+    mockParams.id = data[0]!.id;
+    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass');
+    // One minute before the window opens, 12 hours ahead of the first day.
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-23T00:59:00.000Z'));
+
+    try {
+      renderWithProviders(<EntryPassScreen />);
+
+      await waitFor(() =>
+        expect(
+          screen.getByText('Your entry pass opens 12 hours before the event starts.'),
+        ).toBeTruthy(),
+      );
+      expect(screen.getByText('QR Code will show here.')).toBeTruthy();
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(entryPass).not.toHaveBeenCalled();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
+  });
+
+  /*
+   * An endpoint that answers but does not issue passes yet (501, 405, or an ENTRY_PASS_NOT_*
+   * refusal) is not something the holder can retry, and the panel must not claim a code is
+   * rotating when there is none. The same build renders the QR above as soon as it answers.
    */
   it('says the code will appear later while the endpoint is not serving a pass', async () => {
     await signInAndComplete();
     const { data } = await mockApi.tickets.list();
     mockParams.id = data[0]!.id;
-    const notDeployed = Object.assign(new Error('Cannot GET'), { code: 'UNKNOWN', status: 404 });
-    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(notDeployed);
+    const notServing = Object.assign(new Error('Not implemented'), {
+      code: 'NOT_IMPLEMENTED',
+      status: 501,
+    });
+    const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(notServing);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() => expect(screen.getByText('QR Code will show here.')).toBeTruthy());
-    expect(screen.getByText('Check back 2 days before the event.')).toBeTruthy();
-    expect(screen.queryByText('Try again')).toBeNull();
-    expect(screen.queryByText(/Refreshes in/)).toBeNull();
-    expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
-    // The ticket's own details still belong on the screen.
-    expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
-
-    entryPass.mockRestore();
+      await waitFor(() =>
+        expect(
+          screen.getByText('The entry pass is not available yet. Try again closer to the event.'),
+        ).toBeTruthy(),
+      );
+      expect(entryPass).toHaveBeenCalled();
+      expect(screen.getByText('QR Code will show here.')).toBeTruthy();
+      expect(screen.queryByText('Try again')).toBeNull();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+      // The ticket's own details still belong on the screen.
+      expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
   });
 
   /**
    * The one place the selfie is asked for (CLAUDE.md rule 3). The ticket says why its QR is
    * not showing and hands over the camera; nothing earlier in the app does either.
    */
-  it('asks for the selfie here, and only here, when the QR needs one', async () => {
+  it('demands the selfie only once the QR it protects can open', async () => {
     await signInWithoutSelfie();
     const { data } = await mockApi.tickets.list();
     expect(data[0]!.usageStatus).toBe('selfie_required');
     mockParams.id = data[0]!.id;
+    // Inside the 12 hours before the first day of the seeded ticket (2026-10-23 13:00Z).
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-23T08:00:00.000Z'));
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    // The demand sits inside the QR panel, where the code would be, rather than replacing it.
-    await waitFor(() =>
-      expect(screen.getByText('Take a selfie to activate your QR Code')).toBeTruthy(),
-    );
-    expect(screen.getByText('Tulua · ticket status')).toBeTruthy();
-    expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
-    expect(screen.queryByText('QR Code will show here.')).toBeNull();
+      // The demand sits inside the QR panel, where the code would be, rather than replacing it.
+      await waitFor(() =>
+        expect(screen.getByText('Take a selfie to activate your QR Code')).toBeTruthy(),
+      );
+      expect(screen.getByText('Tulua · ticket status')).toBeTruthy();
+      expect(screen.queryByText(/This code regenerates every ~/)).toBeNull();
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
 
-    fireEvent.press(screen.getByText('Take selfie'));
-    expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');
+      fireEvent.press(screen.getByText('Take selfie'));
+      expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('only offers the selfie while the QR is still days away', async () => {
+    await signInWithoutSelfie();
+    const { data } = await mockApi.tickets.list();
+    mockParams.id = data[0]!.id;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-01T08:00:00.000Z'));
+
+    try {
+      renderWithProviders(<EntryPassScreen />);
+
+      await waitFor(() => expect(screen.getByText('QR Code will show here.')).toBeTruthy());
+      expect(screen.getByText(/It needs your selfie, so add it any time before then/)).toBeTruthy();
+      expect(screen.queryByText('Take a selfie to activate your QR Code')).toBeNull();
+
+      fireEvent.press(screen.getByText('Add selfie now'));
+      expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie?next=back');
+    } finally {
+      now.mockRestore();
+    }
   });
 
   // A pass that genuinely failed to load is still an error the holder can retry.
@@ -1455,18 +1648,23 @@ describe('14 Entry pass', () => {
       status: 500,
     });
     const entryPass = jest.spyOn(mockApi.tickets, 'entryPass').mockRejectedValue(serverError);
+    const now = jest.spyOn(Date, 'now').mockReturnValue(insideEntryWindow);
 
-    renderWithProviders(<EntryPassScreen />);
+    try {
+      renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText('Something went wrong on our side. Try again in a moment.'),
-      ).toBeTruthy(),
-    );
-    expect(screen.getByText('Try again')).toBeTruthy();
-    expect(screen.queryByText('QR Code will show here.')).toBeNull();
-
-    entryPass.mockRestore();
+      await waitFor(() =>
+        expect(
+          screen.getByText('Something went wrong on our side. Try again in a moment.'),
+        ).toBeTruthy(),
+      );
+      expect(screen.getByText('Try again')).toBeTruthy();
+      expect(screen.queryByText('QR Code will show here.')).toBeNull();
+      expect(screen.queryByText(/Refreshes in/)).toBeNull();
+    } finally {
+      now.mockRestore();
+      entryPass.mockRestore();
+    }
   });
 });
 
@@ -1525,7 +1723,7 @@ describe('15 Profile', () => {
    * Profile does not nag about the selfie. It is not an unfinished registration and it does
    * not gate anything this screen offers: the one ticket that needs it asks for it itself.
    */
-  it('says nothing about a missing selfie once the form is done', async () => {
+  it('offers a missing selfie as optional, for the QR code, not as unfinished setup', async () => {
     await signInAndComplete();
     useAuthStore.setState({
       user: { ...useAuthStore.getState().user!, selfieUploaded: false, selfieUrl: null },
@@ -1533,6 +1731,17 @@ describe('15 Profile', () => {
     renderWithProviders(<ProfileTabScreen />);
 
     expect(screen.queryByText(/Finish setup/)).toBeNull();
+    fireEvent.press(screen.getByText('Add your selfie for your QR code'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/account/selfie?next=back');
+  });
+
+  it('says nothing about the selfie once there is one', async () => {
+    await signInAndComplete();
+    useAuthStore.setState({
+      user: { ...useAuthStore.getState().user!, selfieUploaded: true },
+    });
+    renderWithProviders(<ProfileTabScreen />);
+
     expect(screen.queryByText(/selfie/i)).toBeNull();
   });
 
@@ -1678,6 +1887,9 @@ describe('08 Choose your pass · the account gate', () => {
  * this screen counted as finished: Pay was disabled, "Try payment again" was sent to a refusal,
  * and the cancel that would have freed them was hidden.
  */
+const CHECKING_WITH_BANK =
+  "We're checking with your bank. If you were charged, your ticket will appear here automatically.";
+
 describe('11 Payment after a declined card', () => {
   const placeTuluaOrder = async () => {
     await signInAndComplete();
@@ -1735,13 +1947,110 @@ describe('11 Payment after a declined card', () => {
 
     renderWithProviders(<PaymentScreen />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText('Your payment is still being processed. This can take a moment…'),
-      ).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
     expect(screen.queryByText('Try payment again')).toBeNull();
     expect(screen.queryByText('Cancel this order')).toBeNull();
+  });
+
+  /**
+   * Inside the hold a pending attempt is a live intention, which initiate hands back. The buyer
+   * who closed the sheet before entering a card reopens it with Pay; retry and cancel, which the
+   * backend refuses over that attempt, are not offered.
+   */
+  it('reopens a pending intention with Pay inside the hold, and offers no retry or cancel', async () => {
+    const order = await placeTuluaOrder();
+    statusIs({ paymentStatus: 'pending' });
+    const initiate = jest.spyOn(mockApi.payments, 'initiate');
+    const retry = jest.spyOn(mockApi.payments, 'retry');
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('If you already finished paying, this will update by itself.'),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText(CHECKING_WITH_BANK)).toBeNull();
+    expect(screen.queryByText('Try payment again')).toBeNull();
+    expect(screen.queryByText('Cancel this order')).toBeNull();
+
+    const pay = screen.getAllByRole('button', { name: /Pay / }).at(-1)!;
+    expect(pay).not.toBeDisabled();
+    fireEvent.press(pay);
+
+    await waitFor(() => expect(initiate).toHaveBeenCalledWith(order.id));
+    await waitFor(() => expect(mockPaymob.presentPayVC).toHaveBeenCalled());
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it('shows the checking copy, with nothing to tap, when initiate answers 409', async () => {
+    await placeTuluaOrder();
+    statusIs({ paymentStatus: 'pending' });
+    jest.spyOn(mockApi.payments, 'initiate').mockRejectedValue(
+      Object.assign(new Error('pending'), {
+        code: 'PAYMENT_CONFIRMATION_PENDING',
+        status: 409,
+      }),
+    );
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /Pay / }).at(-1)).not.toBeDisabled(),
+    );
+    fireEvent.press(screen.getAllByRole('button', { name: /Pay / }).at(-1)!);
+
+    await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
+    expect(screen.getAllByRole('button', { name: /Pay / }).at(-1)).toBeDisabled();
+    expect(screen.queryByText(/still confirming your last payment attempt/)).toBeNull();
+  });
+
+  it('offers the retry once the hold has run out over a pending attempt', async () => {
+    const order = await placeTuluaOrder();
+    statusIs({ orderStatus: 'expired', paymentStatus: 'pending' });
+    const retry = jest.spyOn(mockApi.payments, 'retry');
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() => expect(screen.getByText('Try payment again')).toBeTruthy());
+    expect(screen.getByText('This payment hold expired. You can try again.')).toBeTruthy();
+    fireEvent.press(screen.getByText('Try payment again'));
+    await waitFor(() => expect(retry).toHaveBeenCalledWith(order.id));
+  });
+
+  it('reads a 409 PAYMENT_CONFIRMATION_PENDING as still confirming, not as an error', async () => {
+    await placeTuluaOrder();
+    statusIs({ orderStatus: 'failed' });
+    jest.spyOn(mockApi.payments, 'retry').mockRejectedValue(
+      Object.assign(new Error('pending'), {
+        code: 'PAYMENT_CONFIRMATION_PENDING',
+        status: 409,
+      }),
+    );
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() => expect(screen.getByText('Try payment again')).toBeTruthy());
+    fireEvent.press(screen.getByText('Try payment again'));
+
+    await waitFor(() => expect(screen.getByText(CHECKING_WITH_BANK)).toBeTruthy());
+    expect(screen.queryByText(/still confirming your last payment attempt/)).toBeNull();
+    expect(screen.queryByText('Try payment again')).toBeNull();
+  });
+
+  it("names the bank's reason when the server gives one", async () => {
+    await placeTuluaOrder();
+    statusIs({ orderStatus: 'failed', failureReason: 'insufficient_funds' });
+
+    renderWithProviders(<PaymentScreen />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "The card didn't have enough funds for this payment. Nothing was charged. Try another card.",
+        ),
+      ).toBeTruthy(),
+    );
   });
 
   it('offers nothing for an order that was cancelled', async () => {

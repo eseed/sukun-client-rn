@@ -25,7 +25,10 @@ import {
   YoutubeEmbed,
 } from '../../src/components/ui';
 import { useAddons, useEvent } from '../../src/hooks/queries';
-import { describeAddonKinds } from '../../src/lib/addons';
+import { AccommodationBox } from '../../src/components/events/AccommodationBox';
+import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
+import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
+import { availableStays, describeAddonKinds } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { eventAvailabilityMessage } from '../../src/lib/event-availability';
@@ -71,6 +74,11 @@ export default function EventDetailScreen() {
   // fetch reads as "no extras", which is the same silent state as a genuinely empty catalogue:
   // better to under-promise on the event page than to advertise extras that are not there.
   const addonsQuery = useAddons(eventSlug);
+  // An invitation waiting on this holder for this event: the bar offers to claim it instead of
+  // selling them a ticket. Nobody signed in has none.
+  const { tickets: waitingInvitations } = useClaimableTickets();
+  // A holder's own ticket takes a stay straight away ("Book your stay"). Nobody signed in has one.
+  const ownTicket = useOwnTicketForEvent(event?.id ?? null);
 
   // An admin can attach a video either in the dedicated links field or by pasting one into the
   // description, and the same video often arrives both ways. Collect them into one ordered,
@@ -107,6 +115,7 @@ export default function EventDetailScreen() {
   }
 
   const firstPurchasableTier = event.tiers.find((tier) => tier.isPurchasable);
+  const invitation = waitingInvitations.find((ticket) => ticket.event.id === event.id) ?? null;
   const availability = eventAvailabilityMessage(event);
   const eventId = event.id;
 
@@ -124,6 +133,7 @@ export default function EventDetailScreen() {
   }
 
   const addonKinds = describeAddonKinds(addonsQuery.data ?? []);
+  const stays = availableStays(addonsQuery.data ?? []);
 
   /**
    * Straight to the pass step, whoever is asking.
@@ -135,6 +145,11 @@ export default function EventDetailScreen() {
    * the one that lists the tiers, and the pass screen now carries it. See `useCheckoutAccess`.
    */
   function onGetTickets() {
+    if (invitation) {
+      track('claim_opened_from_event', { event_id: eventId, ticket_id: invitation.id });
+      router.push(`/ticket/${invitation.id}`);
+      return;
+    }
     if (!firstPurchasableTier) return;
     startCheckout(eventId, firstPurchasableTier.id);
     track('checkout_started', {
@@ -143,6 +158,35 @@ export default function EventDetailScreen() {
       tier_id: firstPurchasableTier.id,
     });
     router.push(`/checkout/pass?eventId=${eventId}`);
+  }
+
+  /**
+   * "Book your stay". A room attaches to a ticket, so where it leads depends on theirs: a holder
+   * adds it to their ticket now; a waiting invitee claims first, as "Claim ticket" does; anyone
+   * else starts the ticket checkout, whose pass step says why (`for=stay`) and whose add-ons step
+   * offers the room with the ticket.
+   */
+  function onBookStay() {
+    track('stay_box_opened', {
+      event_id: eventId,
+      has_ticket: ownTicket !== null,
+      invited: invitation !== null,
+    });
+    if (ownTicket) {
+      router.push(`/ticket/${ownTicket.id}/extras`);
+      return;
+    }
+    if (invitation || !firstPurchasableTier) {
+      onGetTickets();
+      return;
+    }
+    startCheckout(eventId, firstPurchasableTier.id);
+    track('checkout_started', {
+      event_id: eventId,
+      event_slug: eventSlug ?? '',
+      tier_id: firstPurchasableTier.id,
+    });
+    router.push(`/checkout/pass?eventId=${eventId}&for=stay`);
   }
 
   return (
@@ -251,7 +295,10 @@ export default function EventDetailScreen() {
             without a cart and cannot be bought without a ticket in it. A control that only
             repeated "Get tickets" would be a second CTA pretending to be a third thing.
           */}
-          {addonKinds ? (
+          {/* Somewhere to stay is worth more than a line: it gets its own box, which books it. */}
+          {stays.length > 0 ? (
+            <AccommodationBox stays={stays} onPress={onBookStay} />
+          ) : addonKinds ? (
             <View
               accessible
               accessibilityLabel={`Add-ons available: ${addonKinds}`}
@@ -336,18 +383,24 @@ export default function EventDetailScreen() {
       )}
 
       <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.barPriceBlock}>
-          <Text style={styles.barLabel}>From</Text>
-          <Text style={styles.barPrice}>
-            {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
-          </Text>
-        </View>
+        {/* A holder with an invitation waiting is not buying, so no price is shown to them. */}
+        {invitation ? null : (
+          <View style={styles.barPriceBlock}>
+            <Text style={styles.barLabel}>From</Text>
+            <Text style={styles.barPrice}>
+              {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
+            </Text>
+          </View>
+        )}
         <Button
-          label={firstPurchasableTier ? 'Get tickets' : 'Not available'}
+          label={
+            invitation ? 'Claim ticket' : firstPurchasableTier ? 'Get tickets' : 'Not available'
+          }
           variant="accent"
           size="inline"
+          style={invitation ? styles.flex : undefined}
           onPress={onGetTickets}
-          disabled={!firstPurchasableTier}
+          disabled={!invitation && !firstPurchasableTier}
         />
       </View>
 

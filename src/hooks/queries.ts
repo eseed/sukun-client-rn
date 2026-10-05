@@ -14,6 +14,7 @@ import type {
   EntryPass,
   EventListItem,
   GuestValidationInput,
+  InvitePlusOneInput,
   ListEventsQuery,
   PaymentStatus,
   ReplaceCartTicketsInput,
@@ -605,6 +606,41 @@ export function useClaimTicket() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (ticketId: string) => api.tickets.claim(ticketId),
+    onSuccess: (ticket) => {
+      client.setQueryData(queryKeys.ticket(ticket.id), ticket);
+      void client.invalidateQueries({ queryKey: queryKeys.ticketsRoot });
+    },
+  });
+}
+
+/** "Sorry, can't make it": the ticket is voided, so it drops out of every list and detail. */
+export function useDeclineTicket() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (ticketId: string) => api.tickets.decline(ticketId),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.ticketsRoot });
+      void client.invalidateQueries({ queryKey: queryKeys.ticketRoot });
+    },
+  });
+}
+
+export function useInvitePlusOne() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ticketId: string; plusOne: InvitePlusOneInput }) =>
+      api.tickets.invitePlusOne(input.ticketId, input.plusOne),
+    onSuccess: (ticket) => {
+      client.setQueryData(queryKeys.ticket(ticket.id), ticket);
+      void client.invalidateQueries({ queryKey: queryKeys.ticketsRoot });
+    },
+  });
+}
+
+export function useRemovePlusOne() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (ticketId: string) => api.tickets.removePlusOne(ticketId),
     onSuccess: (ticket) => {
       client.setQueryData(queryKeys.ticket(ticket.id), ticket);
       void client.invalidateQueries({ queryKey: queryKeys.ticketsRoot });

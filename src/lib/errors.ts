@@ -32,6 +32,18 @@ const MESSAGES: Record<string, string> = {
   TICKET_FORBIDDEN: 'That ticket is not yours.',
   // A granted ticket revoked, or one already claimed on another account, before this claim.
   TICKET_NOT_CLAIMABLE: 'This ticket can no longer be claimed.',
+  // A granted ticket takes its seat when it is claimed, so a full or closed event refuses it.
+  CLAIM_SOLD_OUT: 'This event is sold out, so this ticket can no longer be claimed.',
+  CLAIM_NOT_ON_SALE:
+    "Tickets for this event aren't on sale right now, so this one can't be claimed yet.",
+  TICKET_NOT_DECLINABLE: 'This ticket is already yours, so there is nothing to decline.',
+  PLUS_ONE_NOT_ALLOWED: 'This invitation does not include a plus one.',
+  PLUS_ONE_ALREADY_INVITED:
+    "You've already invited someone. Remove them first to invite someone else.",
+  PLUS_ONE_IS_SELF: "Enter your plus one's number, not yours.",
+  PLUS_ONE_ALREADY_CLAIMED: 'Your plus one has already claimed their ticket.',
+  ALREADY_HAS_TICKET: 'That number already has a ticket for this event.',
+  EVENT_NOT_INVITABLE: "This event isn't taking invitations right now.",
   TICKET_FILTER_INVALID: "We couldn't load your tickets. Try again.",
   BUYER_NOT_FOUND: 'Complete your profile before buying tickets.',
   SELFIE_NOT_FOUND: 'Add your selfie to use this ticket.',

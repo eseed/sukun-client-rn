@@ -419,6 +419,92 @@ describe('order and ticket lifecycle', () => {
   });
 });
 
+/**
+ * The retry contract shared with the backend: an attempt still pending inside the order's hold
+ * may yet be settled by Paymob, so retry and cancel are refused with
+ * PAYMENT_CONFIRMATION_PENDING; once the hold has run out the retry takes the order with a
+ * fresh intention.
+ */
+describe('payment states', () => {
+  async function initiatedOrder() {
+    await signIn();
+    await completeProfile();
+    const order = await placeOrder({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_DAY1, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_DAY1 }],
+    });
+    await mockApi.payments.initiate(order.id);
+    return order;
+  }
+
+  it('refuses a retry and a cancel while the attempt is pending inside the hold', async () => {
+    const order = await initiatedOrder();
+    expect((await mockApi.payments.status(order.id)).paymentStatus).toBe('pending');
+
+    await expect(mockApi.payments.retry(order.id)).rejects.toMatchObject({
+      code: 'PAYMENT_CONFIRMATION_PENDING',
+      status: 409,
+    });
+    await expect(mockApi.orders.cancel(order.id)).rejects.toMatchObject({
+      code: 'PAYMENT_CONFIRMATION_PENDING',
+    });
+  });
+
+  it('hands the same live intention back to initiate inside the hold', async () => {
+    const order = await initiatedOrder();
+    const first = (await mockApi.payments.status(order.id)).paymentStatus;
+    expect(first).toBe('pending');
+
+    const again = await mockApi.payments.initiate(order.id);
+    const once = await mockApi.payments.initiate(order.id);
+    expect(again.paymentId).toBe(once.paymentId);
+    expect(again.providerIntentionId).toBe(once.providerIntentionId);
+  });
+
+  it('keeps a stuck bank check pending until the hold runs out, then retries it', async () => {
+    mockConfig.paymentOutcome = 'stuck';
+    const order = await initiatedOrder();
+
+    advance(10 * 60 * 1000);
+    expect(await mockApi.payments.status(order.id)).toMatchObject({
+      orderStatus: 'awaiting_payment',
+      paymentStatus: 'pending',
+    });
+
+    advance(6 * 60 * 1000);
+    expect((await mockApi.payments.status(order.id)).orderStatus).toBe('expired');
+
+    const intent = await mockApi.payments.retry(order.id);
+    expect(intent.clientSecret).toBeTruthy();
+    expect((await mockApi.payments.status(order.id)).orderStatus).toBe('awaiting_payment');
+  });
+
+  it('fails a declined payment with its reason, and lets it be retried', async () => {
+    mockConfig.paymentOutcome = 'failed';
+    mockConfig.paymentFailureReason = 'insufficient_funds';
+    const order = await initiatedOrder();
+
+    advance(5000);
+    expect(await mockApi.payments.status(order.id)).toMatchObject({
+      orderStatus: 'failed',
+      paymentStatus: 'failed',
+      failureReason: 'insufficient_funds',
+      ticketsIssued: 0,
+    });
+
+    mockConfig.paymentOutcome = 'paid';
+    await mockApi.payments.retry(order.id);
+    advance(5000);
+    expect(await mockApi.payments.status(order.id)).toMatchObject({
+      orderStatus: 'paid',
+      paymentStatus: 'captured',
+      failureReason: null,
+    });
+  });
+});
+
 describe('entry pass', () => {
   it('requires a selfie, which is the only thing that does', async () => {
     await signIn();

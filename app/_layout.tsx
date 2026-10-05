@@ -3,9 +3,12 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnalyticsConsentScreen } from '../src/components/AnalyticsConsentScreen';
+import { ForceUpdateScreen } from '../src/components/ForceUpdateScreen';
+import { PendingPaymentRecovery } from '../src/components/checkout/PendingPaymentRecovery';
 import { initializeAcquisitionAttribution } from '../src/services/attribution/acquisition-attribution';
 import { QueryProvider } from '../src/providers/QueryProvider';
 import { useAuthStore } from '../src/stores/auth';
@@ -31,6 +34,8 @@ export default function RootLayout() {
   // it. The store guarantees this settles quickly even offline. See `src/stores/flags.ts`.
   const flagsStatus = useFlagsStore((s) => s.status);
   const loadFlags = useFlagsStore((s) => s.load);
+  const refreshFlags = useFlagsStore((s) => s.refresh);
+  const updateRequired = useFlagsStore((s) => s.updateRequired);
   // TrueType, not the licensed OpenType masters beside them: Android's typeface loader does not
   // parse PostScript (CFF) outlines and falls back to the system face without raising, so the
   // .otf files rendered correctly on iOS and as Roboto on Android. See assets/fonts/README.md.
@@ -60,6 +65,15 @@ export default function RootLayout() {
     void loadFlags();
   }, [loadFlags]);
 
+  // A force update switched on while someone is already in the app reaches them the next time
+  // they come back to it, rather than on their next cold start.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refreshFlags();
+    });
+    return () => subscription.remove();
+  }, [refreshFlags]);
+
   useEffect(() => {
     // Every gate below returns null until it resolves, so hiding the splash on fonts alone
     // would trade the splash for a blank screen. Wait for all three.
@@ -75,6 +89,17 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
   if (consentStatus === 'loading') return null;
   if (flagsStatus === 'loading') return null;
+
+  // Ahead of everything else, the consent question included: nothing in an out-of-date build
+  // is reachable until it is updated. See `src/lib/force-update.ts`.
+  if (updateRequired) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <ForceUpdateScreen />
+      </SafeAreaProvider>
+    );
+  }
 
   if (consentStatus === 'unknown') {
     return (
@@ -115,6 +140,8 @@ export default function RootLayout() {
             <Stack.Screen name="account/delete" />
             <Stack.Screen name="legal/terms" />
           </Stack>
+          {/* A payment the app lost track of, re-checked on launch and on every return. */}
+          <PendingPaymentRecovery />
         </QueryProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -24,21 +24,45 @@ jest.mock('../../lib/secure-storage', () => ({
   setSecureItem: jest.fn(async (key: string, value: string) => {
     mockStore.set(key, value);
   }),
-  SECURE_KEYS: { allowGuestBrowsing: 'sukun.allowGuestBrowsing' },
+  SECURE_KEYS: {
+    allowGuestBrowsing: 'sukun.allowGuestBrowsing',
+    forceUpdateRule: 'sukun.forceUpdateRule',
+  },
 }));
 
+/** The installed build, for the force update comparisons below. */
+jest.mock('../../lib/build-info', () => ({ APP_VERSION: '2.1.0' }));
+
 const KEY = 'sukun.allowGuestBrowsing';
+const RULE_KEY = 'sukun.forceUpdateRule';
+
+let store!: typeof import('../flags').useFlagsStore;
 
 /** A fresh store, since `load()` is a one-shot per launch. */
-async function launch(): Promise<{ allowGuestBrowsing: boolean; status: string }> {
+async function launch(): Promise<{
+  allowGuestBrowsing: boolean;
+  status: string;
+  updateRequired: boolean;
+}> {
   let mod!: typeof import('../flags');
   jest.isolateModules(() => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     mod = require('../flags') as typeof import('../flags');
   });
-  await mod.useFlagsStore.getState().load();
-  const { allowGuestBrowsing, status } = mod.useFlagsStore.getState();
-  return { allowGuestBrowsing, status };
+  store = mod.useFlagsStore;
+  await store.getState().load();
+  const { allowGuestBrowsing, status, updateRequired } = store.getState();
+  return { allowGuestBrowsing, status, updateRequired };
+}
+
+function configForcing(ios: string | null, android: string | null = null) {
+  return {
+    allowGuestBrowsing: { ios: true, android: false },
+    forceUpdate: {
+      ios: { enabled: ios !== null, minimumVersion: ios },
+      android: { enabled: android !== null, minimumVersion: android },
+    },
+  };
 }
 
 beforeEach(() => {
@@ -97,5 +121,63 @@ describe('the flags store', () => {
     expect(mockGet).toHaveBeenCalled();
     await new Promise((resolve) => setImmediate(resolve));
     expect(mockStore.get(KEY)).toBe('false');
+  });
+});
+
+describe('force update', () => {
+  it('blocks a build below the minimum for this platform only', async () => {
+    mockGet.mockResolvedValue(configForcing('2.2.0'));
+    await expect(launch()).resolves.toMatchObject({ updateRequired: true, status: 'ready' });
+
+    setPlatform('android');
+    mockStore.clear();
+    await expect(launch()).resolves.toMatchObject({ updateRequired: false });
+  });
+
+  it('lets the minimum version itself through', async () => {
+    mockGet.mockResolvedValue(configForcing('2.1.0'));
+    await expect(launch()).resolves.toMatchObject({ updateRequired: false });
+  });
+
+  it('reads a backend that sends no rule as nothing forced', async () => {
+    mockGet.mockResolvedValue({ allowGuestBrowsing: { ios: true, android: false } });
+    await expect(launch()).resolves.toMatchObject({ updateRequired: false });
+  });
+
+  it('keeps a device that was told to update blocked when the backend is unreachable', async () => {
+    mockGet.mockResolvedValue(configForcing('2.2.0'));
+    await launch();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockStore.get(RULE_KEY)).toBeDefined();
+
+    mockGet.mockRejectedValue(new Error('offline'));
+    await expect(launch()).resolves.toMatchObject({ updateRequired: true, status: 'ready' });
+  });
+
+  it('forces nothing on a first launch that cannot reach the backend', async () => {
+    mockGet.mockRejectedValue(new Error('offline'));
+    await expect(launch()).resolves.toMatchObject({ updateRequired: false, status: 'ready' });
+  });
+
+  it('picks up a switch turned on while the app is open, and keeps it through a failed refresh', async () => {
+    mockGet.mockResolvedValue(configForcing(null));
+    await expect(launch()).resolves.toMatchObject({ updateRequired: false });
+
+    mockGet.mockResolvedValue(configForcing('3.0.0'));
+    await store.getState().refresh();
+    expect(store.getState().updateRequired).toBe(true);
+
+    mockGet.mockRejectedValue(new Error('offline'));
+    await store.getState().refresh();
+    expect(store.getState().updateRequired).toBe(true);
+  });
+
+  it('lifts the block when the switch is turned off again', async () => {
+    mockGet.mockResolvedValue(configForcing('3.0.0'));
+    await expect(launch()).resolves.toMatchObject({ updateRequired: true });
+
+    mockGet.mockResolvedValue(configForcing(null));
+    await store.getState().refresh();
+    expect(store.getState().updateRequired).toBe(false);
   });
 });

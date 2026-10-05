@@ -20,10 +20,35 @@ This is **P0, UI-first**. Every screen is built against a mock api layer; the li
    can count granted against claimed. Builds from before the claim screen never offer to
    claim, so the backend claims for them: every request carries `X-Sukun-Client-Revision`
    (`MOBILE_CLIENT_REVISION` in `src/api/live/http.ts`), and one below 2, or none, has
-   granted tickets claimed on its behalf when it loads them.
-3. **The selfie is the anti-fraud control, and it is asked for once, at the QR.** A holder
-   meets the camera when they open an entry pass, on the ticket that needs it, and never
-   before: not to browse, not to register, not to pay. It is required for a *usable ticket*
+   granted tickets claimed on its behalf when it loads them, under the same rules below.
+   - **A granted ticket takes its seat when it is claimed, not when it is granted.** Sukun can
+     grant more than there are seats; claims compete for what is left. A claim is refused
+     while the shop could not sell the tier (`claimAvailability`: `sold_out` / `not_on_sale`),
+     and the UI says so on the button rather than offering it.
+   - **Claiming needs a complete profile, with no skip** (`readyToClaim` in
+     `src/stores/auth.ts`): the holder finishes it and the claim is made when they are back.
+   - **The claim comes first.** `ClaimGate` covers the tabs until it knows whether an
+     invitation waits, so the claim screen is the first thing seen on a cold start, a sign-in,
+     or a return after `REOPEN_AFTER_MS` in the background. An invitee is never shown a price:
+     the event page offers "Claim ticket" alone.
+   - **A holder can decline** ("Sorry, can't make it"), the RSVP no. The Tickets tab pulses
+     while any invitation waits for either answer.
+   - **An invitation may include a plus one.** Once they claim, the guest names someone by
+     number; that person gets an invitation of their own (same tier, no add-ons, no plus one of
+     their own) and a WhatsApp if the number has no account (rule 6).
+   - **The invitation links to the website, which hands it to the app.** The WhatsApp button
+     opens `https://book.sukunwellness.co/claim` (staging: `clientstaging.`). A phone with the
+     app opens the app instead (Universal Links / App Links: `associatedDomains` and
+     `intentFilters` in `app.json`, the website's `.well-known` files), and
+     `app/+native-intent.tsx` routes it: signed in, the claim screen; anyone else, the entry
+     gate, after which `ClaimGate` shows it. Without the app, the website claims and declines
+     in full and offers the download. Plus ones, the QR and the selfie stay in the app. The
+     iOS profile needs the Associated Domains capability; `assert-ios-signing.mjs` checks it.
+3. **The selfie is the anti-fraud control, and it is required only for the QR.** It is
+   demanded when a holder opens an entry pass whose QR is due (inside the 12 hours before the
+   event) and nowhere else: not to browse, register, claim or pay. It is *offered*, never
+   required, straight after the profile form and from Profile, with "Add the selfie later"
+   and the QR code named as the reason. It is required for a *usable ticket*
    (`usageStatus: selfie_required` until it exists), never for an account or an order.
 4. **The system acts, it never confirms.** No screen may reveal whether a phone number is
    registered. Registered and unregistered guests get identical UI, identical copy, identical
@@ -132,7 +157,9 @@ What the local path needs, none of it in the repo:
   provisioning profile** for `co.sukunwellness` at `../secrets/sukun-appstore.mobileprovision`.
   Take both from EAS rather than making new ones: `eas credentials`, iOS, production, then
   download to `credentials.json`, import the `.p12` into the keychain and move the
-  `.mobileprovision` into place.
+  `.mobileprovision` into place. The profile must carry the Push Notifications entitlement
+  (`aps-environment`), which `expo-notifications` adds to the build; one made before Push was
+  enabled on the App ID does not, and the signing check refuses it.
 - An **App Store Connect API key** (App Manager role) saved as
   `../secrets/AuthKey_<key id>.p8`, with its ids filled into `../secrets/ios-release.env`.
 
@@ -194,6 +221,24 @@ but an explicit "false" leaves the guest path on, because shipping without it is
 Review rejected under guideline 5.1.1(v). Android fails towards closed: only an explicit
 "true" opens it. Nothing reads `Platform.OS` at a call site; the split lives in the two flags.
 
+### Force update
+
+Admins can hold an out-of-date build on a blocking screen until it is updated from the store.
+Each platform has its own switch and minimum store version (`2.1.0`, the `version` in
+`app.json`, not the build number), set on the dashboard's App updates page and sent in
+`forceUpdate` by `GET public/app-config`. `src/stores/flags.ts` resolves it with the guest flag
+at launch and re-reads it whenever the app returns to the foreground; `app/_layout.tsx` returns
+`ForceUpdateScreen` ahead of everything, the consent question included, while
+`useUpdateRequired()` is true. "Update now" opens the store (`src/lib/force-update.ts`, App
+Store id `6804203454`, Play package `co.sukunwellness`).
+
+It fails open: no rule, an unreadable version, a first launch offline, or the web target never
+block. A device that has been told to update stays blocked offline through the cached rule
+until the update lifts it. Only builds that carry the screen honour the switch, so it is no
+substitute for `MOBILE_CLIENT_REVISION` when an older build cannot handle a backend change.
+Raise the minimum only once the new version is live in that store, or people are blocked with
+nothing to update to.
+
 ### Build numbers
 
 `eas.json` sets `appVersionSource: "local"`, so the build number is `ios.buildNumber` in
@@ -237,5 +282,7 @@ starts from a stale number.
   2026-09-28); installs are measured through SKAdNetwork. Only Meta's own parameters: tickets by
   event id, extras by option id, values only as the server gave them, never the app user id, a
   name, email, phone number, or a search that looks like one. `EXPO_PUBLIC_META_APP_ID` and
-  `EXPO_PUBLIC_META_CLIENT_TOKEN` are set in the production profile only; blank turns Meta off.
+  `EXPO_PUBLIC_META_CLIENT_TOKEN` belong in the production profile only; absent turns Meta off.
+  Leave the keys out until the ids exist: EAS rejects an `eas.json` with an empty env value,
+  and every `eas` command, not only builds, fails on it.
   The consent screen, `app/account/analytics.tsx` and `app/legal/terms.tsx` say exactly this.
