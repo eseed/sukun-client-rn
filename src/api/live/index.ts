@@ -34,6 +34,10 @@ import type {
   LiveTicket,
   LiveUpdateProfileInput,
   LiveGuestValidationIssue,
+  MyScheduleQuery,
+  MyScheduleResponse,
+  PublicEventSchedule,
+  SaveScheduleBlockResponse,
   Ticket,
   TicketAddon,
   TicketAddonContext,
@@ -204,9 +208,10 @@ export const liveApi: SukunApi = {
 
   events: {
     // PublicEventsController — GET public/events
-    list: (query?: ListEventsQuery) =>
+    list: (query?: ListEventsQuery, signal?: AbortSignal) =>
       request<CursorPage<EventListItem>>('public/events', {
         auth: false,
+        signal,
         query: {
           cursor: query?.cursor ?? undefined,
           limit: query?.limit,
@@ -223,11 +228,47 @@ export const liveApi: SukunApi = {
       }),
 
     // GET public/events/:identifier (uuid or slug)
-    detail: (identifier) =>
-      request<LiveEventDetail>(`public/events/${encodeURIComponent(identifier)}`, { auth: false }),
+    detail: (identifier, signal) =>
+      request<LiveEventDetail>(`public/events/${encodeURIComponent(identifier)}`, { auth: false, signal }),
 
     meta: (identifier) =>
       request<EventMeta>(`public/events/${encodeURIComponent(identifier)}/meta`, { auth: false }),
+  },
+
+  schedule: {
+    // GET public/events/:identifier/schedule — published blocks only.
+    public: (identifier) =>
+      request<PublicEventSchedule>(
+        `public/events/${encodeURIComponent(identifier)}/schedule`,
+        { auth: false },
+      ),
+
+    // GET mobile/events/:eventId/my-schedule
+    mine: (eventId, query?: MyScheduleQuery) =>
+      request<MyScheduleResponse>(`mobile/events/${encodeURIComponent(eventId)}/my-schedule`, {
+        query: {
+          limit: query?.limit,
+          cursor: query?.cursor ?? undefined,
+          eventDayId: query?.eventDayId,
+          stageId: query?.stageId,
+          practiceTypeId: query?.practiceTypeId,
+        },
+      }),
+
+    // PUT mobile/events/:eventId/my-schedule/blocks/:blockId
+    save: (eventId, blockId) =>
+      request<SaveScheduleBlockResponse>(
+        `mobile/events/${encodeURIComponent(eventId)}/my-schedule/blocks/${encodeURIComponent(blockId)}`,
+        { method: 'PUT' },
+      ),
+
+    // DELETE mobile/events/:eventId/my-schedule/blocks/:blockId — 204
+    remove: async (eventId, blockId) => {
+      await request<void>(
+        `mobile/events/${encodeURIComponent(eventId)}/my-schedule/blocks/${encodeURIComponent(blockId)}`,
+        { method: 'DELETE' },
+      );
+    },
   },
 
   addons: {
@@ -360,8 +401,9 @@ export const liveApi: SukunApi = {
 
   tickets: {
     // MobileTicketsController — GET mobile/tickets
-    list: (params) =>
+    list: (params, signal) =>
       request<CursorPage<LiveTicket>>('mobile/tickets', {
+        signal,
         query: {
           statuses: params?.statuses,
           cursor: params?.cursor ?? undefined,

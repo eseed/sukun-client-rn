@@ -82,6 +82,9 @@ export const space = {
 export const radius = {
   sm: 2,
   md: 4,
+  tile: 10,
+  field: 12,
+  card: 14,
   pill: 999,
   circle: 9999,
 } as const;

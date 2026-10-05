@@ -1,4 +1,5 @@
 import { normalizePhone, requiresLivingArea } from '../../lib/phone';
+import { overlaps } from '../../lib/live-event';
 import type { SukunApi } from '../contract';
 import type {
   ClaimAvailability,
@@ -25,6 +26,12 @@ import type {
   GuestValidationInput,
   GuestValidationResult,
   ListEventsQuery,
+  MyScheduleBlock,
+  MyScheduleQuery,
+  MyScheduleResponse,
+  PublicEventSchedule,
+  SaveScheduleBlockResponse,
+  ScheduleBlock,
   OrderGuest,
   OrderDetail,
   OrderSummary,
@@ -52,6 +59,7 @@ import {
 } from './fixtures';
 import { multiply, toEgp, toPiastres } from './money';
 import { mockConfig, resetMockPaymentConfig } from './config';
+import { tuluaSchedule } from './schedule-fixtures';
 import {
   buildAddonDetail,
   findOption,
@@ -225,6 +233,8 @@ const state: MockState = {
   invitations: new Map(),
 };
 
+const savedScheduleBlocks = new Map<string, Set<string>>();
+
 /** Test/dev seam: reset the mock between runs. */
 export function resetMockState(): void {
   state.user = null;
@@ -249,6 +259,7 @@ export function resetMockState(): void {
   state.ticketAddons.clear();
   state.accommodationTicketIds.clear();
   state.invitations.clear();
+  savedScheduleBlocks.clear();
   resetCartSequences();
   orderSeq = 482;
   ticketSeq = 4821;
@@ -277,6 +288,31 @@ function buyerHoldsTicketForEvent(eventId: string): boolean {
 
     return guestPhone === null || guestPhone === phone;
   });
+}
+
+function hasActiveOwnedTicket(eventId: string, user: CurrentUser): boolean {
+  return state.tickets.some((ticket) => {
+    if (ticket.event.id !== eventId || ticket.status !== 'active') return false;
+    const ownerPhone = state.ticketOwnerPhones.get(ticket.id);
+    return ownerPhone === user.phoneNumber ||
+      (!ownerPhone && state.ticketBuyerPhones.get(ticket.id) === user.phoneNumber);
+  });
+}
+
+function scheduleForEvent(eventIdentifier: string): PublicEventSchedule {
+  const event = findEvent(eventIdentifier);
+  if (event.id === tuluaSchedule.eventId) return tuluaSchedule;
+  return { eventId: event.id, days: [], stages: [], practiceTypes: [], blocks: [] };
+}
+
+function savedBlocksFor(user: CurrentUser, eventId: string): Set<string> {
+  const key = `${user.id}:${eventId}`;
+  let saved = savedScheduleBlocks.get(key);
+  if (!saved) {
+    saved = new Set<string>();
+    savedScheduleBlocks.set(key, saved);
+  }
+  return saved;
 }
 
 /**
@@ -1100,6 +1136,61 @@ export const mockApi: SukunApi = {
         endDate: event.endDate,
         venueName: event.venue?.name ?? null,
       });
+    },
+  },
+
+  schedule: {
+    async public(eventIdentifier: string): Promise<PublicEventSchedule> {
+      return delay(scheduleForEvent(eventIdentifier));
+    },
+
+    async mine(eventId: string, query?: MyScheduleQuery): Promise<MyScheduleResponse> {
+      const user = requireUser();
+      if (!hasActiveOwnedTicket(eventId, user)) {
+        throw new MockApiError('SCHEDULE_TICKET_REQUIRED', 'An active Event ticket is required.', 403);
+      }
+      const schedule = scheduleForEvent(eventId);
+      const saved = savedBlocksFor(user, eventId);
+      const selected = schedule.blocks
+        .filter((block) => saved.has(block.id))
+        .filter((block) => !query?.eventDayId || block.eventDayId === query.eventDayId)
+        .filter((block) => !query?.stageId || block.stageId === query.stageId)
+        .filter((block) => !query?.practiceTypeId || block.practiceTypeId === query.practiceTypeId)
+        .sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt));
+      const result = page(selected, query?.cursor, query?.limit, 100);
+      const blocks: MyScheduleBlock[] = result.data.map((block) => ({
+        ...block,
+        conflicts: selected
+          .filter((other) => other.id !== block.id && overlaps(block, other))
+          .map((other) => ({ blockId: other.id, title: other.title, startAt: other.startAt, endAt: other.endAt })),
+      }));
+      return delay({ eventId, blocks, meta: result.meta });
+    },
+
+    async save(eventId: string, blockId: string): Promise<SaveScheduleBlockResponse> {
+      const user = requireUser();
+      if (!hasActiveOwnedTicket(eventId, user)) {
+        throw new MockApiError('SCHEDULE_TICKET_REQUIRED', 'An active Event ticket is required.', 403);
+      }
+      const block = scheduleForEvent(eventId).blocks.find((item) => item.id === blockId);
+      if (!block) throw new MockApiError('SCHEDULE_BLOCK_NOT_FOUND', 'Session not found.', 404);
+      const saved = savedBlocksFor(user, eventId);
+      saved.add(blockId);
+      const conflicts = [...saved]
+        .filter((id) => id !== blockId)
+        .map((id) => scheduleForEvent(eventId).blocks.find((item) => item.id === id))
+        .filter((item): item is ScheduleBlock => Boolean(item && overlaps(block, item)))
+        .map((item) => ({ blockId: item.id, title: item.title, startAt: item.startAt, endAt: item.endAt }));
+      return delay({ saved: true, conflicts });
+    },
+
+    async remove(eventId: string, blockId: string): Promise<void> {
+      const user = requireUser();
+      if (!hasActiveOwnedTicket(eventId, user)) {
+        throw new MockApiError('SCHEDULE_TICKET_REQUIRED', 'An active Event ticket is required.', 403);
+      }
+      savedBlocksFor(user, eventId).delete(blockId);
+      await delay(undefined);
     },
   },
 

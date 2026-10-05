@@ -17,6 +17,7 @@ module.exports = [
       'android/**',
       'ios/**',
       'build/**',
+      '.apk-build-*/**',
       '.claude/**',
     ],
   },
