@@ -10,6 +10,7 @@ import { messageForError } from '../../src/lib/errors';
 import { formatTagLabel } from '../../src/lib/format';
 import { trackMetaSearch } from '../../src/lib/meta-events';
 import { colors, fontFamily } from '../../src/theme/tokens';
+import { LiveEventReturnBanner } from '../../src/components/live-event/live-event-return-banner';
 
 /** How long the search text must stay put to count as a search, for Meta. */
 const SEARCH_SETTLED_MS = 1000;
@@ -92,6 +93,8 @@ export default function DiscoverScreen() {
       <Text variant="bodyMuted" style={styles.subtitle}>
         Find your next Sukun gathering
       </Text>
+
+      <LiveEventReturnBanner />
 
       <View style={styles.search}>
         <SearchIcon />

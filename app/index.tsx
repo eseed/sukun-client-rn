@@ -1,8 +1,11 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
 import { useAllowGuestBrowsing } from '../src/stores/flags';
 import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../src/stores/auth';
 import { colors } from '../src/theme/tokens';
+import { setSessionLiveEventChoice, useLiveEventContext } from '../src/hooks/useLiveEventContext';
+import { Button, Screen, Text } from '../src/components/ui';
 
 /**
  * Entry gate. Sends a signed-in user with a finished profile to the tabs, a signed-in user
@@ -28,6 +31,8 @@ export default function Index() {
   const user = useAuthStore((s) => s.user);
   const setupDeferred = useAuthStore((s) => s.setupDeferred);
   const guestBrowsing = useAuthStore((s) => s.guestBrowsing);
+  const [selectedEventId, setSelectedEventId] = useState<string>();
+  const liveEvent = useLiveEventContext(status === 'signed-in' && Boolean(user?.profileComplete), selectedEventId);
 
   if (status === 'loading') {
     return (
@@ -51,6 +56,38 @@ export default function Index() {
 
   // A finished profile is the common case and beats every other check.
   if (user.profileComplete) {
+    if (liveEvent.status === 'loading') {
+      return (
+        <View style={styles.splash}>
+          <ActivityIndicator color={colors.textPrimary} />
+        </View>
+      );
+    }
+    if (liveEvent.status === 'ready') {
+      return <Redirect href={`/live-event/${liveEvent.context.eventId}` as never} />;
+    }
+    if (liveEvent.status === 'choose') {
+      return (
+        <Screen scroll contentStyle={styles.chooser}>
+          <Text variant="titleMd" accessibilityRole="header">Choose your LIVE Event</Text>
+          <Text variant="bodyMuted">You have active tickets for more than one Event happening now.</Text>
+          {liveEvent.choices.map(({ event, ticket }) => (
+            <View key={event.id} style={styles.choice}>
+              <Text variant="titleSm">{event.title}</Text>
+              <Text variant="bodyMuted">{event.venueName ?? 'Venue details unavailable'} · {ticket.tier.name}</Text>
+              <Button
+                label={`Open ${event.title}`}
+                onPress={() => {
+                  setSessionLiveEventChoice(user.id, event.id);
+                  setSelectedEventId(event.id);
+                }}
+              />
+            </View>
+          ))}
+        </Screen>
+      );
+    }
+    // Resolver failures must not strand the attendee at launch.
     return <Redirect href="/(tabs)/discover" />;
   }
 
@@ -68,4 +105,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.bgPage,
   },
+  chooser: { paddingHorizontal: 24, gap: 16 },
+  choice: { gap: 10, padding: 16, borderRadius: 4, backgroundColor: colors.bgSurface, borderColor: colors.borderDefault, borderWidth: 1 },
 });

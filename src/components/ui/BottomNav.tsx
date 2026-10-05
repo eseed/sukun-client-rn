@@ -33,10 +33,12 @@ const DESTINATIONS: Destination[] = [
 export function BottomNav({
   tone = 'page',
   style,
+  onNavigate,
 }: {
   tone?: 'page' | 'inverse';
   /** For screens that lay themselves out absolutely and must pin the bar to the bottom. */
   style?: ViewStyle;
+  onNavigate?: (href: Destination['href']) => void;
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -63,7 +65,10 @@ export function BottomNav({
               ? `${label}, an invitation is waiting for you`
               : label
           }
-          onPress={() => router.replace(href)}
+          onPress={() => {
+            onNavigate?.(href);
+            router.replace(href);
+          }}
           style={({ pressed }) => [styles.item, pressed && styles.pressed]}
         >
           {Icon === TicketsIcon ? (

@@ -39,6 +39,7 @@ import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
+import { useLiveEventContext } from '../../src/hooks/useLiveEventContext';
 
 const HERO_HEIGHT = 280;
 
@@ -62,6 +63,7 @@ export default function EventDetailScreen() {
     typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
+  const liveContext = useLiveEventContext();
 
   // Meta's ViewContent, once per event shown, however often the event is refetched.
   const viewedEventId = useRef<string | null>(null);
@@ -280,6 +282,14 @@ export default function EventDetailScreen() {
               <Badge label="Early bird selling fast" tone="gold" />
             ) : null}
           </View>
+
+          {liveContext.status === 'ready' && liveContext.context.eventId === event.id ? (
+            <Button
+              label={`Open LIVE ${event.title}`}
+              size="inline"
+              onPress={() => router.push(`/live-event/${event.id}` as never)}
+            />
+          ) : null}
 
           {/*
             Design screen 07 · the extras teaser.

@@ -15,10 +15,14 @@ import type {
   EventListItem,
   GuestValidationInput,
   InvitePlusOneInput,
+  MyScheduleBlock,
+  MyScheduleResponse,
   ListEventsQuery,
+  PublicEventSchedule,
   PaymentStatus,
   ReplaceCartTicketsInput,
   TicketStatus,
+  SaveScheduleBlockResponse,
   UpdateProfileInput,
 } from '../api/types';
 import { getAuthSessionGeneration, isCurrentSignedInSession, useAuthStore } from '../stores/auth';
@@ -39,6 +43,12 @@ export const queryKeys = {
   events: (query?: ListEventsQuery) => ['events', query ?? {}] as const,
   event: (identifier: string) => ['event', identifier] as const,
   eventMeta: (identifier: string) => ['event-meta', identifier] as const,
+  publicSchedule: (identifier: string) => ['event-schedule', identifier] as const,
+  myScheduleRoot: ['my-schedule'] as const,
+  mySchedule: (eventId: string) => ['my-schedule', eventId] as const,
+  liveEventContextRoot: (userId: string | null) => ['live-event-context', userId] as const,
+  liveEventContext: (userId: string | null, selectedEventId?: string | null) =>
+    ['live-event-context', userId, selectedEventId ?? null] as const,
   order: (orderId: string) => ['order', orderId] as const,
   orders: ['orders'] as const,
   ordersPage: (limit?: number) => ['orders', { limit: limit ?? null }] as const,
@@ -285,6 +295,67 @@ export function useEventMeta(identifier: string | undefined) {
     queryKey: queryKeys.eventMeta(identifier ?? ''),
     queryFn: () => api.events.meta(identifier as string),
     enabled: Boolean(identifier),
+  });
+}
+
+/* --------------------------------------------------------------- schedules */
+
+export function usePublicEventSchedule(identifier: string | undefined) {
+  return useQuery<PublicEventSchedule>({
+    queryKey: queryKeys.publicSchedule(identifier ?? ''),
+    queryFn: () => api.schedule.public(identifier as string),
+    enabled: Boolean(identifier),
+    staleTime: 30_000,
+  });
+}
+
+/** Fetch all saved blocks; the service caps a page at 100 and cursors are opaque. */
+export function useMySchedule(eventId: string | undefined) {
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  return useQuery<MyScheduleResponse>({
+    queryKey: queryKeys.mySchedule(eventId ?? ''),
+    queryFn: async () => {
+      const blocks: MyScheduleBlock[] = [];
+      let page = await api.schedule.mine(eventId as string, { limit: 100 });
+      blocks.push(...page.blocks);
+      const seen = new Set<string>();
+      while (page.meta.hasNextPage && page.meta.nextCursor && !seen.has(page.meta.nextCursor)) {
+        seen.add(page.meta.nextCursor);
+        page = await api.schedule.mine(eventId as string, {
+          limit: 100,
+          cursor: page.meta.nextCursor,
+        });
+        blocks.push(...page.blocks);
+      }
+      blocks.sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt));
+      return {
+        eventId: page.eventId,
+        blocks,
+        meta: { limit: blocks.length, hasNextPage: false, nextCursor: null },
+      };
+    },
+    enabled: signedIn && Boolean(eventId),
+    staleTime: 15_000,
+  });
+}
+
+export function useSaveScheduleBlock() {
+  const client = useQueryClient();
+  return useMutation<SaveScheduleBlockResponse, Error, { eventId: string; blockId: string }>({
+    mutationFn: ({ eventId, blockId }) => api.schedule.save(eventId, blockId),
+    onSuccess: (_result, { eventId }) => {
+      void client.invalidateQueries({ queryKey: queryKeys.mySchedule(eventId) });
+    },
+  });
+}
+
+export function useRemoveScheduleBlock() {
+  const client = useQueryClient();
+  return useMutation<void, Error, { eventId: string; blockId: string }>({
+    mutationFn: ({ eventId, blockId }) => api.schedule.remove(eventId, blockId),
+    onSuccess: (_result, { eventId }) => {
+      void client.invalidateQueries({ queryKey: queryKeys.mySchedule(eventId) });
+    },
   });
 }
 

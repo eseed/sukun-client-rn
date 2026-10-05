@@ -6,6 +6,15 @@
 
 export const TIMEZONE = 'Africa/Cairo';
 
+/** Format an event timestamp in the app's event timezone. */
+export function formatTime(isoTimestamp: string): string {
+  return new Intl.DateTimeFormat('en', {
+    timeZone: TIMEZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(isoTimestamp));
+}
+
 /** `"3200.00"` → `"3,200.00 EGP"`. */
 export function formatEgp(amount: string, options?: { withCurrency?: boolean }): string {
   const withCurrency = options?.withCurrency ?? true;
