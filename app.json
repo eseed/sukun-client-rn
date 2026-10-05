@@ -61,7 +61,7 @@
       "blockedPermissions": [
         "android.permission.WRITE_CONTACTS"
       ],
-      "versionCode": 8
+      "versionCode": 10
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -129,9 +129,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "55c4af36-6e7f-4624-8847-1a4da6500134"
+        "projectId": "c8bccd15-8f36-4757-8fad-4190b27334b2"
       }
     },
-    "owner": "eseed"
+    "owner": "georgezakhary"
   }
 }

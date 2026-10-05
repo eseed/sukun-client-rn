@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, MarkdownText, PageHeader, ResourceState, Screen, Text } from '../../../../src/components/ui';
 import { useEvent, useMySchedule, usePublicEventSchedule, useRemoveScheduleBlock, useSaveScheduleBlock } from '../../../../src/hooks/queries';
+import { scheduleScreenContent } from '../../../../src/components/live-event/schedule-screen-layout';
 import { messageForError } from '../../../../src/lib/errors';
 import { track } from '../../../../src/lib/analytics';
-import { colors, radius, space } from '../../../../src/theme/tokens';
+import { colors, fontFamily, radius, space } from '../../../../src/theme/tokens';
 import { formatTime } from '../../../../src/lib/format';
 
 export default function SessionDetailScreen() {
@@ -51,8 +52,8 @@ export default function SessionDetailScreen() {
 
   const status = event.isLoading || schedule.isLoading ? 'loading' : event.isError || schedule.isError ? 'error' : block ? 'success' : 'empty';
   return (
-    <Screen scroll edges={{ bottom: false }} contentStyle={styles.content}>
-      <PageHeader title={block?.title ?? 'Session details'} onBack={() => router.replace(`/live-event/${eventId}/schedule` as never)} />
+    <Screen scroll edges={{ bottom: false }} contentStyle={scheduleScreenContent}>
+      <PageHeader title="Back to schedule" onBack={() => router.back()} />
       <ResourceState
         status={status}
         loadingLabel="Loading session details..."
@@ -65,25 +66,19 @@ export default function SessionDetailScreen() {
           {block.media[0] ? (
             <Image source={{ uri: block.media[0].url }} accessibilityLabel={block.media[0].altText ?? block.title} contentFit="cover" style={styles.image} />
           ) : null}
-          <Text variant="meta">{formatTime(block.startAt)} – {formatTime(block.endAt)} · {block.durationMinutes} min</Text>
-          <View style={styles.info}>
-            <Text variant="titleSm">{block.stage.name}</Text>
-            {block.practiceType ? <Text variant="bodyMuted">{block.practiceType.name}</Text> : null}
-            <Text variant="bodyMuted">{block.eventDay.label ?? block.eventDay.date}</Text>
-          </View>
-          {block.facilitators.length ? (
-            <View style={styles.info}>
-              <Text variant="titleSm">Facilitators</Text>
-              {block.facilitators.map((facilitator) => <View key={facilitator.id} style={styles.facilitator}>
-                {facilitator.imageUrl ? <Image source={{ uri: facilitator.imageUrl }} accessibilityLabel={facilitator.name} contentFit="cover" style={styles.avatar} /> : null}
-                <View style={styles.facilitatorText}>
-                  <Text variant="bodyValue">{facilitator.name}</Text>
-                  {facilitator.bio ? <Text variant="bodyMuted">{facilitator.bio}</Text> : null}
-                </View>
-              </View>)}
-            </View>
-          ) : null}
+          <Text variant="eyebrow" style={styles.eyebrow}>{[block.facilitators[0]?.name, block.stage.name].filter(Boolean).join(' · ')}</Text>
+          <Text variant="titleMd" accessibilityRole="header" style={styles.title}>{block.title}</Text>
+          <Text variant="bodyValue" style={styles.time}>◷  {formatTime(block.startAt)} — {formatTime(block.endAt)}  ·  {block.durationMinutes} min</Text>
+          <Text variant="meta">{block.eventDay.label ?? block.eventDay.date}</Text>
           {block.descriptionHtml ? <MarkdownText markdown={block.descriptionHtml} /> : null}
+          <View style={styles.metaRows}>
+            <View style={styles.metaRow}><Text style={styles.metaIcon}>⌖</Text><Text variant="bodyValue" style={styles.metaValue}>{block.stage.name}</Text><Text style={styles.metaArrow}>›</Text></View>
+            {block.facilitators.map((facilitator) => <View key={facilitator.id} style={styles.metaRow}>
+              {facilitator.imageUrl ? <Image source={{ uri: facilitator.imageUrl }} accessibilityLabel={facilitator.name} contentFit="cover" style={styles.avatar} /> : <Text style={styles.metaIcon}>♙</Text>}
+              <Text variant="bodyValue" style={styles.metaValue}>With {facilitator.name}</Text><Text style={styles.metaArrow}>›</Text>
+            </View>)}
+            {block.practiceType ? <View style={styles.metaRow}><Text style={styles.metaIcon}>◇</Text><Text variant="bodyValue" style={styles.metaValue}>{block.practiceType.name}</Text><Text style={styles.metaArrow}>›</Text></View> : null}
+          </View>
           {savedBlock?.conflicts.length ? <View accessibilityRole="alert" style={styles.conflict}>
             <Text variant="titleSm">Schedule conflict</Text>
             <Text variant="bodyMuted">Overlaps with {savedBlock.conflicts.map((conflict) => conflict.title).join(', ')}. This session remains saved.</Text>
@@ -98,12 +93,16 @@ export default function SessionDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: space.s4, paddingTop: space.s4, gap: space.s3 },
-  image: { width: '100%', height: 220, borderRadius: radius.md, backgroundColor: colors.sage100 },
-  info: { gap: space.s1, padding: space.s3, borderRadius: radius.md, backgroundColor: colors.bgSurface, borderWidth: 1, borderColor: colors.borderDefault },
-  facilitator: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
-  facilitatorText: { flex: 1, gap: space.s1 },
-  avatar: { width: 44, height: 44, borderRadius: radius.circle },
+  image: { width: '100%', height: 300, borderRadius: radius.md, backgroundColor: colors.sage100 },
+  eyebrow: { color: colors.gold700 },
+  title: { fontFamily: fontFamily.displayItalic, fontSize: 39, lineHeight: 40 },
+  time: { fontSize: 16 },
+  metaRows: { borderTopWidth: 1, borderTopColor: colors.borderDefault },
+  metaRow: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: space.s3, borderBottomWidth: 1, borderBottomColor: colors.borderDefault },
+  metaIcon: { width: 24, fontSize: 19, color: colors.black, textAlign: 'center' },
+  metaValue: { flex: 1 },
+  metaArrow: { fontSize: 24, color: colors.textMuted },
+  avatar: { width: 28, height: 28, borderRadius: radius.circle },
   conflict: { gap: space.s1, padding: space.s3, borderRadius: radius.md, backgroundColor: colors.rose100 },
   notice: { padding: space.s3, borderRadius: radius.md, backgroundColor: colors.gold100 },
 });
