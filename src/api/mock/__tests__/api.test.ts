@@ -3,7 +3,9 @@ import {
   mockConfig,
   MOCK_EMAIL_VERIFICATION_TOKEN,
   MOCK_OTP_CODE,
+  clearMockLiveEvents,
   resetMockState,
+  setMockLiveEvents,
 } from '..';
 import { SOUND_BATH_ID, TIER_DAY1, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../fixtures';
 
@@ -621,6 +623,55 @@ describe('mock parity', () => {
     expect(me.status).toBe('pending_profile');
     // The old tickets went with the old account and cannot rebind to this number.
     expect((await mockApi.tickets.list({ statuses: ['active'] })).data).toHaveLength(0);
+  });
+});
+
+describe('mock live simulation', () => {
+  it('lists no live events by default', async () => {
+    const live = await mockApi.events.list({ state: ['live'] });
+    expect(live.data).toHaveLength(0);
+    expect((await mockApi.events.detail('tulua')).state).toBe('on_sale');
+  });
+
+  it('simulates a live event locally, without any staging URL', async () => {
+    setMockLiveEvents([TULUA_ID]);
+    try {
+      const live = await mockApi.events.list({ state: ['live'] });
+      expect(live.data.map((event) => event.id)).toEqual([TULUA_ID]);
+      expect((await mockApi.events.detail('tulua')).state).toBe('live');
+      expect((await mockApi.events.detail(TULUA_ID)).state).toBe('live');
+      // The override applies before filtering, so the event leaves the on-sale shelf.
+      const onSale = await mockApi.events.list({ state: ['on_sale'] });
+      expect(onSale.data.map((event) => event.id)).not.toContain(TULUA_ID);
+      // Untouched events keep their fixture state.
+      expect((await mockApi.events.detail(SOUND_BATH_ID)).state).toBe('on_sale');
+    } finally {
+      clearMockLiveEvents();
+    }
+  });
+
+  it('intersects a simulated live event with an owned active ticket', async () => {
+    setMockLiveEvents([TULUA_ID]);
+    try {
+      await signIn();
+      await completeProfile();
+      const tickets = await mockApi.tickets.list({ statuses: ['active'] });
+      const live = await mockApi.events.list({ state: ['live'] });
+      const ownedLive = live.data.filter((event) =>
+        tickets.data.some(
+          (ticket) => ticket.status === 'active' && ticket.event.id === event.id,
+        ),
+      );
+      expect(ownedLive.map((event) => event.id)).toEqual([TULUA_ID]);
+    } finally {
+      clearMockLiveEvents();
+    }
+  });
+
+  it('resetMockState clears the simulation', async () => {
+    setMockLiveEvents([TULUA_ID]);
+    resetMockState();
+    expect((await mockApi.events.list({ state: ['live'] })).data).toHaveLength(0);
   });
 });
 

@@ -441,10 +441,16 @@ export const liveApi: SukunApi = {
     entryPass: (ticketId) => request<EntryPass>(`mobile/tickets/${ticketId}/entry-pass`),
 
     // GET mobile/tickets/:ticketId/addons
-    addons: (ticketId, includeRefunded) =>
-      request<{ data: TicketAddon[] }>(`mobile/tickets/${ticketId}/addons`, {
+    addons: async (ticketId, includeRefunded) => {
+      const response = await request<
+        TicketAddon[] | { data?: TicketAddon[] } | null | undefined
+      >(`mobile/tickets/${ticketId}/addons`, {
         query: { includeRefunded: includeRefunded ? 'true' : undefined },
-      }).then((response) => response.data),
+      });
+      // Current OpenAPI returns an array; older staging deployments wrapped it in a data object.
+      // An empty response also means no attached add-ons. React Query must always get an array.
+      return Array.isArray(response) ? response : response?.data ?? [];
+    },
 
     // GET mobile/tickets/:ticketId/addon-context
     addonContext: (ticketId) =>

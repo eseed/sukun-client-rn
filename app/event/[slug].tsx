@@ -233,7 +233,9 @@ export default function EventDetailScreen() {
           <Pressable
             accessibilityRole="link"
             accessibilityLabel={`View the full schedule for ${event.title}`}
-            onPress={() => router.push(`/event/${event.slug}/schedule` as never)}
+            onPress={() =>
+              router.push(`/event/${event.slug}/schedule`)
+            }
             style={styles.scheduleLink}
           >
             <View style={styles.scheduleLinkCopy}>
@@ -297,11 +299,15 @@ export default function EventDetailScreen() {
           </View>
 
           {liveContext.status === 'ready' && liveContext.context.eventId === event.id ? (
-            <Button
-              label={`Open LIVE ${event.title}`}
-              size="inline"
-              onPress={() => router.push(`/live-event/${event.id}` as never)}
-            />
+            <View style={styles.liveCta}>
+              <Button
+                label={`Open LIVE ${event.title}`}
+                size="inline"
+                onPress={() =>
+                  router.push(`/live-event/${event.id}`)
+                }
+              />
+            </View>
           ) : null}
 
           {/*
@@ -597,6 +603,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginBottom: 20,
+  },
+  liveCta: {
     marginBottom: 20,
   },
   scheduleLink: {

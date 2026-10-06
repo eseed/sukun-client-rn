@@ -48,7 +48,11 @@ export default function PublicEventScheduleScreen() {
         defaultDay="all"
         initialView={view}
         analyticsScope="public"
-        onOpenSession={(block, view) => router.push(`/event/${encodeURIComponent(eventSlug ?? slug ?? '')}/schedule/${encodeURIComponent(block.id)}?view=${view}` as never)}
+        onOpenSession={(block, sessionView) => {
+          const targetSlug = eventSlug ?? slug;
+          if (targetSlug === undefined) return;
+          router.push(`/event/${targetSlug}/schedule/${block.id}?view=${sessionView}`);
+        }}
         onRetry={() => {
           void event.refetch();
           if (event.data?.slug) void schedule.refetch();

@@ -15,7 +15,6 @@ import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { missingProfileFields, ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
-import { LiveEventReturnBanner } from '../../src/components/live-event/live-event-return-banner';
 
 /** Design screen 15 · Profile. */
 export default function ProfileScreen() {
@@ -42,7 +41,6 @@ export default function ProfileScreen() {
         contentStyle={styles.content}
         style={styles.transparent}
       >
-        <LiveEventReturnBanner />
         <View style={styles.heading}>
           <BulletHeading title="Profile" size="md" />
         </View>

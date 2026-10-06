@@ -230,7 +230,7 @@ export default function OrderDetailScreen() {
               {payLabel ? (
                 <Button
                   label={payLabel}
-                  onPress={() => router.push(`/checkout/payment?orderId=${data.id}` as never)}
+                  onPress={() => router.push(`/checkout/payment?orderId=${data.id}`)}
                 />
               ) : null}
               {canCancel ? (

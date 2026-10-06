@@ -22,12 +22,16 @@ export function useCartNotEditableRecovery(eventIdOverride?: string): (error: un
       if (!isCartNotEditableError(error)) return false;
 
       if (orderId) {
-        router.replace(`/checkout/payment?orderId=${orderId}` as never);
+        router.replace(`/checkout/payment?orderId=${orderId}`);
         return true;
       }
 
       reset();
-      router.replace(eventId ? (`/event/${eventId}` as never) : ('/(tabs)/discover' as never));
+      router.replace(
+        eventId
+          ? `/event/${eventId}`
+          : '/(tabs)/discover',
+      );
       return true;
     },
     [eventId, orderId, reset, router],

@@ -368,7 +368,7 @@ export default function TicketExtrasScreen() {
             picked.map(([optionId, quantity]) => ({ id: optionId, quantity })),
             subtotal,
           );
-          router.push(`/ticket/${context.ticketId}/review` as never);
+          router.push(`/ticket/${context.ticketId}/review`);
         }}
       />
     </Screen>

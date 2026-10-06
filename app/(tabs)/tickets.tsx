@@ -90,7 +90,9 @@ export default function TicketsScreen() {
                 ticketCount={count}
                 addonCount={addonCount}
                 onPress={() => router.push(`/ticket/${lead.id}`)}
-                onAddExtras={() => router.push(`/ticket/${lead.id}/extras` as never)}
+                onAddExtras={() =>
+                  router.push(`/ticket/${lead.id}/extras`)
+                }
               />
             ))}
           </View>

@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useState } from 'react';
 import { useAllowGuestBrowsing } from '../src/stores/flags';
 import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../src/stores/auth';
-import { colors } from '../src/theme/tokens';
+import { colors, radius } from '../src/theme/tokens';
 import { setSessionLiveEventChoice, useLiveEventContext } from '../src/hooks/useLiveEventContext';
 import { Button, Screen, Text } from '../src/components/ui';
 
@@ -57,12 +57,20 @@ export default function Index() {
   }
 
   if (status === 'signed-in' && user) {
-    if (liveEvent.status === 'ready') {
-      return <Redirect href={`/live-event/${liveEvent.context.eventId}` as never} />;
+    // LIVE mode is an app-ready destination only: an unfinished profile still owes its
+    // onboarding step first (plan section 7). The resolver is awaited either way so an
+    // incomplete account does not race past the ticket check into onboarding.
+    if (user.profileComplete && liveEvent.status === 'ready') {
+      return (
+        <Redirect
+          href={`/live-event/${liveEvent.context.eventId}`}
+        />
+      );
     }
-    if (liveEvent.status === 'choose') {
+    if (user.profileComplete && liveEvent.status === 'choose') {
       return (
         <Screen scroll contentStyle={styles.chooser}>
+          <View style={styles.chooserStack}>
           <Text variant="titleMd" accessibilityRole="header">Choose your LIVE Event</Text>
           <Text variant="bodyMuted">You have active tickets for more than one Event happening now.</Text>
           {liveEvent.choices.map(({ event, ticket }) => (
@@ -78,6 +86,7 @@ export default function Index() {
               />
             </View>
           ))}
+          </View>
         </Screen>
       );
     }
@@ -110,6 +119,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.bgPage,
   },
-  chooser: { paddingHorizontal: 24, gap: 16 },
-  choice: { gap: 10, padding: 16, borderRadius: 4, backgroundColor: colors.bgSurface, borderColor: colors.borderDefault, borderWidth: 1 },
+  chooser: { paddingHorizontal: 24 },
+  chooserStack: { gap: 16 },
+  choice: { gap: 10, padding: 16, borderRadius: radius.card, backgroundColor: colors.bgSurface, borderColor: colors.borderDefault, borderWidth: 1 },
 });

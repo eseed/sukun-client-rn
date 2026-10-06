@@ -1,6 +1,13 @@
 import { api } from '../../src/api';
 import type { CursorPage, CurrentUser, EventDetail, EventListItem, Ticket } from '../../src/api/types';
-import { seedTickets } from '../../src/api/mock/fixtures';
+import { seedTickets, TULUA_ID } from '../../src/api/mock/fixtures';
+import {
+  MOCK_OTP_CODE,
+  mockConfig,
+  mockApi,
+  resetMockState,
+  setMockLiveEvents,
+} from '../../src/api/mock';
 import { useAuthStore } from '../../src/stores/auth';
 import { renderWithProviders, waitFor } from '../../src/test-utils';
 import Index from '../index';
@@ -127,6 +134,78 @@ describe('Launch redirect', () => {
     renderWithProviders(<Index />);
 
     await waitFor(() => expect(hrefs).toEqual(['/live-event/event-live']));
+  });
+
+  it('checks the ticketed Event directly when the public LIVE list omits it', async () => {
+    const event: EventListItem = {
+      id: 'event-live',
+      slug: 'tulua-festival-2026',
+      title: 'Tulua Wellness Festival 2026',
+      tagline: null,
+      coverImageUrl: null,
+      state: 'live',
+      startDate: '2026-10-06',
+      endDate: '2026-10-07',
+      venueName: 'Ain Sokhna',
+      priceFromEgp: null,
+      tags: [],
+      isSoldOut: false,
+    };
+    const seededTicket = seedTickets('Attendee')[0]!;
+    const ticket = {
+      ...seededTicket,
+      event: { ...seededTicket.event, id: event.id, slug: event.slug },
+    } as Ticket;
+    const page = <T,>(data: T[]): CursorPage<T> => ({
+      data,
+      meta: { limit: 100, hasNextPage: false, nextCursor: null },
+    });
+    jest.spyOn(api.tickets, 'list').mockResolvedValue(page([ticket]));
+    jest.spyOn(api.events, 'list').mockResolvedValue(page([]));
+    jest
+      .spyOn(api.events, 'detail')
+      .mockResolvedValue({
+        ...event,
+        state: 'live',
+        venue: null,
+        tiers: [],
+      } as unknown as EventDetail);
+
+    useAuthStore.setState({ status: 'signed-in', user: user() });
+    renderWithProviders(<Index />);
+
+    await waitFor(() => expect(hrefs).toEqual(['/live-event/event-live']));
+    expect(api.events.detail).toHaveBeenCalledWith(event.slug, expect.anything());
+  });
+
+  it('lands on LIVE Event Home for an owned ticket when the mock simulates live', async () => {
+    // No spies and no staging URL: the real mock backend with a locally simulated live
+    // event, the way a dev session exercises the attendee switch.
+    resetMockState();
+    const prevLatency = mockConfig.latencyMs;
+    mockConfig.latencyMs = 0;
+    try {
+      setMockLiveEvents([TULUA_ID]);
+      await mockApi.auth.requestOtp('+201012345678');
+      await mockApi.auth.verifyOtp('+201012345678', MOCK_OTP_CODE);
+      await mockApi.profile.update({
+        fullName: 'Yasmin El Sayed',
+        email: 'yasmin@email.com',
+        dateOfBirth: '1994-03-12',
+        gender: 'female',
+        areaId: 'ar-maadi',
+      });
+      const me = await mockApi.auth.me();
+      expect(me.profileComplete).toBe(true);
+
+      useAuthStore.setState({ status: 'signed-in', user: me });
+      renderWithProviders(<Index />);
+
+      await waitFor(() => expect(hrefs).toEqual([`/live-event/${TULUA_ID}`]));
+    } finally {
+      resetMockState();
+      mockConfig.latencyMs = prevLatency;
+    }
   });
 
   it('waits for the ticket check before routing an incomplete signed-in account', async () => {

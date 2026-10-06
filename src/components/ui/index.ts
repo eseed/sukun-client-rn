@@ -21,12 +21,23 @@ export { InlineError, type InlineErrorProps } from './InlineError';
 export { PageHeader, type PageHeaderProps } from './PageHeader';
 export {
   BackIcon,
+  BellIcon,
+  CalendarIcon,
   CameraIcon,
+  CheckIcon,
   DiscoverIcon,
   ExternalLinkIcon,
+  HeartIcon,
+  HelpIcon,
+  HomeIcon,
   type IconProps,
+  InfoIcon,
+  PeopleIcon,
   PinIcon,
+  PlusIcon,
   ProfileIcon,
+  QrIcon,
   SearchIcon,
+  ShirtIcon,
   TicketsIcon,
 } from './icons';

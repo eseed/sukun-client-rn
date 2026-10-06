@@ -1,16 +1,18 @@
 import { useRouter } from 'expo-router';
+import type { Href } from 'expo-router';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/tokens';
 import { text } from '../../theme/typography';
 import { TicketsTabIcon } from '../tickets/TicketsTabIcon';
 import { useHasWaitingInvitation } from '../../hooks/useClaimableTickets';
-import { DiscoverIcon, ProfileIcon, TicketsIcon } from './icons';
+import { useLiveEventContext } from '../../hooks/useLiveEventContext';
+import { DiscoverIcon, HomeIcon, ProfileIcon, TicketsIcon } from './icons';
 import { Text } from './Text';
 
 type Destination = {
   label: string;
-  href: '/(tabs)/discover' | '/(tabs)/tickets' | '/(tabs)/profile';
+  href: Href;
   Icon: typeof DiscoverIcon;
 };
 
@@ -43,6 +45,13 @@ export function BottomNav({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const invitationWaiting = useHasWaitingInvitation();
+  const live = useLiveEventContext();
+
+  // While the attendee's event is live, the bar grows a Home tab that always opens Event
+  // Home. Everywhere else it stays the three global destinations.
+  const destinations: Destination[] = live.status === 'ready'
+    ? [{ label: 'Home', href: `/live-event/${live.context.eventId}`, Icon: HomeIcon }, ...DESTINATIONS]
+    : DESTINATIONS;
 
   const inverse = tone === 'inverse';
   const tint = inverse ? colors.creme : colors.textMuted;
@@ -56,9 +65,9 @@ export function BottomNav({
         style,
       ]}
     >
-      {DESTINATIONS.map(({ label, href, Icon }) => (
+      {destinations.map(({ label, href, Icon }) => (
         <Pressable
-          key={href}
+          key={label}
           accessibilityRole="button"
           accessibilityLabel={
             Icon === TicketsIcon && invitationWaiting
