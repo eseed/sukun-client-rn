@@ -1,48 +1,79 @@
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useLiveEventContext } from '../../hooks/useLiveEventContext';
-import { colors, fontFamily, radius, space } from '../../theme/tokens';
+import { formatDateRange } from '../../lib/format';
+import { colors, fontFamily, fontSize, radius, space } from '../../theme/tokens';
 import { Text } from '../ui/Text';
 import { track } from '../../lib/analytics';
 
-/** Persistent return path shown on global pages while the current Event remains LIVE. */
+/**
+ * The LIVE return banner: the event's cover with its identity and a Return to Live Event
+ * action. Shown on global pages while the attendee's event remains LIVE.
+ */
 export function LiveEventReturnBanner() {
   const router = useRouter();
   const live = useLiveEventContext();
   if (live.status !== 'ready') return null;
   const { context } = live;
+  const { event } = context;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`LIVE. Return to ${context.event.title}`}
+      accessibilityLabel={`LIVE. Return to ${event.title}`}
       onPress={() => {
         track('live_event_return_tapped', { event_id: context.eventId });
-        router.push(`/live-event/${context.eventId}` as never);
+        router.push(`/live-event/${context.eventId}`);
       }}
       style={({ pressed }) => [styles.banner, pressed && styles.pressed]}
     >
-      <View style={styles.liveDot} />
-      <Text style={styles.liveLabel}>LIVE</Text>
-      <Text numberOfLines={1} style={styles.eventName}>Return to {context.event.title}</Text>
-      <Text style={styles.arrow} accessibilityElementsHidden>›</Text>
+      {event.coverImageUrl ? (
+        <Image
+          source={{ uri: event.coverImageUrl }}
+          accessibilityLabel={`${event.title} event image`}
+          contentFit="cover"
+          style={styles.cover}
+        />
+      ) : null}
+      <View style={styles.scrim} />
+      <View style={styles.copy}>
+        <Text numberOfLines={1} style={styles.title}>{event.title}</Text>
+        <Text numberOfLines={1} style={styles.sub}>
+          {formatDateRange(event.startDate, event.endDate)}
+          {event.venue?.name ? ` · ${event.venue.name}` : ''}
+        </Text>
+      </View>
+      <View style={styles.cta}>
+        <Text style={styles.ctaLabel}>Return to Live Event →</Text>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   banner: {
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.s2,
-    paddingHorizontal: space.s4,
-    borderRadius: radius.md,
+    minHeight: 148,
+    justifyContent: 'flex-end',
+    gap: space.s3,
+    overflow: 'hidden',
+    marginVertical: space.s3,
+    padding: space.s4,
+    borderRadius: radius.card,
     backgroundColor: colors.sage500,
   },
-  liveDot: { width: 8, height: 8, borderRadius: radius.circle, backgroundColor: colors.sage300 },
-  liveLabel: { color: colors.creme, fontSize: 11, fontFamily: fontFamily.bodyMedium, letterSpacing: 0.8 },
-  eventName: { flex: 1, color: colors.creme, fontSize: 14 },
-  arrow: { color: colors.creme, fontSize: 22, lineHeight: 24 },
+  cover: { ...StyleSheet.absoluteFill },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: colors.overlayScrim },
+  copy: { gap: 2 },
+  title: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.headingLg, color: colors.creme },
+  sub: { fontFamily: fontFamily.body, fontSize: fontSize.bodyMd, color: colors.creme },
+  cta: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: space.s5,
+    paddingVertical: space.s3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.sage500,
+  },
+  ctaLabel: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.bodyMd, color: colors.creme },
   pressed: { opacity: 0.82 },
 });

@@ -39,8 +39,12 @@ export default function PublicScheduleSessionScreen() {
   }, [block, view]);
 
   const goBack = () => {
-    if (router.canGoBack()) router.back();
-    else router.replace(`/event/${encodeURIComponent(slug ?? '')}/schedule?view=${view}` as never);
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      if (slug === undefined) return;
+      router.replace(`/event/${slug}/schedule?view=${view}`);
+    }
   };
 
   const toggleSaved = async () => {

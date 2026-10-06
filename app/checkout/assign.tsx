@@ -157,7 +157,7 @@ export default function AssignAddonsScreen() {
         retryLabel={validEventId ? 'Back to the event' : 'Find an event'}
         onRetry={() =>
           router.replace(
-            validEventId ? (`/event/${validEventId}` as never) : ('/(tabs)/discover' as never),
+            validEventId ? `/event/${validEventId}` : '/(tabs)/discover',
           )
         }
       />
@@ -234,8 +234,8 @@ export default function AssignAddonsScreen() {
 
     router.push(
       rooms.length > 0
-        ? (`/checkout/rooms?eventId=${validEventId}` as never)
-        : (`/checkout/review?eventId=${validEventId}` as never),
+        ? `/checkout/rooms?eventId=${validEventId}`
+        : `/checkout/review?eventId=${validEventId}`,
     );
   }
 

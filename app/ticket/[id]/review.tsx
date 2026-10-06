@@ -147,11 +147,13 @@ export default function TicketExtrasReviewScreen() {
         errorTitle="This checkout has expired"
         errorMessage="Start again and pick the extras you want."
         retryLabel={ticketId ? 'Back to extras' : 'Your tickets'}
-        onRetry={() =>
-          router.replace(
-            ticketId ? (`/ticket/${ticketId}/extras` as never) : ('/(tabs)/tickets' as never),
-          )
-        }
+        onRetry={() => {
+          if (ticketId) {
+            router.replace(`/ticket/${ticketId}/extras`);
+          } else {
+            router.replace('/(tabs)/tickets');
+          }
+        }}
       />
     </Screen>
   );

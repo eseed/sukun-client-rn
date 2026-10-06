@@ -4,14 +4,15 @@ import { StyleSheet, View } from 'react-native';
 import type { MyScheduleBlock, ScheduleDay } from '../../../src/api/types';
 import { Button, ResourceState, Screen, Text } from '../../../src/components/ui';
 import { ScheduleSessionCard } from '../../../src/components/live-event/schedule-session-card';
+import { ScheduleNotice, type ScheduleNoticeState } from '../../../src/components/live-event/schedule-notice';
 import { ScheduleCalendar } from '../../../src/components/live-event/schedule-calendar';
 import { ScheduleViewSwitcher, type ScheduleViewMode } from '../../../src/components/live-event/schedule-view-switcher';
 import { scheduleStageAccents } from '../../../src/components/live-event/schedule-stage-accent';
-import { scheduleScreenContent } from '../../../src/components/live-event/schedule-screen-layout';
+import { liveScheduleContent } from '../../../src/components/live-event/schedule-screen-layout';
 import { useEvent, useMySchedule, usePublicEventSchedule, useRemoveScheduleBlock } from '../../../src/hooks/queries';
 import { messageForError } from '../../../src/lib/errors';
 import { track } from '../../../src/lib/analytics';
-import { colors, space } from '../../../src/theme/tokens';
+import { space } from '../../../src/theme/tokens';
 
 export default function MyScheduleScreen() {
   const params = useLocalSearchParams<{ eventId: string }>();
@@ -21,7 +22,7 @@ export default function MyScheduleScreen() {
   const publicSchedule = usePublicEventSchedule(event.data?.slug);
   const query = useMySchedule(eventId);
   const remove = useRemoveScheduleBlock();
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState<ScheduleNoticeState>(null);
   const [viewMode, setViewMode] = useState<ScheduleViewMode>('list');
   useEffect(() => { track('live_my_schedule_opened', { event_id: eventId }); }, [eventId]);
 
@@ -41,23 +42,35 @@ export default function MyScheduleScreen() {
   }, [publicSchedule.data?.days, query.data?.blocks]);
   const stageAccents = useMemo(() => scheduleStageAccents(publicSchedule.data?.stages ?? []), [publicSchedule.data?.stages]);
 
+  const openSession = (blockId: string) => {
+    if (!eventId) return;
+    router.push(`/live-event/${eventId}/session/${blockId}`);
+  };
+
+  const goSchedule = () => {
+    if (!eventId) return;
+    router.push(`/live-event/${eventId}/schedule`);
+  };
+
   const removeBlock = async (blockId: string, title: string) => {
-    setNotice('');
+    setNotice(null);
     try {
       await remove.mutateAsync({ eventId, blockId });
       track('live_schedule_session_removed', { event_id: eventId, block_id: blockId });
-      setNotice(`${title} removed from My Schedule.`);
+      setNotice({ message: `${title} removed from My Schedule.`, conflicted: false });
     } catch (error) {
-      setNotice(messageForError(error));
+      setNotice({ message: messageForError(error), conflicted: false });
     }
   };
 
   return (
-    <Screen scroll edges={{ bottom: false }} contentStyle={scheduleScreenContent}>
+    <Screen scroll edges={{ bottom: false }} contentStyle={liveScheduleContent}>
+      {/* Same Screen gap quirk as LIVE home: sections stack here. */}
+      <View style={styles.stack}>
       <Text variant="titleMd" accessibilityRole="header">My Schedule</Text>
       <Text variant="bodyMuted">Your saved sessions for this Event.</Text>
       <ScheduleViewSwitcher value={viewMode} onChange={setViewMode} />
-      {notice ? <View accessibilityRole="alert" style={styles.notice}><Text>{notice}</Text></View> : null}
+      {notice ? <ScheduleNotice message={notice.message} onDismiss={() => setNotice(null)} /> : null}
       <ResourceState
         status={query.isLoading ? 'loading' : query.isError ? 'error' : query.data?.blocks.length ? 'success' : 'empty'}
         loadingLabel="Loading your saved sessions..."
@@ -72,7 +85,7 @@ export default function MyScheduleScreen() {
           stages={publicSchedule.data?.stages}
           personal
           pending={remove.isPending}
-          onOpenSession={(block) => router.push(`/live-event/${eventId}/session/${block.id}` as never)}
+          onOpenSession={(block) => openSession(block.id)}
           onToggleSaved={(block) => { void removeBlock(block.id, block.title); }}
         /> : <View style={styles.list}>
           {byDay.map(([dayId, blocks]) => (
@@ -90,7 +103,7 @@ export default function MyScheduleScreen() {
                   stageAccent={stageAccents.get(block.stageId)}
                   conflicts={block.conflicts}
                   compactSave
-                  onPress={() => router.push(`/live-event/${eventId}/session/${block.id}` as never)}
+                  onPress={() => openSession(block.id)}
                   onToggleSaved={() => void removeBlock(block.id, block.title)}
                 />
               ))}
@@ -98,16 +111,17 @@ export default function MyScheduleScreen() {
           ))}
         </View>}
       </ResourceState>
-      <Button label="Browse Full Schedule" variant="secondary" onPress={() => router.push(`/live-event/${eventId}/schedule` as never)} />
+      <Button label="Browse Full Schedule" variant="secondary" onPress={goSchedule} />
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  stack: { gap: space.s4 },
   list: { gap: space.s6 },
   dayGroup: { gap: space.s4 },
   dayHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.s2 },
   dayTitle: { flex: 1 },
   date: { fontSize: 10, textAlign: 'right' },
-  notice: { padding: space.s3, backgroundColor: colors.gold100, borderRadius: 4 },
 });

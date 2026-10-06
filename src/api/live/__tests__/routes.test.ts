@@ -135,12 +135,12 @@ describe('cart and addon routes', () => {
     requestMock
       .mockResolvedValueOnce({ data: [] })
       .mockResolvedValueOnce({ id: 'addon-1' })
-      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce({ ticketId: 'tk-1' });
 
     await liveApi.addons.list('tulua-2026');
     await liveApi.addons.detail('tulua-2026', 'addon-1');
-    await liveApi.tickets.addons('tk-1');
+    await expect(liveApi.tickets.addons('tk-1')).resolves.toEqual([]);
     await liveApi.tickets.addonContext('tk-1');
 
     expect(requestMock.mock.calls.map(([path]) => path)).toEqual([
@@ -150,5 +150,12 @@ describe('cart and addon routes', () => {
       'mobile/tickets/tk-1/addon-context',
     ]);
     expect(requestMock.mock.calls[0]?.[1]).toMatchObject({ auth: false });
+  });
+
+  it('normalizes legacy and empty ticket-addon responses to an array', async () => {
+    requestMock.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce(undefined);
+
+    await expect(liveApi.tickets.addons('tk-1')).resolves.toEqual([]);
+    await expect(liveApi.tickets.addons('tk-2')).resolves.toEqual([]);
   });
 });

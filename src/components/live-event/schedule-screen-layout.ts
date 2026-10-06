@@ -10,3 +10,13 @@ export const scheduleScreenContent: ViewStyle = {
   maxWidth: 520,
   alignSelf: 'center',
 };
+
+/**
+ * The same frame at the LIVE home's s4 page rhythm, so the attendee pages share one
+ * padding. The public schedule keeps `scheduleScreenContent` untouched.
+ */
+export const liveScheduleContent: ViewStyle = {
+  ...scheduleScreenContent,
+  paddingHorizontal: space.s4,
+  paddingTop: space.s4,
+};

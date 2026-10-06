@@ -15,6 +15,20 @@ export function formatTime(isoTimestamp: string): string {
   }).format(new Date(isoTimestamp));
 }
 
+/**
+ * Schedule times as the LIVE screens draw them (reference pack screens 01-05): 24-hour
+ * `"10:00"`, in Africa/Cairo. Separate from `formatTime` (12-hour, app-wide) so existing
+ * screens keep their convention.
+ */
+export function formatScheduleTime(isoTimestamp: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(isoTimestamp));
+}
+
 /** `"3200.00"` → `"3,200.00 EGP"`. */
 export function formatEgp(amount: string, options?: { withCurrency?: boolean }): string {
   const withCurrency = options?.withCurrency ?? true;

@@ -85,6 +85,8 @@ export const radius = {
   tile: 10,
   field: 12,
   card: 14,
+  /** LIVE home sheet top corners (reference pack screen 01); nothing in the system matched. */
+  sheet: 28,
   pill: 999,
   circle: 9999,
 } as const;

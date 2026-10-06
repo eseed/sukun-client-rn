@@ -125,14 +125,14 @@ describe('OTP screen', () => {
     renderWithProviders(<OtpScreen />);
   }
 
-  it('sends the user into the app on a correct code', async () => {
+  it('sends an incomplete account to profile setup on a correct code', async () => {
     await renderWithPendingPhone();
 
     // Entering the last digit submits on its own; there is no button press to make.
     fireEvent.changeText(screen.getByLabelText('Verification code'), MOCK_OTP_CODE);
 
     await waitFor(() => expect(useAuthStore.getState().status).toBe('signed-in'));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalled());
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/(onboarding)/profile'));
   });
 
   /**

@@ -45,8 +45,9 @@ const ADDON_KIND_ORDER: AddonType[] = ['accommodation', 'meal', 'transport', 'ot
 
 /** "room and voucher", "room, voucher and shuttle". No Oxford comma, as the design writes it. */
 function joinKinds(words: string[]): string {
-  if (words.length === 1) return words[0]!;
-  return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]!}`;
+  if (words.length === 0) return '';
+  if (words.length === 1) return words[0] ?? '';
+  return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1] ?? ''}`;
 }
 
 /**
@@ -74,7 +75,9 @@ function describeAttachedAddons(addons: OrderAddon[]): string | null {
       ? ADDON_KIND_WORDS[kind].plural
       : ADDON_KIND_WORDS[kind].singular,
   );
-  const plural = kinds.length > 1 || (unitsByKind.get(kinds[0]!) ?? 0) > 1;
+  const firstKind = kinds[0];
+  const plural =
+    kinds.length > 1 || (firstKind === undefined ? false : (unitsByKind.get(firstKind) ?? 0) > 1);
   const list = joinKinds(words);
 
   return `${list.charAt(0).toUpperCase()}${list.slice(1)} ${plural ? 'are' : 'is'} attached to your tickets. Redeem ${plural ? 'them' : 'it'} at the event.`;
@@ -128,7 +131,8 @@ export default function ConfirmationScreen() {
   }, [closed, paid, validOrderId]);
 
   useEffect(() => {
-    if (notPaid && validOrderId) router.replace(`/checkout/payment?orderId=${validOrderId}`);
+    if (notPaid && validOrderId)
+      router.replace(`/checkout/payment?orderId=${validOrderId}`);
   }, [notPaid, router, validOrderId]);
 
   if (!validOrderId) {
@@ -182,7 +186,7 @@ export default function ConfirmationScreen() {
                 <Button
                   label="See my orders"
                   size="inline"
-                  onPress={() => router.replace('/orders' as never)}
+                  onPress={() => router.replace('/orders')}
                 />
               </>
             ) : (
