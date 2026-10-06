@@ -565,6 +565,11 @@ describe('the Tickets tab while an invitation waits', () => {
  * holder landed on Discover with the ticket still to claim.
  */
 describe('claiming from the middle of sign-up', () => {
+  it('sends a completed sign-in through the LIVE-event entry check', () => {
+    resumeAfterOnboarding(mockRouter as never);
+    expect(mockRouter.replace).toHaveBeenCalledWith('/');
+  });
+
   it('keeps the claim screen away while sign-up is on screen', async () => {
     grantMockTicket({ phoneNumber: PHONE, holderName: 'Yasmin El Sayed' });
     await signIn();

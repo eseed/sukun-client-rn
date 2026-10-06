@@ -8,8 +8,10 @@ import { setSessionLiveEventChoice, useLiveEventContext } from '../src/hooks/use
 import { Button, Screen, Text } from '../src/components/ui';
 
 /**
- * Entry gate. Sends a signed-in user with a finished profile to the tabs, a signed-in user
- * mid-onboarding back to the step they stopped at, and a first-time visitor to Welcome.
+ * Entry gate. Sends signed-in holders with a LIVE event ticket into that Event, other users
+ * with a finished profile to Discover, users mid-onboarding back to their unfinished step,
+ * and first-time visitors to Welcome. Successful sign-in returns here so both paths share
+ * the same ticket check.
  *
  * Two cases are not a redirect into the flow, and they are the same case twice: someone who
  * has already been asked and already answered. `setupDeferred` is an account that declined a
@@ -32,7 +34,7 @@ export default function Index() {
   const setupDeferred = useAuthStore((s) => s.setupDeferred);
   const guestBrowsing = useAuthStore((s) => s.guestBrowsing);
   const [selectedEventId, setSelectedEventId] = useState<string>();
-  const liveEvent = useLiveEventContext(status === 'signed-in' && Boolean(user?.profileComplete), selectedEventId);
+  const liveEvent = useLiveEventContext(status === 'signed-in', selectedEventId);
 
   if (status === 'loading') {
     return (
@@ -54,15 +56,7 @@ export default function Index() {
     return <Redirect href="/(onboarding)/welcome" />;
   }
 
-  // A finished profile is the common case and beats every other check.
-  if (user.profileComplete) {
-    if (liveEvent.status === 'loading') {
-      return (
-        <View style={styles.splash}>
-          <ActivityIndicator color={colors.textPrimary} />
-        </View>
-      );
-    }
+  if (status === 'signed-in' && user) {
     if (liveEvent.status === 'ready') {
       return <Redirect href={`/live-event/${liveEvent.context.eventId}` as never} />;
     }
@@ -87,6 +81,17 @@ export default function Index() {
         </Screen>
       );
     }
+    if (liveEvent.status === 'loading') {
+      return (
+        <View style={styles.splash}>
+          <ActivityIndicator color={colors.textPrimary} />
+        </View>
+      );
+    }
+  }
+
+  // A finished profile with no matching LIVE ticket reaches the public catalogue.
+  if (user?.profileComplete) {
     // Resolver failures must not strand the attendee at launch.
     return <Redirect href="/(tabs)/discover" />;
   }

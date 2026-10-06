@@ -1,5 +1,6 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useState } from 'react';
+import { AppState, Platform } from 'react-native';
 import { NotificationResponseRouter } from '../services/notifications/NotificationResponseRouter';
 import { PushTokenRegistration } from '../services/notifications/PushTokenRegistration';
 import { setAuthQueryCacheClearHandler, useAuthStore } from '../stores/auth';
@@ -27,6 +28,18 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   const [client] = useState(createQueryClient);
   const authStatus = useAuthStore((state) => state.status);
   const user = useAuthStore((state) => state.user);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    focusManager.setFocused(AppState.currentState === 'active');
+    const subscription = AppState.addEventListener('change', (state) => {
+      focusManager.setFocused(state === 'active');
+    });
+    return () => {
+      subscription.remove();
+      focusManager.setFocused(undefined);
+    };
+  }, []);
 
   useEffect(() => {
     setAuthQueryCacheClearHandler(() => client.clear());

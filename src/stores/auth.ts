@@ -349,13 +349,14 @@ type Router = ReturnType<typeof useRouter>;
 
 /**
  * Where onboarding lets someone go once it has what it needs: back to the ticket they were
- * claiming, or the checkout, that sent them here, or to Discover when nothing did. The ticket
+ * claiming, or the checkout, that sent them here, or through the app entry resolver when nothing
+ * did. That resolver checks for an active ticket at a LIVE Event before choosing Discover. The ticket
  * opens with `claim=1`, which makes the claim they had asked for.
  *
  * Both exits from registration ask this, the one on the OTP screen for a returning account
  * whose profile is already complete and the one on the profile form for an account that has
  * just completed it, and they have to answer it the same way or a guest who signed in at the
- * pass step would be returned to it on one path and dropped on Discover on the other.
+ * pass step would be returned to it on one path and skip the LIVE resolver on the other.
  *
  * Deliberately not called when the profile step is *deferred*: purchase needs it finished
  * (CLAUDE.md rule 8), so resuming a checkout there would only stop them again a screen later.
@@ -368,7 +369,7 @@ export function resumeAfterOnboarding(router: Router): void {
   }
   const pendingEventId = useAuthStore.getState().takePendingCheckoutEventId();
   if (pendingEventId) router.replace(`/checkout/pass?eventId=${pendingEventId}`);
-  else router.replace('/(tabs)/discover');
+  else router.replace('/');
 }
 
 /**

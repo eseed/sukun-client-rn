@@ -85,7 +85,10 @@ export function useLiveEventContext(enabled = true, selectedEventId?: string): L
       }
     },
     enabled: enabled && authStatus === 'signed-in' && Boolean(userId),
-    staleTime: 60_000,
+    // LIVE state can change while the attendee is already in the app. Refresh this small
+    // resolver when the app/browser regains focus so a return banner appears without polling.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
     retry: false,
   });
 
