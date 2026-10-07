@@ -37,10 +37,10 @@ export function AnalyticsConsentScreen({ onAnswer }: AnalyticsConsentScreenProps
           installation ID to our backend; after you verify your phone, that installation can be
           linked to your account. Meta receives app installs and opens, the events you search for
           and view, your checkout and sign-up steps, completed purchases and device details, and may
-          use this activity under its own terms for measurement and advertising. We do not send your
-          Sukun account ID, name, email, or phone number to Kochava or Meta, and neither requests
-          IDFA, Google Advertising ID, or Apple&apos;s tracking permission. You can turn it off at
-          any time under Analytics &amp; session replay on the Profile tab.
+          use this activity under its own terms for measurement and advertising. The app does not
+          send your Sukun account ID, name, email, or phone number to Kochava or Meta, and neither
+          requests IDFA, Google Advertising ID, or Apple&apos;s tracking permission. You can turn it
+          off at any time under Analytics &amp; session replay on the Profile tab.
         </Text>
       </View>
       <View style={styles.footer}>
