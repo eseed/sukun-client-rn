@@ -176,6 +176,11 @@ export default function TicketExtrasReviewScreen() {
 
   if (!cartQuery.data && !order) return expired;
 
+  // Ticket lines mean another checkout took this draft over after screen 22 opened it. This screen
+  // lists extras only, so its total would include lines it never shows; screen 22 opens a fresh
+  // cart when it is reached again.
+  if (cartQuery.data && cartQuery.data.tickets.length > 0 && !order) return expired;
+
   const cart = cartQuery.data;
   const ticket = ticketQuery.data;
   const catalog = contextQuery.data?.catalog ?? [];

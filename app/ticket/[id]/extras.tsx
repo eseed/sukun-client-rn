@@ -19,11 +19,11 @@ import {
 } from '../../../src/components/ui';
 import {
   useCartPreview,
-  useCreateCart,
   useReplaceCartAddons,
   useTicket,
   useTicketAddonContext,
 } from '../../../src/hooks/queries';
+import { useOpenExtrasCart } from '../../../src/hooks/useTicketExtrasCart';
 import { describeOption, describePriceWindow, isAccommodation } from '../../../src/lib/addons';
 import { messageForError } from '../../../src/lib/errors';
 import { formatEgp } from '../../../src/lib/format';
@@ -56,7 +56,9 @@ export default function TicketExtrasScreen() {
   // A second call: `TicketAddonContext` carries ids only, and artboard 22 names the ticket being
   // added to. With several tickets in an account, nothing else on screen says which one this is.
   const ticketQuery = useTicket(ticketId);
-  const createCart = useCreateCart();
+  // Never the draft as `POST carts` hands it back: one left with tickets in it would be priced
+  // and placed with those tickets (see `useOpenExtrasCart`).
+  const extrasCart = useOpenExtrasCart();
   const replaceAddons = useReplaceCartAddons();
   const preview = useCartPreview();
   // The review screen picks the cart up from here, the same way `app/checkout/review.tsx` does,
@@ -92,8 +94,8 @@ export default function TicketExtrasScreen() {
     async function ensureCart(eventId: string): Promise<string> {
       if (cartIdRef.current) return cartIdRef.current;
       if (!cartRequest.current) {
-        cartRequest.current = createCart
-          .mutateAsync(eventId)
+        cartRequest.current = extrasCart
+          .open(eventId)
           .then((cart) => {
             cartIdRef.current = cart.id;
             return cart.id;
@@ -267,7 +269,8 @@ export default function TicketExtrasScreen() {
             // One room per person for the whole event, so a holder who already has one cannot
             // buy a second here.
             const blocked = room && hasAccommodation;
-            const unavailable = option.availability === 'unavailable' || option.priceEgpNow === null;
+            const unavailable =
+              option.availability === 'unavailable' || option.priceEgpNow === null;
             const quantity = chosen[option.id] ?? 0;
 
             return (
@@ -353,16 +356,14 @@ export default function TicketExtrasScreen() {
               Assigned to you
             </Text>
           </View>
-          <Text style={styles.summaryMoney}>
-            {subtotal ? formatEgp(subtotal) : 'Pricing...'}
-          </Text>
+          <Text style={styles.summaryMoney}>{subtotal ? formatEgp(subtotal) : 'Pricing...'}</Text>
         </Card>
       ) : null}
 
       <Button
         label={picked.length > 0 ? 'Continue' : 'Choose an extra'}
         disabled={!canContinue}
-        loading={preview.isPending || createCart.isPending}
+        loading={preview.isPending || extrasCart.isPending}
         onPress={() => {
           trackMetaAddExtrasToTicket(
             picked.map(([optionId, quantity]) => ({ id: optionId, quantity })),

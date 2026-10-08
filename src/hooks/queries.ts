@@ -410,6 +410,18 @@ export function useCreateCart() {
   });
 }
 
+/** Closes a draft for good, so the next `POST carts` for its event opens a fresh one. */
+export function useAbandonCart() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (cartId: string) => api.carts.abandon(cartId),
+    onSuccess: (cart) => {
+      client.setQueryData(queryKeys.cart(cart.id), cart);
+      client.removeQueries({ queryKey: queryKeys.cartPreview(cart.id) });
+    },
+  });
+}
+
 /**
  * Replacing tickets also wipes the cart's draft extras, so this drops the cached preview: the
  * price on screen belongs to a basket that no longer exists.
