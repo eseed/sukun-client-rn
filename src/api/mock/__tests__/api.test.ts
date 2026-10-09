@@ -739,17 +739,29 @@ describe('cart addons', () => {
     ).rejects.toMatchObject({ code: 'ADDON_ASSIGNMENT_TARGET_INVALID' });
   });
 
-  /** Same rule for rooms: a double with one person in it is refused when it is sent, not later. */
-  it('will not take a half-filled room', async () => {
+  /** Roommates are optional: a double with one person in it is taken, the other place left open. */
+  it('takes a double with one person in it', async () => {
     const { cartId, attendees } = await cartWithGuest();
+
+    await mockApi.carts.replaceAddons(cartId, [
+      {
+        optionId: 'opt-lodge-double-2',
+        quantity: 1,
+        rooms: [{ occupants: [{ cartAttendeeId: attendees[0]!.cartAttendeeId }] }],
+      },
+    ]);
+
+    const cart = await mockApi.carts.get(cartId);
+    expect(cart.addons).toHaveLength(1);
+  });
+
+  /** Same rule as the units: a room with nobody in it is refused when it is sent, not later. */
+  it('will not take a room with nobody in it', async () => {
+    const { cartId } = await cartWithGuest();
 
     await expect(
       mockApi.carts.replaceAddons(cartId, [
-        {
-          optionId: 'opt-lodge-double-2',
-          quantity: 1,
-          rooms: [{ occupants: [{ cartAttendeeId: attendees[0]!.cartAttendeeId }] }],
-        },
+        { optionId: 'opt-lodge-double-2', quantity: 1, rooms: [{ occupants: [] }] },
       ]),
     ).rejects.toMatchObject({ code: 'ROOM_OCCUPANCY_UNFILLED' });
 
@@ -1029,7 +1041,11 @@ describe('extras for a ticket holder who never signed up', () => {
     // C themselves: a real, registered account that holds no Tulua ticket yet.
     const [accountNoTicket] = await mockApi.carts.lookupRecipients(cart.id, [C_PHONE]);
 
-    expect(noAccount).toEqual({ ...noAccount, ...accountNoTicket, phoneNumber: noAccount!.phoneNumber });
+    expect(noAccount).toEqual({
+      ...noAccount,
+      ...accountNoTicket,
+      phoneNumber: noAccount!.phoneNumber,
+    });
     expect(noAccount?.eligible).toBe(false);
     expect(accountNoTicket?.eligible).toBe(false);
     // Same keys, same values, nothing that could tell the two apart.

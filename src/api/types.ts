@@ -986,3 +986,39 @@ export interface OrderAddon {
   recipients: OrderAddonRecipient[];
   room: TicketAddonRoom | null;
 }
+
+/* -------------------------------------------------------- rooms after purchase */
+
+/** `MobileRoomOccupantResponseDto`. Named only when the order that bought the room named them. */
+export interface RoomOccupant {
+  ticketId: string;
+  phoneNumber: string | null;
+  displayName: string | null;
+  isYou: boolean;
+}
+
+/**
+ * `MobileRoomResponseDto`: a room this account paid for (`GET mobile/rooms`).
+ *
+ * A room needs one person in it at checkout; its other places may stay empty, and its buyer fills
+ * them later with people who hold a ticket to the event (`POST mobile/rooms/:roomId/occupants`).
+ */
+export interface BuyerRoom {
+  roomId: string;
+  eventId: string;
+  orderId: string;
+  orderNumber: string;
+  addonName: string;
+  label: string;
+  roomType: string;
+  nights: number;
+  checkInDate: string;
+  checkInTime: string;
+  checkOutDate: string;
+  checkOutTime: string;
+  capacity: number;
+  status: TicketAddonRoom['status'];
+  occupants: RoomOccupant[];
+  openPlaces: number;
+  canAddOccupants: boolean;
+}

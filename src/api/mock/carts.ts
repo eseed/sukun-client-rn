@@ -242,7 +242,7 @@ export function validateCart(
       }
 
       for (const [roomGroupId, occupants] of rooms) {
-        if (occupants.length !== (option.occupancy ?? 0)) {
+        if (occupants.length === 0 || occupants.length > (option.occupancy ?? 0)) {
           issues.push({
             code: 'ROOM_OCCUPANCY_UNFILLED',
             path: `addons.${index}.rooms.${roomGroupId}`,
