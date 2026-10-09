@@ -71,7 +71,16 @@ const MESSAGES: Record<string, string> = {
   // The backend uses this for converted, abandoned, and expired carts; it does not prove an
   // order exists, so recovery decides whether payment or a fresh event checkout is appropriate.
   CART_NOT_EDITABLE: 'This checkout is no longer available. Start again from the event.',
-  ROOM_OCCUPANCY_UNFILLED: 'Every room has to be full before you can check out.',
+  ROOM_OCCUPANCY_UNFILLED: 'Pick who is in each room.',
+  // Filling a room's empty places after paying (`POST mobile/rooms/:roomId/occupants`). A number
+  // with no account and one with no ticket get the same answer (rule: never say who is registered).
+  ADDON_ROOM_GUEST_TICKET_REQUIRED:
+    'No ticket to this event on that number. Rooms are for ticket holders.',
+  ADDON_ROOM_OCCUPANT_ALREADY_ASSIGNED: 'They already have a room for this event.',
+  ADDON_ROOM_FULL: 'This room is full.',
+  ADDON_ROOM_CHANGES_CLOSED: 'This event is over, so its rooms can no longer change.',
+  ADDON_ROOM_BOOKING_NOT_FOUND: "We couldn't find this room.",
+  RECIPIENT_LOOKUP_RATE_LIMITED: 'Too many tries. Wait a few minutes and try again.',
   ADDON_ASSIGNMENT_COUNT_MISMATCH: 'Every extra needs somebody to go to.',
 
   PROMO_CODE_INVALID: 'That promo code is not valid.',

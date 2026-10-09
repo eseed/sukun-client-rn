@@ -11,6 +11,7 @@ import {
   Text,
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
+import { RoomSpotsPanel } from '../../src/components/tickets/RoomSpotsPanel';
 import type { OrderAddon } from '../../src/api/types';
 import { useCancelOrder, useEvent, useOrder } from '../../src/hooks/queries';
 import { describeOrderAddonRecipients, ticketAddonStatusLabel } from '../../src/lib/addons';
@@ -210,6 +211,10 @@ export default function OrderDetailScreen() {
                   emphasis
                 />
               </Card>
+
+              {paid && data.addons.some((addon) => addon.room) ? (
+                <RoomSpotsPanel eventId={data.eventId} orderId={data.id} />
+              ) : null}
 
               {data.addons.length > 0 ? (
                 <Text variant="metaSm" style={styles.footnote}>

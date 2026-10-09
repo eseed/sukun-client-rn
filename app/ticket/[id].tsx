@@ -14,6 +14,7 @@ import {
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
 import { PlusOnePanel } from '../../src/components/tickets/PlusOnePanel';
+import { RoomSpotsPanel } from '../../src/components/tickets/RoomSpotsPanel';
 import {
   queryKeys,
   useClaimTicket,
@@ -25,10 +26,7 @@ import {
 import { describeTicketAddon, ticketAddonStatusLabel } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
-import {
-  getEntryPassOpensAt,
-  getEntryPassRefreshAt,
-} from '../../src/lib/entry-pass';
+import { getEntryPassOpensAt, getEntryPassRefreshAt } from '../../src/lib/entry-pass';
 import { api } from '../../src/api';
 import {
   getAuthSessionGeneration,
@@ -566,6 +564,8 @@ export default function EntryPassScreen() {
         ))}
 
         {ticket.plusOne && !needsClaim && !unusable ? <PlusOnePanel ticket={ticket} /> : null}
+
+        {!needsClaim && !unusable ? <RoomSpotsPanel eventId={ticket.event.id} /> : null}
 
         {addons.length > 0 ? (
           <View style={styles.addons}>

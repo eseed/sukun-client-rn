@@ -9,6 +9,7 @@ import { useEffect, useMemo } from 'react';
 import { api } from '../api';
 import { ENTRY_QR_REFRESH_INTERVAL_MS, isEntryPassResponseForTicket } from '../lib/entry-pass';
 import type {
+  BuyerRoom,
   CartAddonInput,
   CurrentUser,
   EntryPass,
@@ -68,6 +69,8 @@ export const queryKeys = {
   ticketAddons: (ticketId: string) => ['ticket-addons', ticketId] as const,
   ticketAddonContext: (ticketId: string) => ['ticket-addon-context', ticketId] as const,
   deletionPreview: ['deletion-preview'] as const,
+  roomsRoot: ['rooms'] as const,
+  rooms: (eventId: string) => ['rooms', eventId] as const,
 };
 
 /* -------------------------------------------------------------- reference */
@@ -784,6 +787,33 @@ export function useTicketAddonContext(ticketId: string | undefined) {
     queryFn: () => api.tickets.addonContext(ticketId as string),
     enabled: signedIn && Boolean(ticketId),
     retry: false,
+  });
+}
+
+/** Rooms this account paid for at an event, with who is in them and the places left. */
+export function useEventRooms(eventId: string | undefined) {
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  return useQuery({
+    queryKey: queryKeys.rooms(eventId ?? ''),
+    queryFn: () => api.rooms.list(eventId as string),
+    enabled: signedIn && Boolean(eventId),
+    retry: false,
+  });
+}
+
+/** Puts a ticket holder in an empty place of a room this account paid for. */
+export function useAddRoomOccupant() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { roomId: string; phoneNumber: string }) =>
+      api.rooms.addOccupant(input.roomId, input.phoneNumber),
+    onSuccess: (room) => {
+      client.setQueryData<BuyerRoom[]>(queryKeys.rooms(room.eventId), (rooms) =>
+        rooms?.map((item) => (item.roomId === room.roomId ? room : item)),
+      );
+      void client.invalidateQueries({ queryKey: queryKeys.rooms(room.eventId) });
+      void client.invalidateQueries({ queryKey: queryKeys.order(room.orderId) });
+    },
   });
 }
 

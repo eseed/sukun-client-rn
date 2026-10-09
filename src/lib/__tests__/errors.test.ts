@@ -39,7 +39,7 @@ describe('messageForError', () => {
       'This checkout is no longer available. Start again from the event.',
     );
     expect(messageForError(apiError('ROOM_OCCUPANCY_UNFILLED'))).toBe(
-      'Every room has to be full before you can check out.',
+      'Pick who is in each room.',
     );
     expect(messageForError(apiError('ADDON_ASSIGNMENT_COUNT_MISMATCH'))).toBe(
       'Every extra needs somebody to go to.',

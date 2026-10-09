@@ -2,6 +2,7 @@ import { normalizePhone, requiresLivingArea } from '../../lib/phone';
 import { overlaps } from '../../lib/live-event';
 import type { SukunApi } from '../contract';
 import type {
+  BuyerRoom,
   ClaimAvailability,
   PlusOneGuestStatus,
   AccountDeletionPreview,
@@ -333,8 +334,10 @@ function hasActiveOwnedTicket(eventId: string, user: CurrentUser): boolean {
   return state.tickets.some((ticket) => {
     if (ticket.event.id !== eventId || ticket.status !== 'active') return false;
     const ownerPhone = state.ticketOwnerPhones.get(ticket.id);
-    return ownerPhone === user.phoneNumber ||
-      (!ownerPhone && state.ticketBuyerPhones.get(ticket.id) === user.phoneNumber);
+    return (
+      ownerPhone === user.phoneNumber ||
+      (!ownerPhone && state.ticketBuyerPhones.get(ticket.id) === user.phoneNumber)
+    );
   });
 }
 
@@ -367,9 +370,9 @@ function seedSavedScheduleFor(user: CurrentUser, eventId: string): void {
   const schedule = scheduleForEvent(eventId);
   const preferred =
     schedule.blocks.find((block) => block.id === 'block-breathwork-journey') ??
-    [...schedule.blocks].sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt)).find(
-      (block) => Date.parse(block.startAt) > mockConfig.now(),
-    ) ??
+    [...schedule.blocks]
+      .sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))
+      .find((block) => Date.parse(block.startAt) > mockConfig.now()) ??
     [...schedule.blocks].sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))[0];
   if (preferred) saved.add(preferred.id);
 }
@@ -962,6 +965,67 @@ function recipientUnits(line: OrderAddon, ticketId: string | null): number {
 
 /* ------------------------------------------------------------------- api */
 
+/** Who holds a ticket: the guest it was bought for, or else the buyer who bought it. */
+function holderPhoneOf(ticketId: string): string | null {
+  return state.ticketOwnerPhones.get(ticketId) ?? state.ticketBuyerPhones.get(ticketId) ?? null;
+}
+
+/**
+ * The rooms a paid order of this account bought at an event, as `GET mobile/rooms` answers. The
+ * mock keys a room by its room group and keeps its occupants as the order line's recipients.
+ */
+function mockRoomsFor(user: CurrentUser, eventId: string): BuyerRoom[] {
+  const event = eventDetails[eventId];
+  const closed = event?.state === 'completed' || event?.state === 'cancelled';
+  return state.orders
+    .filter(
+      (order) =>
+        order.eventId === eventId &&
+        order.status === 'paid' &&
+        state.orderBuyerPhones.get(order.id) === user.phoneNumber,
+    )
+    .flatMap((order) =>
+      order.addons.flatMap((addon) => {
+        if (!addon.room) return [];
+        const room = addon.room;
+        const groups = [...new Set(addon.recipients.map((recipient) => recipient.roomGroupId))];
+        return groups.flatMap((roomGroupId) => {
+          if (!roomGroupId) return [];
+          const occupants = addon.recipients
+            .filter((recipient) => recipient.roomGroupId === roomGroupId)
+            .map((recipient) => ({
+              ticketId: recipient.ticketId,
+              phoneNumber: recipient.phoneNumber,
+              displayName: recipient.displayName,
+              isYou: recipient.phoneNumber === user.phoneNumber,
+            }));
+          const openPlaces = Math.max(room.capacity - occupants.length, 0);
+          return [
+            {
+              roomId: roomGroupId,
+              eventId,
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              addonName: addon.label,
+              label: addon.label,
+              roomType: room.roomType,
+              nights: room.nights,
+              checkInDate: room.checkInDate,
+              checkInTime: room.checkInTime,
+              checkOutDate: room.checkOutDate,
+              checkOutTime: room.checkOutTime,
+              capacity: room.capacity,
+              status: room.status,
+              occupants,
+              openPlaces,
+              canAddOccupants: openPlaces > 0 && !closed,
+            },
+          ];
+        });
+      }),
+    );
+}
+
 export const mockApi: SukunApi = {
   auth: {
     async requestOtp(phoneNumber: string): Promise<OtpRequested> {
@@ -1208,7 +1272,11 @@ export const mockApi: SukunApi = {
     async mine(eventId: string, query?: MyScheduleQuery): Promise<MyScheduleResponse> {
       const user = requireUser();
       if (!hasActiveOwnedTicket(eventId, user)) {
-        throw new MockApiError('SCHEDULE_TICKET_REQUIRED', 'An active Event ticket is required.', 403);
+        throw new MockApiError(
+          'SCHEDULE_TICKET_REQUIRED',
+          'An active Event ticket is required.',
+          403,
+        );
       }
       const schedule = scheduleForEvent(eventId);
       const saved = savedBlocksFor(user, eventId);
@@ -1223,7 +1291,12 @@ export const mockApi: SukunApi = {
         ...block,
         conflicts: selected
           .filter((other) => other.id !== block.id && overlaps(block, other))
-          .map((other) => ({ blockId: other.id, title: other.title, startAt: other.startAt, endAt: other.endAt })),
+          .map((other) => ({
+            blockId: other.id,
+            title: other.title,
+            startAt: other.startAt,
+            endAt: other.endAt,
+          })),
       }));
       return delay({ eventId, blocks, meta: result.meta });
     },
@@ -1231,7 +1304,11 @@ export const mockApi: SukunApi = {
     async save(eventId: string, blockId: string): Promise<SaveScheduleBlockResponse> {
       const user = requireUser();
       if (!hasActiveOwnedTicket(eventId, user)) {
-        throw new MockApiError('SCHEDULE_TICKET_REQUIRED', 'An active Event ticket is required.', 403);
+        throw new MockApiError(
+          'SCHEDULE_TICKET_REQUIRED',
+          'An active Event ticket is required.',
+          403,
+        );
       }
       const block = scheduleForEvent(eventId).blocks.find((item) => item.id === blockId);
       if (!block) throw new MockApiError('SCHEDULE_BLOCK_NOT_FOUND', 'Session not found.', 404);
@@ -1241,14 +1318,23 @@ export const mockApi: SukunApi = {
         .filter((id) => id !== blockId)
         .map((id) => scheduleForEvent(eventId).blocks.find((item) => item.id === id))
         .filter((item): item is ScheduleBlock => Boolean(item && overlaps(block, item)))
-        .map((item) => ({ blockId: item.id, title: item.title, startAt: item.startAt, endAt: item.endAt }));
+        .map((item) => ({
+          blockId: item.id,
+          title: item.title,
+          startAt: item.startAt,
+          endAt: item.endAt,
+        }));
       return delay({ saved: true, conflicts });
     },
 
     async remove(eventId: string, blockId: string): Promise<void> {
       const user = requireUser();
       if (!hasActiveOwnedTicket(eventId, user)) {
-        throw new MockApiError('SCHEDULE_TICKET_REQUIRED', 'An active Event ticket is required.', 403);
+        throw new MockApiError(
+          'SCHEDULE_TICKET_REQUIRED',
+          'An active Event ticket is required.',
+          403,
+        );
       }
       savedBlocksFor(user, eventId).delete(blockId);
       await delay(undefined);
@@ -1386,7 +1472,7 @@ export const mockApi: SukunApi = {
 
         /*
           This endpoint is a commit, not a scratch pad: a line whose units are not all spoken
-          for, or a room that is not full, is refused at the write rather than reported back as
+          for, or a room with nobody in it, is refused at the write rather than reported back as
           an advisory issue. Modelling it only in `validateCartHere` is what let the app push
           half-assigned drafts all the way to staging before anything said no.
         */
@@ -1399,13 +1485,10 @@ export const mockApi: SukunApi = {
               400,
             );
           }
+          // One person at least, never more than it sleeps; the rest are added after paying.
           for (const room of rooms) {
-            if (room.occupants.length !== option.occupancy) {
-              throw new MockApiError(
-                'ROOM_OCCUPANCY_UNFILLED',
-                'Every room has to be full before you can check out.',
-                400,
-              );
+            if (room.occupants.length === 0 || room.occupants.length > option.occupancy) {
+              throw new MockApiError('ROOM_OCCUPANCY_UNFILLED', 'Pick who is in each room.', 400);
             }
           }
         } else {
@@ -2035,6 +2118,75 @@ export const mockApi: SukunApi = {
         },
         0.7,
       );
+    },
+  },
+
+  rooms: {
+    async list(eventId: string): Promise<BuyerRoom[]> {
+      const user = requireUser();
+      settleDuePayments();
+      return delay(mockRoomsFor(user, eventId));
+    },
+
+    async addOccupant(roomId: string, phoneNumber: string): Promise<BuyerRoom> {
+      const user = requireUser();
+      const e164 = normalizePhone(phoneNumber);
+      if (!e164) {
+        throw new MockApiError('INVALID_PHONE_NUMBER', 'Enter a valid mobile phone number', 400);
+      }
+      const order = state.orders.find(
+        (item) =>
+          item.status === 'paid' &&
+          state.orderBuyerPhones.get(item.id) === user.phoneNumber &&
+          item.addons.some((addon) =>
+            addon.recipients.some((recipient) => recipient.roomGroupId === roomId),
+          ),
+      );
+      const addon = order?.addons.find((item) =>
+        item.recipients.some((recipient) => recipient.roomGroupId === roomId),
+      );
+      const current = order
+        ? mockRoomsFor(user, order.eventId).find((r) => r.roomId === roomId)
+        : undefined;
+      if (!order || !addon?.room || !current) {
+        throw new MockApiError('ADDON_ROOM_BOOKING_NOT_FOUND', 'The room was not found', 404);
+      }
+      const ticket = state.tickets.find(
+        (item) =>
+          item.event.id === order.eventId &&
+          (item.status === 'active' || item.status === 'pending_claim') &&
+          holderPhoneOf(item.id) === e164,
+      );
+      if (!ticket) {
+        throw new MockApiError(
+          'ADDON_ROOM_GUEST_TICKET_REQUIRED',
+          'Only someone with a ticket to this event can be put in a room',
+          409,
+        );
+      }
+      if (current.occupants.some((occupant) => occupant.ticketId === ticket.id)) {
+        return delay(current);
+      }
+      if (!current.canAddOccupants) {
+        throw new MockApiError('ADDON_ROOM_FULL', 'This room is full', 409);
+      }
+      const housed = state.accommodationTicketIds.get(order.eventId) ?? new Set<string>();
+      if (housed.has(ticket.id)) {
+        throw new MockApiError(
+          'ADDON_ROOM_OCCUPANT_ALREADY_ASSIGNED',
+          'The Ticket already has accommodation for this event',
+          409,
+        );
+      }
+      housed.add(ticket.id);
+      state.accommodationTicketIds.set(order.eventId, housed);
+      addon.recipients.push({
+        ticketId: ticket.id,
+        phoneNumber: e164,
+        displayName: null,
+        roomGroupId: roomId,
+      });
+      return delay(mockRoomsFor(user, order.eventId).find((r) => r.roomId === roomId)!);
     },
   },
 

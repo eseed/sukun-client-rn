@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import type {
   AccountDeletionPreview,
+  BuyerRoom,
   AddonDetail,
   AddonSummary,
   AppConfig,
@@ -229,7 +230,10 @@ export const liveApi: SukunApi = {
 
     // GET public/events/:identifier (uuid or slug)
     detail: (identifier, signal) =>
-      request<LiveEventDetail>(`public/events/${encodeURIComponent(identifier)}`, { auth: false, signal }),
+      request<LiveEventDetail>(`public/events/${encodeURIComponent(identifier)}`, {
+        auth: false,
+        signal,
+      }),
 
     meta: (identifier) =>
       request<EventMeta>(`public/events/${encodeURIComponent(identifier)}/meta`, { auth: false }),
@@ -238,10 +242,9 @@ export const liveApi: SukunApi = {
   schedule: {
     // GET public/events/:identifier/schedule — published blocks only.
     public: (identifier) =>
-      request<PublicEventSchedule>(
-        `public/events/${encodeURIComponent(identifier)}/schedule`,
-        { auth: false },
-      ),
+      request<PublicEventSchedule>(`public/events/${encodeURIComponent(identifier)}/schedule`, {
+        auth: false,
+      }),
 
     // GET mobile/events/:eventId/my-schedule
     mine: (eventId, query?: MyScheduleQuery) =>
@@ -442,19 +445,32 @@ export const liveApi: SukunApi = {
 
     // GET mobile/tickets/:ticketId/addons
     addons: async (ticketId, includeRefunded) => {
-      const response = await request<
-        TicketAddon[] | { data?: TicketAddon[] } | null | undefined
-      >(`mobile/tickets/${ticketId}/addons`, {
-        query: { includeRefunded: includeRefunded ? 'true' : undefined },
-      });
+      const response = await request<TicketAddon[] | { data?: TicketAddon[] } | null | undefined>(
+        `mobile/tickets/${ticketId}/addons`,
+        {
+          query: { includeRefunded: includeRefunded ? 'true' : undefined },
+        },
+      );
       // Current OpenAPI returns an array; older staging deployments wrapped it in a data object.
       // An empty response also means no attached add-ons. React Query must always get an array.
-      return Array.isArray(response) ? response : response?.data ?? [];
+      return Array.isArray(response) ? response : (response?.data ?? []);
     },
 
     // GET mobile/tickets/:ticketId/addon-context
     addonContext: (ticketId) =>
       request<TicketAddonContext>(`mobile/tickets/${ticketId}/addon-context`),
+  },
+
+  rooms: {
+    // MobileRoomsController — GET mobile/rooms?eventId=
+    list: (eventId) => request<BuyerRoom[]>('mobile/rooms', { query: { eventId } }),
+
+    // POST mobile/rooms/:roomId/occupants
+    addOccupant: (roomId, phoneNumber) =>
+      request<BuyerRoom>(`mobile/rooms/${roomId}/occupants`, {
+        method: 'POST',
+        body: { phoneNumber: normalizePhoneForRequest(phoneNumber) },
+      }),
   },
 
   account: {
