@@ -233,6 +233,17 @@ export default function ConfirmationScreen() {
    * in the QR panel for as long as it goes unanswered (CLAUDE.md rule 3).
    */
   const promptForSelfie = order.buyerTierId !== null && !hasSelfie;
+  // A room bought with its roommate left for later: say where they are added.
+  const roomHasSpot = order.addons.some((addon) => {
+    if (!addon.room) return false;
+    const groups = new Map<string, number>();
+    for (const recipient of addon.recipients) {
+      if (recipient.roomGroupId) {
+        groups.set(recipient.roomGroupId, (groups.get(recipient.roomGroupId) ?? 0) + 1);
+      }
+    }
+    return [...groups.values()].some((count) => count < addon.room!.capacity);
+  });
 
   function openTicket() {
     if (firstTicket) router.replace(`/ticket/${firstTicket.id}`);
@@ -287,6 +298,11 @@ export default function ConfirmationScreen() {
             )}
 
             {attachedLine ? <Text style={styles.attached}>{attachedLine}</Text> : null}
+            {roomHasSpot ? (
+              <Text style={styles.attached}>
+                Free spot in your room: add a roommate from your ticket.
+              </Text>
+            ) : null}
 
             {promptForSelfie ? (
               <>

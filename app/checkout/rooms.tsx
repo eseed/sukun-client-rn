@@ -35,14 +35,16 @@ import type { CartAddonInput, CartAddonRecipient, CartAttendee } from '../../src
 /**
  * Design screen 14 · Room occupancy.
  *
- * Accommodation is bought by the room, and every room has to be full before checkout: a double
- * sleeps two, and the backend rejects a half-filled one (`ROOM_OCCUPANCY_UNFILLED`). One person
- * can only be in one room for the event, so anyone already placed drops out of the remaining
- * rooms' pickers rather than failing later.
+ * Accommodation is bought by the room, and only ticket holders stay in one. Every room needs one
+ * person in it before checkout (the backend refuses an empty one, `ROOM_OCCUPANCY_UNFILLED`), but
+ * roommates are optional: a double can be paid for with one person in it, and its buyer adds the
+ * roommate later from the room screen (`app/rooms.tsx`). One person can only be in one room for
+ * the event, so anyone already placed drops out of the remaining rooms' pickers rather than
+ * failing later.
  *
  * Every accommodation line in the cart is filled in here, not just the first. Nothing stops a
- * buyer taking a lodge room and a tent, and a second line left unfilled produces a cart that
- * passes this screen and can never be paid for.
+ * buyer taking a lodge room and a tent, and a second line left empty produces a cart that passes
+ * this screen and can never be paid for.
  *
  * The buyer does not have to be in the room they are paying for.
  */
@@ -84,10 +86,7 @@ export default function RoomsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [facts, setFacts] = useState<Record<string, LineFacts>>({});
 
-  const roomLines = useMemo(
-    () => addons.filter((line) => line.type === 'accommodation'),
-    [addons],
-  );
+  const roomLines = useMemo(() => addons.filter((line) => line.type === 'accommodation'), [addons]);
 
   const attendees = useMemo(() => cartQuery.data?.attendees ?? [], [cartQuery.data]);
   const event = eventQuery.data;
@@ -146,12 +145,30 @@ export default function RoomsScreen() {
       if (rooms.length === line.quantity) continue;
       setAddonRooms(
         line.optionId,
-        Array.from({ length: line.quantity }, (_unused, index) => rooms[index] ?? { occupants: [] }),
+        Array.from(
+          { length: line.quantity },
+          (_unused, index) => rooms[index] ?? { occupants: [] },
+        ),
       );
     }
     // Only the set of lines and their sizes matter; re-running on every room edit would undo it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shape]);
+
+  // One person and one room: they are the one staying, so the room starts with them in it. Only
+  // once, when the room appears, so taking them out again sticks.
+  const onlyPersonId =
+    attendees.length === 1 && external.length === 0 ? attendees[0]!.cartAttendeeId : null;
+  const onlyRoomLine =
+    roomLines.length === 1 && roomLines[0]!.quantity === 1 ? roomLines[0]! : null;
+  const onlyRoomSeeded = (onlyRoomLine?.rooms ?? []).length === 1;
+  useEffect(() => {
+    if (!onlyPersonId || !onlyRoomLine || !onlyRoomSeeded) return;
+    if ((onlyRoomLine.rooms ?? [])[0]!.occupants.length > 0) return;
+    setAddonRooms(onlyRoomLine.optionId, [{ occupants: [{ cartAttendeeId: onlyPersonId }] }]);
+    // Runs when the person or the room first appears, never on a later edit of the room.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlyPersonId, onlyRoomLine?.optionId, onlyRoomSeeded]);
 
   /**
    * The cart is gone: it expired, or this screen was reached without one. Nothing here can be
@@ -239,7 +256,8 @@ export default function RoomsScreen() {
     setAddonRooms(line.optionId, next);
   }
 
-  const allFull =
+  // Somebody in every room is enough: roommates are optional and can be added after paying.
+  const allPlaced =
     allResolved &&
     roomLines.every((line) => {
       const occupancy = occupancyOf(line);
@@ -247,27 +265,22 @@ export default function RoomsScreen() {
       return (
         occupancy > 0 &&
         rooms.length === line.quantity &&
-        rooms.every((room) => room.occupants.length === occupancy)
+        rooms.every((room) => room.occupants.length > 0)
       );
     });
 
-  /** Artboard 15's "Room not yet full": the first room short of occupants, and what to do. */
+  /** The first room nobody is in yet, named, when there is more than one to choose between. */
   function shortfallMessage(): string | null {
+    const roomCount = roomLines.reduce((total, line) => total + line.quantity, 0);
+    if (roomCount < 2) return null;
     for (const line of roomLines) {
-      const occupancy = occupancyOf(line);
-      if (occupancy === 0) continue;
-      const rooms = line.rooms ?? [];
-      for (const [index, room] of rooms.entries()) {
-        if (room.occupants.length === occupancy) continue;
-        const missing = occupancy - room.occupants.length;
+      if (occupancyOf(line) === 0) continue;
+      for (const [index, room] of (line.rooms ?? []).entries()) {
+        if (room.occupants.length > 0) continue;
         const roomType = facts[line.optionId]?.roomType ?? '';
         const name = roomType ? `${line.addonName} · ${roomType}` : line.addonName;
         const which = line.quantity > 1 ? `${name} (room ${index + 1})` : name;
-        const fix =
-          missing === 1
-            ? 'Add one more occupant to check out.'
-            : `Add ${missing} more occupants to check out.`;
-        return `${which} is ${room.occupants.length} of ${occupancy} filled. ${fix}`;
+        return `Pick who stays in ${which}.`;
       }
     }
     return null;
@@ -338,10 +351,8 @@ export default function RoomsScreen() {
       </View>
       <Text style={styles.lead}>
         {roomLines.length === 1 && onlyOccupancy > 0
-          ? onlyOccupancy === 1
-            ? `This room sleeps one. Whoever is in it needs a ticket to ${eventTitle}.`
-            : `This room sleeps ${onlyOccupancy}. Everyone in it needs a ticket to ${eventTitle}.`
-          : `Every room has to be full, and everyone in one needs a ticket to ${eventTitle}.`}
+          ? `Sleeps ${onlyOccupancy}. Ticket holders only.`
+          : 'Ticket holders only.'}
       </Text>
 
       {roomLines.map((line) => (
@@ -375,12 +386,12 @@ export default function RoomsScreen() {
       <View style={styles.spacer} />
 
       <Text variant="metaSm" color={colors.textMuted} style={styles.rule}>
-        One room per person. Rooms must be full before you can pay.
+        One room per person.
       </Text>
 
       <Button
-        label={allFull ? 'Continue' : 'Room not full yet'}
-        disabled={!allFull}
+        label={allPlaced ? 'Continue' : 'Choose who stays'}
+        disabled={!allPlaced}
         loading={replaceAddons.isPending}
         onPress={onContinue}
       />
@@ -460,7 +471,7 @@ function RoomLineCard({
             </Text>
             <Badge
               label={`${current.occupants.length} of ${occupancy} assigned`}
-              tone={current.occupants.length === occupancy ? 'sage' : 'gold'}
+              tone={current.occupants.length > 0 ? 'sage' : 'gold'}
             />
           </View>
 
@@ -496,6 +507,12 @@ function RoomLineCard({
               </SelectableCard>
             );
           })}
+
+          {occupancy > 1 && current.occupants.length < occupancy ? (
+            <Text variant="metaSm" color={colors.textMuted}>
+              {`${occupancy - current.occupants.length === 1 ? 'Roommate' : 'Roommates'} optional · add later`}
+            </Text>
+          ) : null}
         </View>
       ))}
     </View>

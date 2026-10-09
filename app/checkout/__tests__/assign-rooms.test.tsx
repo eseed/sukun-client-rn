@@ -1,8 +1,5 @@
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src/api/mock';
-import {
-  ADDON_ACCOMMODATION,
-  ADDON_MEALS,
-} from '../../../src/api/mock/addon-fixtures';
+import { ADDON_ACCOMMODATION, ADDON_MEALS } from '../../../src/api/mock/addon-fixtures';
 import { TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
 import { useAuthStore } from '../../../src/stores/auth';
 import { useCheckoutStore, type DraftAddon } from '../../../src/stores/checkout';
@@ -733,7 +730,9 @@ describe('13 Assign add-ons', () => {
     });
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/event/${TULUA_ID}`));
-    expect(mockRouter.replace).not.toHaveBeenCalledWith(expect.stringContaining('/checkout/payment'));
+    expect(mockRouter.replace).not.toHaveBeenCalledWith(
+      expect.stringContaining('/checkout/payment'),
+    );
     expect(
       screen.queryByText('This checkout has already been placed. Finish the payment instead.'),
     ).toBeNull();
@@ -744,7 +743,7 @@ describe('13 Assign add-ons', () => {
 });
 
 describe('14 Room occupancy', () => {
-  it('names the room, and says exactly what is missing before it will let the buyer on', async () => {
+  it('names the room, and lets the buyer on with the roommate left for later', async () => {
     await signInAsBuyer();
     await seedCheckout({
       quantity: 3,
@@ -766,25 +765,48 @@ describe('14 Room occupancy', () => {
     expect(screen.getByText('2 nights · 2,200.00 EGP')).toBeTruthy();
     expect(screen.getByText('Check-in 23 Oct 2026 · Check-out 25 Oct 2026')).toBeTruthy();
 
+    expect(screen.getByText('Sleeps 2. Ticket holders only.')).toBeTruthy();
+    // Nobody in the room yet: somebody has to stay in it.
+    expect(screen.getByRole('button', { name: 'Choose who stays' })).toBeDisabled();
+
     await act(async () => {
       fireEvent.press(screen.getByText('Yasmin El Sayed'));
     });
 
-    // Design 15's "Room not yet full", naming the room and the shortfall.
-    expect(
-      screen.getByText(
-        'Desert Lodge Room · Double is 1 of 2 filled. Add one more occupant to check out.',
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText('Room not full yet')).toBeTruthy();
+    // One person is enough; the roommate is optional and can be added after paying.
+    expect(screen.getByText('1 of 2 assigned')).toBeTruthy();
+    expect(screen.getByText('Roommate optional · add later')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled();
 
     await act(async () => {
       fireEvent.press(screen.getByText('Nour Hassan'));
     });
 
     expect(screen.getByText('2 of 2 assigned')).toBeTruthy();
-    expect(screen.queryByText('Room not full yet')).toBeNull();
+    expect(screen.queryByText('Roommate optional · add later')).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled();
+  });
+
+  it('puts the only person in the only room, and saves it half full', async () => {
+    await signInAsBuyer();
+    const cart = await seedCheckout({ quantity: 1, guests: [], addons: [lodgeDouble(1)] });
+
+    renderWithProviders(<RoomsScreen />);
+
+    await waitFor(() => expect(screen.getByText('1 of 2 assigned')).toBeTruthy());
+    expect(screen.getByText('Roommate optional · add later')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Continue' }));
+    });
+
+    await waitFor(() =>
+      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${TULUA_ID}`),
+    );
+    const saved = await mockApi.carts.get(cart.id);
+    expect(saved.addons).toHaveLength(1);
+    expect(saved.addons[0]!.assignments).toHaveLength(1);
+    expect(saved.validation?.canPlaceOrder).toBe(true);
   });
 
   it('will not let one person be in two rooms', async () => {
@@ -837,13 +859,9 @@ describe('14 Room occupancy', () => {
     });
 
     expect(screen.getByText('2 of 2 assigned')).toBeTruthy();
-    // The single is still empty, so there is nowhere to go yet.
-    expect(screen.getByRole('button', { name: 'Room not full yet' })).toBeDisabled();
-    expect(
-      screen.getByText(
-        'Desert Lodge Room · Single is 0 of 1 filled. Add one more occupant to check out.',
-      ),
-    ).toBeTruthy();
+    // Nobody is in the single yet, so there is nowhere to go.
+    expect(screen.getByRole('button', { name: 'Choose who stays' })).toBeDisabled();
+    expect(screen.getByText('Pick who stays in Desert Lodge Room · Single.')).toBeTruthy();
 
     await act(async () => {
       fireEvent.press(screen.getAllByText('Yasmin El Sayed')[1]!);
@@ -960,10 +978,9 @@ describe('14 Room occupancy', () => {
 
     await waitFor(() => expect(screen.getByText('Karim Adel')).toBeTruthy());
     expect(screen.getByText('Has a ticket to Tulua')).toBeTruthy();
+    // The buyer is the only person in the order, so the room already has them in it.
+    expect(screen.getByText('1 of 2 assigned')).toBeTruthy();
 
-    await act(async () => {
-      fireEvent.press(screen.getByText('Yasmin El Sayed'));
-    });
     await act(async () => {
       fireEvent.press(screen.getByText('Karim Adel'));
     });
@@ -1024,7 +1041,11 @@ describe('the checkout draft when a seat is added for a refused contact', () => 
 
     useCheckoutStore
       .getState()
-      .addGuestSeat({ phoneNumber: REGISTERED_NO_TICKET, name: 'Laila Mansour', fromContacts: true });
+      .addGuestSeat({
+        phoneNumber: REGISTERED_NO_TICKET,
+        name: 'Laila Mansour',
+        fromContacts: true,
+      });
 
     expect(useCheckoutStore.getState().quantity).toBe(3);
     expect(useCheckoutStore.getState().guests).toHaveLength(2);

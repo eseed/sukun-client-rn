@@ -1,8 +1,9 @@
 import { isSendableAddonLine } from '../addons';
 
 /**
- * The shared predicate behind every cart write: accommodation rooms must hold exactly the
- * option's published occupancy, and an unknown occupancy fails closed.
+ * The shared predicate behind every cart write: accommodation rooms must hold at least one
+ * person and no more than the option's published occupancy, and an unknown occupancy fails
+ * closed.
  */
 
 function room(occupants: number) {
@@ -10,7 +11,7 @@ function room(occupants: number) {
 }
 
 describe('isSendableAddonLine · accommodation', () => {
-  it('accepts a room line only when every room is exactly full', () => {
+  it('accepts a room line when every room is full', () => {
     expect(
       isSendableAddonLine({
         type: 'accommodation',
@@ -21,7 +22,7 @@ describe('isSendableAddonLine · accommodation', () => {
     ).toBe(true);
   });
 
-  it('refuses a room that is under-filled, even though it holds somebody', () => {
+  it('accepts a room with somebody in it and places left for later', () => {
     expect(
       isSendableAddonLine({
         type: 'accommodation',
@@ -29,7 +30,20 @@ describe('isSendableAddonLine · accommodation', () => {
         occupancy: 2,
         rooms: [room(2), room(1)],
       }),
-    ).toBe(false);
+    ).toBe(true);
+  });
+
+  it('refuses a room nobody is in, or one holding more than it sleeps', () => {
+    for (const rooms of [[room(2), room(0)], [room(3)]]) {
+      expect(
+        isSendableAddonLine({
+          type: 'accommodation',
+          quantity: rooms.length,
+          occupancy: 2,
+          rooms,
+        }),
+      ).toBe(false);
+    }
   });
 
   it('refuses a line whose room count does not match the purchased quantity', () => {

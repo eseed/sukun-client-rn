@@ -1,5 +1,6 @@
 import type {
   AccountDeletionPreview,
+  BuyerRoom,
   AddonDetail,
   AddonSummary,
   AppConfig,
@@ -188,6 +189,16 @@ export interface SukunApi {
      * ticket, what it already has, and the event's current catalogue.
      */
     addonContext(ticketId: string): Promise<TicketAddonContext>;
+  };
+
+  rooms: {
+    /** Rooms this account paid for at an event, with who is in them and the places left. */
+    list(eventId: string): Promise<BuyerRoom[]>;
+    /**
+     * Puts the ticket holder on this number in an empty place of a room this account paid for.
+     * A number with no ticket to the event is refused the same whether or not it has an account.
+     */
+    addOccupant(roomId: string, phoneNumber: string): Promise<BuyerRoom>;
   };
 
   account: {

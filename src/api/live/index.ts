@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import type {
   AccountDeletionPreview,
+  BuyerRoom,
   AddonDetail,
   AddonSummary,
   AppConfig,
@@ -407,6 +408,18 @@ export const liveApi: SukunApi = {
     // GET mobile/tickets/:ticketId/addon-context
     addonContext: (ticketId) =>
       request<TicketAddonContext>(`mobile/tickets/${ticketId}/addon-context`),
+  },
+
+  rooms: {
+    // MobileRoomsController — GET mobile/rooms?eventId=
+    list: (eventId) => request<BuyerRoom[]>('mobile/rooms', { query: { eventId } }),
+
+    // POST mobile/rooms/:roomId/occupants
+    addOccupant: (roomId, phoneNumber) =>
+      request<BuyerRoom>(`mobile/rooms/${roomId}/occupants`, {
+        method: 'POST',
+        body: { phoneNumber: normalizePhoneForRequest(phoneNumber) },
+      }),
   },
 
   account: {

@@ -187,14 +187,15 @@ export function stayPhotos(
  * Whether a draft line is one `PUT /carts/:id/addons` will accept.
  *
  * That endpoint is a commit, not a scratch pad. It refuses a line whose units are not all spoken
- * for (`ADDON_ASSIGNMENT_COUNT_MISMATCH`) and a room line whose rooms are not all filled
+ * for (`ADDON_ASSIGNMENT_COUNT_MISMATCH`) and a room line with a room nobody is in
  * (`ROOM_OCCUPANCY_UNFILLED`). A checkout draft passes through both of those states on its way to
  * being finished: the assignment step exists precisely because the units start unassigned, and an
  * accommodation line stays empty until the rooms step. Sending a line mid-flight is a guaranteed
  * 400, so the draft stays local until the line is whole.
  *
- * Accommodation is stricter: every room must hold exactly the option's published occupancy, and
- * an unknown occupancy fails closed.
+ * Accommodation is stricter: every room must hold at least one person and no more than the
+ * option's published occupancy, and an unknown occupancy fails closed. Roommates are optional: a
+ * room's empty places are filled after paying, with people who hold tickets.
  *
  * The whole set is still sent as one `PUT`, which replaces what the cart holds. Leaving an
  * unfinished line out is therefore not a partial save: it is the cart saying that line is not
@@ -213,7 +214,7 @@ export function isSendableAddonLine(line: {
     return (
       occupancy > 0 &&
       rooms.length === line.quantity &&
-      rooms.every((room) => room.occupants.length === occupancy)
+      rooms.every((room) => room.occupants.length > 0 && room.occupants.length <= occupancy)
     );
   }
   const assigned = (line.assignments ?? []).reduce(
