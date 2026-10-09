@@ -38,9 +38,7 @@ describe('messageForError', () => {
     expect(messageForError(apiError('CART_NOT_EDITABLE'))).toBe(
       'This checkout is no longer available. Start again from the event.',
     );
-    expect(messageForError(apiError('ROOM_OCCUPANCY_UNFILLED'))).toBe(
-      'Pick who is in each room.',
-    );
+    expect(messageForError(apiError('ROOM_OCCUPANCY_UNFILLED'))).toBe('Pick who is in each room.');
     expect(messageForError(apiError('ADDON_ASSIGNMENT_COUNT_MISMATCH'))).toBe(
       'Every extra needs somebody to go to.',
     );
