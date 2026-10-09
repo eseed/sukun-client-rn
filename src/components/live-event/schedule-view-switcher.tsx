@@ -1,20 +1,37 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import { colors, radius, space } from '../../theme/tokens';
-import { Text } from '../ui';
+import Svg, { Path } from 'react-native-svg';
+import { colors, fontFamily, fontSize, radius, space } from '../../theme/tokens';
+import { Text } from '../ui/Text';
 
 export type ScheduleViewMode = 'list' | 'calendar';
 
+const GLYPHS: Record<ScheduleViewMode, string> = {
+  list: 'M7 5.5h9.5M7 10h9.5M7 14.5h9.5M3.5 5.5h.5M3.5 10h.5M3.5 14.5h.5',
+  calendar:
+    'M4.5 3.5v3M15.5 3.5v3M3 8h14M4.5 5h11A1.5 1.5 0 0 1 17 6.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5v-9A1.5 1.5 0 0 1 4.5 5Z',
+};
+
+/** The List / Calendar switch: a white pill track, the chosen view black (as on the website). */
 export function ScheduleViewSwitcher({ value, onChange }: { value: ScheduleViewMode; onChange: (value: ScheduleViewMode) => void }) {
   return (
     <View accessibilityRole="tablist" style={styles.container}>
       {(['list', 'calendar'] as const).map((mode) => {
         const selected = value === mode;
+        const label = mode === 'list' ? 'List' : 'Calendar';
+        const tint = selected ? colors.textInverse : colors.textPrimary;
         return (
-          <Pressable key={mode} accessibilityRole="tab" accessibilityState={{ selected }} accessibilityLabel={`${mode === 'list' ? 'List' : 'Calendar'} view`} onPress={() => onChange(mode)} style={[styles.tab, selected && styles.selected]}>
-            <View style={styles.labelRow}>
-              {mode === 'list' ? <View style={styles.listIcon}>{[0, 1, 2].map((key) => <View key={key} style={[styles.listLine, selected && styles.selectedIcon]} />)}</View> : <View style={[styles.calendarIcon, selected && styles.selectedCalendar]}><View style={[styles.calendarRule, selected && styles.selectedIcon]} /><View style={[styles.calendarDot, selected && styles.selectedIcon]} /><View style={[styles.calendarDot, selected && styles.selectedIcon]} /></View>}
-              <Text variant="bodyValue" style={[styles.label, selected && styles.selectedLabel]}>{mode === 'list' ? 'List' : 'Calendar'}</Text>
-            </View>
+          <Pressable
+            key={mode}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            accessibilityLabel={`${label} view`}
+            onPress={() => onChange(mode)}
+            style={[styles.tab, selected && styles.selected]}
+          >
+            <Svg width={16} height={16} viewBox="0 0 20 20" fill="none">
+              <Path d={GLYPHS[mode]} stroke={tint} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+            <Text style={[styles.label, { color: tint }]}>{label}</Text>
           </Pressable>
         );
       })}
@@ -24,16 +41,7 @@ export function ScheduleViewSwitcher({ value, onChange }: { value: ScheduleViewM
 
 const styles = StyleSheet.create({
   container: { flexDirection: 'row', padding: space.s1, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderDefault, backgroundColor: colors.bgSurface },
-  tab: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, paddingHorizontal: space.s2 },
-  selected: { backgroundColor: colors.black },
-  label: { fontSize: 14 },
-  selectedLabel: { color: colors.creme },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
-  listIcon: { width: 14, height: 14, justifyContent: 'space-between', paddingVertical: 2 },
-  listLine: { height: 2, borderRadius: radius.pill, backgroundColor: colors.black },
-  selectedIcon: { backgroundColor: colors.creme },
-  calendarIcon: { width: 14, height: 14, paddingTop: 4, flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', borderWidth: 1.25, borderColor: colors.black, borderRadius: 3 },
-  selectedCalendar: { borderColor: colors.creme },
-  calendarRule: { position: 'absolute', top: 3, left: 0, right: 0, height: 1, backgroundColor: colors.black },
-  calendarDot: { width: 2.5, height: 2.5, borderRadius: radius.circle, backgroundColor: colors.black },
+  tab: { flex: 1, minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: space.s3, borderRadius: radius.pill },
+  selected: { backgroundColor: colors.bgInverse },
+  label: { fontFamily: fontFamily.body, fontSize: fontSize.bodySm },
 });

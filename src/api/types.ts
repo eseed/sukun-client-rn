@@ -315,7 +315,7 @@ export interface PublicEventSchedule {
 export interface ScheduleDay {
   id: string;
   label: string | null;
-  date: string;
+  dayDate: string;
   startsAt: string;
   endsAt: string;
   sortOrder?: number;

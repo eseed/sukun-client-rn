@@ -2,11 +2,11 @@ import type { PublicEventSchedule, ScheduleBlock } from '../types';
 import { TULUA_ID } from './fixtures';
 
 const day1 = {
-  id: 'day-tulua-1', label: 'Friday, 23 October', date: '2026-10-23',
+  id: 'day-tulua-1', label: 'Friday, 23 October', dayDate: '2026-10-23',
   startsAt: '2026-10-23T08:00:00+03:00', endsAt: '2026-10-23T22:00:00+03:00', sortOrder: 0,
 };
 const day2 = {
-  id: 'day-tulua-2', label: 'Saturday, 24 October', date: '2026-10-24',
+  id: 'day-tulua-2', label: 'Saturday, 24 October', dayDate: '2026-10-24',
   startsAt: '2026-10-24T08:00:00+03:00', endsAt: '2026-10-24T22:00:00+03:00', sortOrder: 1,
 };
 const mainStage = { id: 'stage-main', name: 'Main Stage', description: 'Main performances and large sessions.', sortOrder: 0 };

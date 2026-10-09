@@ -66,6 +66,40 @@ export const colors = {
   overlayScrim: 'rgba(29,29,29,0.45)',
 } as const;
 
+/**
+ * Event schedule: one colour per stage, the website's `--stage-1` to `--stage-8`
+ * (sukun-client-web src/styles/tokens.css). A session's rail, its stage tag, its calendar block
+ * and the stage's filter chip share the stage's colour, so the colour reads as the stage's name.
+ * Stages take them in the API's stage order; a ninth stage starts the list again.
+ *
+ * `on` is the label colour on a solid fill of that stage, at least 4.5:1: creme on the dark
+ * shades, white on rose500 (creme is 4.2:1 there) and black on the light ones.
+ */
+export const stageColors = [
+  { color: palette.sage500, on: palette.creme },
+  { color: palette.gold300, on: palette.black },
+  { color: palette.rose500, on: palette.white },
+  { color: palette.sky500, on: palette.creme },
+  { color: palette.rose300, on: palette.black },
+  { color: palette.sage300, on: palette.black },
+  { color: palette.sky700, on: palette.creme },
+  { color: palette.rose700, on: palette.creme },
+] as const;
+
+/** The website's schedule values (sukun-client-web src/styles/tokens.css, "Event schedule"). */
+export const schedule = {
+  /** How much of a stage's colour washes a calendar block or an empty photo tile over white. */
+  stageTint: 0.14,
+  /** The coloured rule down a session card's leading edge and a calendar block's. */
+  stageRailWidth: 5,
+  /** The calendar's timetable: an hour is 96 tall, columns stay readable at 150 wide. */
+  timetableHourHeight: 96,
+  timetableRailWidth: 56,
+  timetableColumnMin: 150,
+  /** The rule across the timetable at the current time: the LIVE pill's rose300. */
+  timetableNow: palette.rose300,
+} as const;
+
 /** tokens/spacing.css */
 export const space = {
   s1: 4,

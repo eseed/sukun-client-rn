@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BackIcon,
   Button,
+  CalendarIcon,
   CheckIcon,
   HeartIcon,
   MarkdownText,
@@ -16,14 +17,17 @@ import {
   Screen,
   Text,
 } from '../../../../src/components/ui';
+import { blockMinutes, dayTitle, isHappeningNow, resolveStageColor, stageColors } from '../../../../src/components/live-event/schedule-model';
 import { ScheduleNotice, ScheduleSaveSheet, type SaveConflict, type ScheduleNoticeState } from '../../../../src/components/live-event/schedule-notice';
 import { ScheduleSessionCard } from '../../../../src/components/live-event/schedule-session-card';
+import { StageTag } from '../../../../src/components/live-event/stage-tag';
 import { useEvent, useMySchedule, usePublicEventSchedule, useRemoveScheduleBlock, useSaveScheduleBlock } from '../../../../src/hooks/queries';
+import { useNow } from '../../../../src/hooks/useNow';
 import { messageForError } from '../../../../src/lib/errors';
-import { happeningNow, overlaps } from '../../../../src/lib/live-event';
+import { overlaps } from '../../../../src/lib/live-event';
 import { track } from '../../../../src/lib/analytics';
 import { colors, fontFamily, fontSize, radius, space } from '../../../../src/theme/tokens';
-import { formatScheduleTime, initials } from '../../../../src/lib/format';
+import { formatDuration, formatTime, formatWeekdayDate, initials } from '../../../../src/lib/format';
 import type { ScheduleBlock } from '../../../../src/api/types';
 
 export default function SessionDetailScreen() {
@@ -39,22 +43,18 @@ export default function SessionDetailScreen() {
   const remove = useRemoveScheduleBlock();
   const [notice, setNotice] = useState<ScheduleNoticeState>(null);
   const [saveSheet, setSaveSheet] = useState<{ title: string; conflicts: SaveConflict[] } | null>(null);
-  const [now, setNow] = useState<number | null>(null);
+  const now = useNow(30_000);
   const openedBlockId = useRef<string | null>(null);
   const block = useMemo(() => schedule.data?.blocks.find((item) => item.id === blockId), [blockId, schedule.data?.blocks]);
   const savedIds = useMemo(() => new Set((mine.data?.blocks ?? []).map((item) => item.id)), [mine.data?.blocks]);
   const savedBlock = mine.data?.blocks.find((item) => item.id === blockId);
   const isSaved = Boolean(savedBlock);
-  const isLive = now !== null && block ? happeningNow([block], now).length > 0 : false;
-
-  useEffect(() => {
-    const initialTimer = setTimeout(() => setNow(Date.now()), 0);
-    const interval = setInterval(() => setNow(Date.now()), 30_000);
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(interval);
-    };
-  }, []);
+  const isLive = block ? isHappeningNow(block, now) : false;
+  const colorsByStage = useMemo(() => stageColors(schedule.data?.stages ?? []), [schedule.data?.stages]);
+  const stage = resolveStageColor(block ? colorsByStage.get(block.stageId) : undefined);
+  const days = schedule.data?.days ?? [];
+  const dayIndex = block ? days.findIndex((day) => day.id === block.eventDayId) : -1;
+  const day = block ? (days[dayIndex] ?? block.eventDay) : undefined;
   useEffect(() => {
     if (!block || openedBlockId.current === block.id) return;
     openedBlockId.current = block.id;
@@ -163,18 +163,26 @@ export default function SessionDetailScreen() {
           emptyMessage="It may have been removed or cancelled. Return to the full schedule to explore other sessions."
         >
           {block ? <>
-            <View style={styles.timeRow}>
-              <Text variant="meta">{formatScheduleTime(block.startAt)} – {formatScheduleTime(block.endAt)}</Text>
+            <View style={styles.tags}>
+              <StageTag name={block.stage.name} color={stage} />
               {isLive ? <OverlayPill label="Live" /> : null}
             </View>
             <Text accessibilityRole="header" style={styles.title}>{block.title}</Text>
+            <View style={styles.timeRow}>
+              <Text style={styles.time}>{formatTime(block.startAt)} – {formatTime(block.endAt)}</Text>
+              <Text style={styles.duration}>· {formatDuration(blockMinutes(block))}</Text>
+            </View>
             <View style={styles.metaRows}>
+              {day ? <View style={styles.metaRow}>
+                <CalendarIcon size={22} color={colors.textPrimary} />
+                <Text variant="bodyValue" style={styles.metaLabel}>{`${formatWeekdayDate(day.dayDate)} · ${dayTitle(day, Math.max(0, dayIndex))}`}</Text>
+              </View> : null}
               <View style={styles.metaRow}>
-                <PinIcon size={22} color={colors.textPrimary} />
+                <PinIcon size={22} color={stage.color} />
                 <Text variant="bodyValue" style={styles.metaLabel}>{block.stage.name}</Text>
               </View>
               {block.practiceType ? <View style={styles.metaRow}>
-                <PinIcon size={22} color={colors.textPrimary} />
+                <Text style={styles.practiceIcon}>◇</Text>
                 <Text variant="bodyValue" style={styles.metaLabel}>{block.practiceType.name}</Text>
               </View> : null}
             </View>
@@ -223,10 +231,10 @@ export default function SessionDetailScreen() {
                 <ScheduleSessionCard
                   key={item.id}
                   block={item}
+                  color={colorsByStage.get(item.stageId)}
+                  live={isHappeningNow(item, now)}
                   saved={savedIds.has(item.id)}
                   pending={busy}
-                  mediaLeft
-                  inlineSave
                   onPress={() => {
                     if (!eventId) return;
                     router.push(`/live-event/${eventId}/session/${item.id}`);
@@ -273,7 +281,11 @@ const styles = StyleSheet.create({
     gap: space.s4,
   },
   bottomFill: { flexGrow: 1, backgroundColor: colors.bgSurface },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.s2 },
+  timeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.s2 },
+  time: { fontFamily: fontFamily.body, fontSize: 16, color: colors.textPrimary },
+  duration: { fontFamily: fontFamily.body, fontSize: 16, color: colors.textMuted },
+  practiceIcon: { width: 22, fontSize: 22, lineHeight: 24, color: colors.textPrimary, textAlign: 'center' },
   title: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.displayLg, color: colors.textPrimary },
   metaRows: { borderTopWidth: 1, borderTopColor: colors.borderDefault },
   metaRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: space.s3, borderBottomWidth: 1, borderBottomColor: colors.borderDefault },

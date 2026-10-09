@@ -24,7 +24,7 @@ import {
   Text,
   YoutubeEmbed,
 } from '../../src/components/ui';
-import { useAddons, useEvent } from '../../src/hooks/queries';
+import { useAddons, useEvent, usePublicEventSchedule } from '../../src/hooks/queries';
 import { AccommodationBox } from '../../src/components/events/AccommodationBox';
 import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
 import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
@@ -64,6 +64,10 @@ export default function EventDetailScreen() {
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
   const liveContext = useLiveEventContext();
+  // The schedule link shows only once the event has published sessions: loading, failed (a
+  // backend without schedules answers 404) and empty all leave it out, never a dead end.
+  const scheduleQuery = usePublicEventSchedule(eventSlug);
+  const hasSchedule = (scheduleQuery.data?.blocks.length ?? 0) > 0;
 
   // Meta's ViewContent, once per event shown, however often the event is refetched.
   const viewedEventId = useRef<string | null>(null);
@@ -230,22 +234,19 @@ export default function EventDetailScreen() {
         </View>
 
         <View style={styles.body}>
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={`View the full schedule for ${event.title}`}
-            onPress={() =>
-              router.push(`/event/${event.slug}/schedule`)
-            }
-            style={styles.scheduleLink}
-          >
-            <View style={styles.scheduleLinkCopy}>
-              <Text variant="titleSm">Full schedule</Text>
-              <Text variant="bodyMuted">Browse sessions by day, stage, and practice type</Text>
-            </View>
-            <Text style={styles.scheduleArrow}>›</Text>
-          </Pressable>
-
           <MarkdownText markdown={description} variant="bodyLead" style={styles.lead} />
+
+          {hasSchedule ? (
+            <View style={styles.scheduleLink}>
+              <Button
+                label="View full schedule"
+                variant="secondary"
+                size="inline"
+                accessibilityLabel={`View the full schedule for ${event.title}`}
+                onPress={() => router.push(`/event/${event.slug}/schedule`)}
+              />
+            </View>
+          ) : null}
 
           {videoIds.length > 0 ? (
             <View style={styles.mediaSection}>
@@ -609,20 +610,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   scheduleLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+    alignSelf: 'flex-start',
     marginBottom: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    borderRadius: 12,
-    backgroundColor: colors.bgSurface,
   },
-  scheduleLinkCopy: { flex: 1, gap: 3 },
-  scheduleArrow: { color: colors.sage500, fontSize: 24 },
   sectionLabel: {
     marginBottom: 10,
   },

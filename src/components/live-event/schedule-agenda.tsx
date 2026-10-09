@@ -1,30 +1,52 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import type { PublicEventSchedule, ScheduleBlock, ScheduleDay } from '../../api/types';
-import { ResourceState, SearchIcon, Text } from '../ui';
-import { ScheduleSessionCard } from './schedule-session-card';
-import { ScheduleCalendar } from './schedule-calendar';
-import { ScheduleViewSwitcher, type ScheduleViewMode } from './schedule-view-switcher';
-import { scheduleStageAccents } from './schedule-stage-accent';
-import { happeningNow } from '../../lib/live-event';
+import { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import type { PublicEventSchedule, ScheduleBlock, ScheduleDay, SchedulePracticeType, ScheduleStage } from '../../api/types';
+import { useNow } from '../../hooks/useNow';
 import { track } from '../../lib/analytics';
-import { colors, fontFamily, fontSize, radius, space } from '../../theme/tokens';
+import { formatWeekdayDate } from '../../lib/format';
+import { colors, fontFamily, fontSize, radius, space, tracking } from '../../theme/tokens';
+import { ResourceState, Text } from '../ui';
+import { ScheduleDayTrack, ScheduleFilterControls } from './schedule-filters';
+import {
+  buildTimetable,
+  dayTitle,
+  defaultCalendarDay,
+  filterBlocks,
+  groupByDay,
+  isHappeningNow,
+  sessionCount,
+  stageColors,
+} from './schedule-model';
+import { ScheduleSessionCard } from './schedule-session-card';
+import { ScheduleTimetable } from './schedule-timetable';
+import { ScheduleViewSwitcher, type ScheduleViewMode } from './schedule-view-switcher';
 
 const EMPTY_SAVED_IDS: ReadonlySet<string> = new Set();
+const EMPTY_BLOCKS: ScheduleBlock[] = [];
 const EMPTY_DAYS: ScheduleDay[] = [];
-const EMPTY_IDS: string[] = [];
+const EMPTY_STAGES: ScheduleStage[] = [];
+const EMPTY_PRACTICES: SchedulePracticeType[] = [];
 
+/**
+ * An event's schedule, built as the website builds it (sukun-client-web EventSchedulePage):
+ * the day track, the search, the colour-keyed stage chips and the practice chips, then List or
+ * Calendar. The list shows each day's sessions as cards under a "Doors open" heading; the
+ * calendar shows one day as a timetable of stages, and is where the schedule opens. Every stage
+ * has its own colour, carried by its chip, its sessions' rails and tags, and its calendar
+ * column, so the colours read as a key.
+ *
+ * A ticket holder also saves sessions to My Schedule from the cards (`onToggleSaved`).
+ */
 export function ScheduleAgenda({
   eventId,
   schedule,
   status,
   onRetry,
+  bleed = 0,
   savedIds = EMPTY_SAVED_IDS,
   pending = false,
-  notice,
   personalScheduleError = false,
-  defaultDay = 'current',
-  initialView = 'list',
+  initialView = 'calendar',
   analyticsScope = 'live',
   onOpenSession,
   onToggleSaved,
@@ -33,288 +55,264 @@ export function ScheduleAgenda({
   schedule: PublicEventSchedule | undefined;
   status: 'loading' | 'error' | 'ready';
   onRetry: () => void;
+  /** The screen's side padding, which the calendar's stages run on into. */
+  bleed?: number;
   savedIds?: ReadonlySet<string>;
   pending?: boolean;
-  notice?: string;
   personalScheduleError?: boolean;
-  defaultDay?: 'current' | 'all';
   initialView?: ScheduleViewMode;
   analyticsScope?: 'live' | 'public';
-  onOpenSession?: (block: ScheduleBlock, view: ScheduleViewMode) => void;
+  onOpenSession: (block: ScheduleBlock, view: ScheduleViewMode) => void;
   onToggleSaved?: (block: ScheduleBlock) => void;
 }) {
-  const [dayIds, setDayIds] = useState<string[] | undefined>(undefined);
-  const [stageIds, setStageIds] = useState<string[]>([]);
-  const [practiceTypeIds, setPracticeTypeIds] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<ScheduleViewMode>(initialView);
+  const [view, setView] = useState<ScheduleViewMode>(initialView);
+  const [requestedDayId, setRequestedDayId] = useState<string | null>(null);
+  const [stageIds, setStageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [practiceIds, setPracticeIds] = useState<ReadonlySet<string>>(() => new Set());
   const [query, setQuery] = useState('');
-  const [now, setNow] = useState<number | null>(null);
+  const now = useNow();
+
   const days = schedule?.days ?? EMPTY_DAYS;
-  useEffect(() => {
-    const timer = setTimeout(() => setNow(Date.now()), 0);
-    return () => clearTimeout(timer);
-  }, []);
-  const preferredDayId = useMemo(() => {
-    if (defaultDay === 'all' || days.length === 0) return null;
-    if (now === null) return days[0]?.id ?? null;
-    return days.find((day) => Date.parse(day.startsAt) <= now && Date.parse(day.endsAt) > now)?.id
-      ?? days.find((day) => Date.parse(day.startsAt) > now)?.id
-      ?? days[days.length - 1]?.id
-      ?? null;
-  }, [defaultDay, days, now]);
-  const selectedDayIds = useMemo(() => dayIds ?? (defaultDay === 'all' || !preferredDayId ? EMPTY_IDS : [preferredDayId]), [dayIds, defaultDay, preferredDayId]);
-  const validDayIds = useMemo(() => selectedDayIds.filter((id) => days.some((day) => day.id === id)), [days, selectedDayIds]);
-  const selectedDaySet = useMemo(() => new Set(validDayIds), [validDayIds]);
-  const selectedStageSet = useMemo(() => new Set(stageIds), [stageIds]);
-  const selectedPracticeSet = useMemo(() => new Set(practiceTypeIds), [practiceTypeIds]);
-  const stageAccents = useMemo(() => scheduleStageAccents(schedule?.stages ?? []), [schedule?.stages]);
-  const calendarDays = useMemo(() => validDayIds.length ? days.filter((day) => selectedDaySet.has(day.id)) : days, [days, selectedDaySet, validDayIds.length]);
-  const queryText = query.trim().toLowerCase();
+  const stages = schedule?.stages ?? EMPTY_STAGES;
+  const practices = schedule?.practiceTypes ?? EMPTY_PRACTICES;
+  const blocks = schedule?.blocks ?? EMPTY_BLOCKS;
+  const colorsByStage = useMemo(() => stageColors(stages), [stages]);
+  const requestedDay = days.find((day) => day.id === requestedDayId) ?? null;
+  const eventName = analyticsScope === 'live' ? 'live_schedule_filter_changed' : 'event_schedule_filter_changed';
 
-  const filtered = useMemo(() => (schedule?.blocks ?? [])
-    .filter((block) => selectedDaySet.size === 0 || selectedDaySet.has(block.eventDayId))
-    .filter((block) => selectedStageSet.size === 0 || selectedStageSet.has(block.stageId))
-    .filter((block) => selectedPracticeSet.size === 0 || (block.practiceTypeId !== null && selectedPracticeSet.has(block.practiceTypeId)))
-    .filter((block) => {
-      if (!queryText) return true;
-      return block.title.toLowerCase().includes(queryText)
-        || block.stage.name.toLowerCase().includes(queryText)
-        || block.facilitators.some((facilitator) => facilitator.name.toLowerCase().includes(queryText));
-    })
-    .sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt)),
-  [schedule?.blocks, selectedDaySet, selectedPracticeSet, selectedStageSet, queryText]);
-
-  const liveIds = useMemo(
-    () => new Set(happeningNow(filtered, now ?? 0).map((block) => block.id)),
-    [filtered, now],
+  // Every day's sessions that pass the stage, practice and search filters.
+  const matching = useMemo(
+    () => filterBlocks(blocks, stages, { dayId: null, stageIds, practiceIds, query }),
+    [blocks, practiceIds, query, stageIds, stages],
   );
+  const listed = useMemo(
+    () => (requestedDay ? matching.filter((block) => block.eventDayId === requestedDay.id) : matching),
+    [matching, requestedDay],
+  );
+  const dayGroups = useMemo(() => groupByDay(days, listed), [days, listed]);
+  const calendarDay = requestedDay ?? defaultCalendarDay(days, matching, now);
+  const calendarIndex = calendarDay ? days.findIndex((day) => day.id === calendarDay.id) : -1;
+  const timetable = useMemo(
+    () => (calendarDay ? buildTimetable(calendarDay.id, matching, stages) : null),
+    [calendarDay, matching, stages],
+  );
+  const shownCount = view === 'list'
+    ? listed.length
+    : timetable ? timetable.columns.reduce((total, column) => total + column.items.length, 0) : 0;
+  const filtered =
+    stageIds.size > 0 ||
+    practiceIds.size > 0 ||
+    query.trim() !== '' ||
+    (view === 'list' && requestedDay !== null);
 
-  const changeFilter = (filter: 'day' | 'stage' | 'practice', value: string | null) => {
-    // Day pills are exclusive: one day at a time, tapping the active day shows everything.
-    if (filter === 'day') {
-      const base = dayIds ?? (preferredDayId ? [preferredDayId] : []);
-      const next = value === null || (base.length === 1 && base[0] === value) ? [] : [value as string];
-      setDayIds(next);
-      track(`${analyticsScope === 'live' ? 'live' : 'event'}_schedule_filter_changed`, {
-        event_id: eventId,
-        filter,
-        ...(value ? { event_day_id: value } : {}),
-        action: value === null ? 'clear' : base.includes(value) ? 'remove' : 'add',
-      });
-      return;
-    }
-    const currentIds = filter === 'stage' ? stageIds : practiceTypeIds;
-    const toggle = (current: string[]) => value === null
-      ? []
-      : current.includes(value)
-        ? current.filter((id) => id !== value)
-        : [...current, value];
-    if (filter === 'stage') setStageIds(toggle);
-    else setPracticeTypeIds(toggle);
-    track(`${analyticsScope === 'live' ? 'live' : 'event'}_schedule_filter_changed`, {
+  const changeDay = (dayId: string | null) => {
+    setRequestedDayId(dayId);
+    track(eventName, {
       event_id: eventId,
-      filter,
-      ...(filter === 'stage' && value ? { stage_id: value } : {}),
-      ...(filter === 'practice' && value ? { practice_type_id: value } : {}),
-      action: value === null ? 'clear' : currentIds.includes(value) ? 'remove' : 'add',
+      filter: 'day',
+      ...(dayId ? { event_day_id: dayId } : {}),
+      action: dayId === null ? 'clear' : 'add',
     });
   };
 
-  return (
-    <View style={styles.agenda}>
-      <View style={styles.controls}>
-        {schedule ? <ScheduleControls
-          schedule={schedule}
-          dayIds={selectedDaySet}
-          stageIds={selectedStageSet}
-          practiceIds={selectedPracticeSet}
-          query={query}
-          onQueryChange={setQuery}
-          onChange={changeFilter}
-        /> : null}
-        <ScheduleViewSwitcher value={viewMode} onChange={setViewMode} />
-      </View>
+  const toggle = (filter: 'stage' | 'practice', id: string | null) => {
+    const current = filter === 'stage' ? stageIds : practiceIds;
+    const next = new Set(current);
+    if (id === null) next.clear();
+    else if (next.has(id)) next.delete(id);
+    else next.add(id);
+    if (filter === 'stage') setStageIds(next);
+    else setPracticeIds(next);
+    track(eventName, {
+      event_id: eventId,
+      filter,
+      ...(filter === 'stage' && id ? { stage_id: id } : {}),
+      ...(filter === 'practice' && id ? { practice_type_id: id } : {}),
+      action: id === null ? 'clear' : current.has(id) ? 'remove' : 'add',
+    });
+  };
 
-      {notice ? <View accessibilityRole="alert" style={styles.notice}><Text variant="bodyValue">{notice}</Text></View> : null}
-      {personalScheduleError ? <Text variant="bodyMuted">Your saved sessions could not be loaded. You can still browse the public schedule.</Text> : null}
+  const clearFilters = () => {
+    setQuery('');
+    setRequestedDayId(null);
+    setStageIds(new Set());
+    setPracticeIds(new Set());
+  };
 
-      <ResourceState
-        status={status === 'ready' ? filtered.length ? 'success' : 'empty' : status}
-        loadingLabel="Loading the schedule..."
-        errorMessage="We couldn't load this Event's schedule."
-        onRetry={onRetry}
-        emptyTitle={schedule?.blocks.length ? 'No sessions match these filters' : 'No sessions published yet'}
-        emptyMessage={schedule?.blocks.length ? 'Try another search, day, or filter to see more sessions.' : 'Please check again later.'}
-      >
-        {viewMode === 'calendar' && schedule ? <ScheduleCalendar
-          days={calendarDays}
-          blocks={filtered}
-          stages={schedule.stages}
-          savedIds={savedIds}
-          pending={pending}
-          hideDayTabs
-          liveIds={liveIds}
-          onOpenSession={onOpenSession ? (block) => onOpenSession(block, 'calendar') : undefined}
-          onToggleSaved={onToggleSaved}
-        /> : <View style={styles.list}>
-          {filtered.map((block) => (
-            <ScheduleSessionCard
-              key={block.id}
-              block={block}
-              saved={savedIds.has(block.id)}
-              pending={pending}
-              isLive={liveIds.has(block.id)}
-              stageAccent={stageAccents.get(block.stageId)}
-              onPress={onOpenSession ? () => onOpenSession(block, 'list') : undefined}
-              onToggleSaved={onToggleSaved ? () => onToggleSaved(block) : undefined}
-            />
-          ))}
-        </View>}
-      </ResourceState>
-      {schedule?.blocks.length && onToggleSaved ? <Text variant="bodyMuted" style={styles.note}>Sessions may run at the same time. Saving a conflict is allowed; the schedule will identify the overlap.</Text> : null}
-    </View>
+  const card = (block: ScheduleBlock) => (
+    <ScheduleSessionCard
+      key={block.id}
+      block={block}
+      color={colorsByStage.get(block.stageId)}
+      live={isHappeningNow(block, now)}
+      saved={savedIds.has(block.id)}
+      pending={pending}
+      onPress={() => onOpenSession(block, 'list')}
+      onToggleSaved={onToggleSaved ? () => onToggleSaved(block) : undefined}
+    />
   );
-}
 
-/**
- * Screen 03 controls: exclusive day pills, the search pill, the stage chip rail with the
- * sliders button, and the expandable practice-type rail.
- */
-function ScheduleControls({ schedule, dayIds, stageIds, practiceIds, query, onQueryChange, onChange }: {
-  schedule: PublicEventSchedule;
-  dayIds: ReadonlySet<string>;
-  stageIds: ReadonlySet<string>;
-  practiceIds: ReadonlySet<string>;
-  query: string;
-  onQueryChange: (value: string) => void;
-  onChange: (filter: 'day' | 'stage' | 'practice', value: string | null) => void;
-}) {
-  const [showPractices, setShowPractices] = useState(false);
+  const resourceStatus = status === 'ready' ? (blocks.length ? 'success' : 'empty') : status;
+
   return (
-    <View style={styles.controlsStack}>
-      <View style={styles.dayPills}>
-        {schedule.days.map((day) => {
-          const selected = dayIds.has(day.id);
-          return (
-            <Pressable
-              key={day.id}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`${day.label ?? day.date} sessions`}
-              onPress={() => onChange('day', day.id)}
-              style={[styles.dayPill, selected && styles.dayPillSelected]}
-            >
-              <Text style={[styles.dayPillText, selected && styles.dayPillTextSelected]}>
-                {dayPillLabel(day.date, day.label)}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <View style={styles.searchBar}>
-        <SearchIcon size={18} color={colors.textMuted} />
-        <TextInput
-          accessibilityLabel="Search sessions"
-          placeholder="Search sessions, facilitators..."
-          placeholderTextColor={colors.textMuted}
-          value={query}
-          onChangeText={onQueryChange}
-          returnKeyType="search"
-          autoCorrect={false}
-          style={styles.searchInput}
-        />
-      </View>
-      <View style={styles.chipRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRail}>
-          <FilterChip label="All" selected={stageIds.size === 0} onPress={() => onChange('stage', null)} />
-          {schedule.stages.map((stage) => (
-            <FilterChip key={stage.id} label={stage.name} selected={stageIds.has(stage.id)} onPress={() => onChange('stage', stage.id)} />
-          ))}
-        </ScrollView>
-        {schedule.practiceTypes.length ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: showPractices }}
-            accessibilityLabel="More filters"
-            onPress={() => setShowPractices((open) => !open)}
-            style={[styles.slidersButton, showPractices && styles.slidersActive]}
-          >
-            <SlidersGlyph />
-          </Pressable>
-        ) : null}
-      </View>
-      {showPractices && schedule.practiceTypes.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRail}>
-          <FilterChip label="All practices" selected={practiceIds.size === 0} onPress={() => onChange('practice', null)} />
-          {schedule.practiceTypes.map((practice) => (
-            <FilterChip key={practice.id} label={practice.name} selected={practiceIds.has(practice.id)} onPress={() => onChange('practice', practice.id)} />
-          ))}
-        </ScrollView>
-      ) : null}
-    </View>
-  );
-}
-
-/** `"2026-10-23"` → `"Thu 23 Oct"`, as the screen 03 day pills draw it. */
-function dayPillLabel(date: string, fallback: string | null): string {
-  const parsed = new Date(`${date}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return fallback ?? date;
-  const weekday = new Intl.DateTimeFormat('en', { weekday: 'short' }).format(parsed);
-  const month = new Intl.DateTimeFormat('en', { month: 'short' }).format(parsed);
-  return `${weekday} ${parsed.getDate()} ${month}`;
-}
-
-function FilterChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.chip, selected && styles.chipSelected]}
+    <ResourceState
+      status={resourceStatus}
+      loadingLabel="Loading the schedule..."
+      errorMessage="We couldn't load this Event's schedule."
+      onRetry={onRetry}
+      emptyTitle="No sessions published yet"
+      emptyMessage="Please check again later."
     >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </Pressable>
+      <View style={styles.layout}>
+        <View style={styles.filters}>
+          <ScheduleDayTrack
+            days={days}
+            dayId={view === 'calendar' ? (calendarDay?.id ?? null) : requestedDayId}
+            allowAllDays={view === 'list'}
+            onChange={changeDay}
+          />
+          <ScheduleFilterControls
+            query={query}
+            onQueryChange={setQuery}
+            stages={stages}
+            colors={colorsByStage}
+            stageIds={stageIds}
+            onToggleStage={(id) => toggle('stage', id)}
+            onClearStages={() => toggle('stage', null)}
+            practices={practices}
+            practiceIds={practiceIds}
+            onTogglePractice={(id) => toggle('practice', id)}
+            onClearPractices={() => toggle('practice', null)}
+          />
+        </View>
+
+        <View style={styles.main}>
+          <View style={styles.toolbar}>
+            <ScheduleViewSwitcher value={view} onChange={setView} />
+            <View style={styles.countRow}>
+              <Text accessibilityLiveRegion="polite" style={styles.count}>
+                {sessionCount(shownCount)}
+                {view === 'list' && filtered ? ` of ${blocks.length}` : ''}
+              </Text>
+              {filtered ? (
+                <Pressable accessibilityRole="button" onPress={clearFilters} hitSlop={8}>
+                  <Text style={styles.clear}>Clear filters</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          {personalScheduleError ? (
+            <Text variant="bodyMuted">Your saved sessions could not be loaded. You can still browse the schedule.</Text>
+          ) : null}
+
+          {shownCount === 0 ? (
+            <View style={styles.noMatch}>
+              <Text variant="titleSm" style={styles.noMatchTitle}>No sessions match these filters</Text>
+              <Text variant="bodyMuted" style={styles.centered}>Try another search, day, or filter to see more sessions.</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={clearFilters}
+                style={({ pressed }) => [styles.noMatchButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.noMatchLabel}>Clear filters</Text>
+              </Pressable>
+            </View>
+          ) : view === 'list' ? (
+            <View style={styles.dayGroups}>
+              {dayGroups.map((group) => (
+                <View key={group.day.id}>
+                  <ScheduleDayHeading
+                    title={dayTitle(group.day, group.index)}
+                    meta={`${formatWeekdayDate(group.day.dayDate)} · ${sessionCount(group.blocks.length)}`}
+                  />
+                  <View style={styles.sessions}>{group.blocks.map(card)}</View>
+                </View>
+              ))}
+            </View>
+          ) : calendarDay && timetable ? (
+            <View>
+              <ScheduleDayHeading
+                title={dayTitle(calendarDay, Math.max(0, calendarIndex))}
+                meta={formatWeekdayDate(calendarDay.dayDate)}
+                calendar
+              />
+              <ScheduleTimetable
+                timetable={timetable}
+                now={now}
+                bleed={bleed}
+                onOpenSession={(block) => onOpenSession(block, 'calendar')}
+              />
+            </View>
+          ) : null}
+
+          {onToggleSaved ? (
+            <Text variant="bodyMuted">Sessions may run at the same time. Saving a conflict is allowed; the schedule will identify the overlap.</Text>
+          ) : null}
+        </View>
+      </View>
+    </ResourceState>
   );
 }
 
-/** The sliders mark on the filter button: three staggered rails with knobs. */
-function SlidersGlyph() {
+/** A day's name with its doors-open time, and its date (and, in the list, its count). */
+export function ScheduleDayHeading({ title, meta, calendar = false }: { title: string; meta: string; calendar?: boolean }) {
   return (
-    <View accessibilityElementsHidden style={styles.sliders}>
-      {[2, 10, 6].map((offset, row) => (
-        <View key={row} style={styles.sliderRow}>
-          <View style={styles.sliderLine} />
-          <View style={[styles.sliderKnob, { left: offset }]} />
-        </View>
-      ))}
+    <View style={[styles.dayHeading, calendar && styles.dayHeadingCalendar]}>
+      <Text variant="titleSm" accessibilityRole="header" style={styles.dayTitle}>{title}</Text>
+      <Text variant="fieldLabel">{meta}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  agenda: { width: '100%', gap: space.s5 },
-  controls: { gap: space.s3 },
-  controlsStack: { gap: space.s3 },
-  dayPills: { flexDirection: 'row', gap: space.s2 },
-  dayPill: { flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s2, borderRadius: radius.card, borderWidth: 1, borderColor: colors.borderDefault, backgroundColor: colors.bgSurface },
-  dayPillSelected: { backgroundColor: colors.sage500, borderColor: colors.sage500 },
-  dayPillText: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.bodyMd, color: colors.textPrimary, textAlign: 'center' },
-  dayPillTextSelected: { color: colors.creme },
-  searchBar: { flexDirection: 'row', alignItems: 'center', gap: space.s2, minHeight: 52, paddingHorizontal: space.s4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderDefault, backgroundColor: colors.bgSurface },
-  searchInput: { flex: 1, minHeight: 48, fontFamily: fontFamily.body, fontSize: fontSize.bodyMd, color: colors.textPrimary },
-  chipRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
-  chipRail: { flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: space.s2, paddingRight: space.s2 },
-  chip: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s4, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderDefault, backgroundColor: colors.bgSurface },
-  chipSelected: { backgroundColor: colors.black, borderColor: colors.black },
-  chipText: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.bodyMd, color: colors.textPrimary },
-  chipTextSelected: { color: colors.creme },
-  slidersButton: { width: 48, height: 48, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: radius.circle, borderWidth: 1, borderColor: colors.borderDefault, backgroundColor: colors.bgSurface },
-  slidersActive: { backgroundColor: colors.black, borderColor: colors.black },
-  sliders: { width: 18, gap: 4 },
-  sliderRow: { position: 'relative', height: 6, justifyContent: 'center' },
-  sliderLine: { height: 1.5, backgroundColor: colors.textMuted },
-  sliderKnob: { position: 'absolute', width: 6, height: 6, borderRadius: radius.circle, backgroundColor: colors.textMuted },
-  list: { gap: space.s3 },
-  notice: { padding: space.s4, backgroundColor: colors.gold100, borderRadius: radius.card },
-  note: { color: colors.textMuted },
+  layout: { width: '100%', gap: space.s5 },
+  filters: { gap: space.s3 },
+  main: { gap: space.s5 },
+  toolbar: { gap: space.s2 },
+  countRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.s3, rowGap: space.s2, minHeight: 32 },
+  count: { fontFamily: fontFamily.body, fontSize: fontSize.bodySm, color: colors.textPrimary },
+  clear: { fontFamily: fontFamily.body, fontSize: fontSize.bodySm, color: colors.textMuted, textDecorationLine: 'underline' },
+  dayGroups: { gap: space.s6 },
+  dayHeading: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    columnGap: space.s3,
+    rowGap: space.s1,
+    paddingVertical: space.s3,
+  },
+  dayHeadingCalendar: { paddingTop: 0 },
+  // The italic leans past its box; keep the last letter clear of the date.
+  dayTitle: { flexShrink: 1, paddingRight: 4 },
+  sessions: { gap: space.s3 },
+  noMatch: {
+    alignItems: 'center',
+    gap: space.s2,
+    paddingVertical: space.s7,
+    paddingHorizontal: space.s5,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.borderDefault,
+  },
+  noMatchTitle: { textAlign: 'center' },
+  centered: { textAlign: 'center' },
+  noMatchButton: {
+    marginTop: space.s3,
+    paddingVertical: 9,
+    paddingHorizontal: 18,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+  },
+  noMatchLabel: {
+    fontFamily: fontFamily.bodyMedium,
+    fontSize: fontSize.label,
+    letterSpacing: tracking.wide(fontSize.label),
+    textTransform: 'uppercase',
+    color: colors.textPrimary,
+  },
+  pressed: { opacity: 0.85 },
 });

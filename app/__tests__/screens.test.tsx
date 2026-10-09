@@ -370,7 +370,7 @@ describe('06 Discover', () => {
     expect(screen.getByText('All')).toBeTruthy();
     expect(screen.getByText('Festivals')).toBeTruthy();
     expect(screen.getByText('On sale now')).toBeTruthy();
-    expect(screen.getByText('23–24 Oct 2026 · Tunis Village, Fayoum')).toBeTruthy();
+    expect(screen.getByText('23–24 Oct 2026 · El Gouna, Egypt')).toBeTruthy();
     expect(screen.getByText('More gatherings')).toBeTruthy();
     expect(screen.getByText('Sound Bath Under the Stars')).toBeTruthy();
   });
@@ -383,10 +383,11 @@ describe('07 Event detail', () => {
     renderWithProviders(<EventDetailScreen />);
 
     await waitFor(() => expect(screen.getByText('Tulua')).toBeTruthy());
-    expect(screen.getByText('23–24 October 2026 · Fayoum')).toBeTruthy();
+    expect(screen.getByText('23–24 October 2026 · El Gouna')).toBeTruthy();
     expect(screen.getByText(/flagship festival returns to the desert/)).toBeTruthy();
     expect(screen.getByText('Venue')).toBeTruthy();
-    expect(screen.getByText('Tunis Village')).toBeTruthy();
+    // The mock venue's name and address are the same string, so the card shows it twice.
+    expect(screen.getAllByText('El Gouna, Egypt').length).toBeGreaterThan(0);
     expect(screen.getByText('From')).toBeTruthy();
     expect(screen.getByText('950.00 EGP')).toBeTruthy();
     expect(screen.getByText('Get tickets')).toBeTruthy();
@@ -1512,7 +1513,7 @@ describe('14 Entry pass', () => {
       expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
       expect(screen.getByText('Venue')).toBeTruthy();
       // The pass shows the ticket's full venue string, as the design draws it.
-      expect(screen.getByText('Tunis Village, Fayoum')).toBeTruthy();
+      expect(screen.getByText('El Gouna, Egypt')).toBeTruthy();
       // The mock's pass lives 30s and is refetched 3s before it expires; the clock is frozen.
       await waitFor(() => expect(screen.getByText('Refreshes in 27s')).toBeTruthy());
       expect(screen.queryByText('QR Code will show here.')).toBeNull();
