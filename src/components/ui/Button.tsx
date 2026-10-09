@@ -6,7 +6,8 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { colors, radius } from '../../theme/tokens';
+import type { ReactNode } from 'react';
+import { colors, radius, space } from '../../theme/tokens';
 import { Text } from './Text';
 
 /**
@@ -24,6 +25,8 @@ export interface ButtonProps extends Omit<PressableProps, 'style' | 'children'> 
   label: string;
   variant?: ButtonVariant;
   loading?: boolean;
+  /** Optional leading glyph, e.g. the entry-pass mark on the LIVE home CTA. */
+  icon?: ReactNode;
   /** Renders the compact inline size used by the event-detail bar and the guest "Add". */
   size?: 'block' | 'inline';
   style?: ViewStyle;
@@ -33,6 +36,7 @@ export function Button({
   label,
   variant = 'primary',
   loading = false,
+  icon,
   size = 'block',
   disabled,
   style,
@@ -72,9 +76,12 @@ export function Button({
           <ActivityIndicator color={labelColor} size="small" />
         </View>
       ) : (
-        <Text variant="buttonLabel" color={labelColor} style={styles.label}>
-          {label}
-        </Text>
+        <View style={styles.content}>
+          {icon}
+          <Text variant="buttonLabel" color={labelColor} style={styles.label}>
+            {label}
+          </Text>
+        </View>
       )}
     </Pressable>
   );
@@ -106,6 +113,11 @@ const styles = StyleSheet.create({
   },
   label: {
     textAlign: 'center',
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s2,
   },
   loading: {
     height: 17,

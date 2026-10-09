@@ -138,7 +138,7 @@ export default function ReviewScreen() {
   useEffect(() => {
     const orderId = useCheckoutStore.getState().orderId;
     if (!orderId) return;
-    router.replace(`/checkout/payment?orderId=${orderId}` as never);
+    router.replace(`/checkout/payment?orderId=${orderId}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -201,7 +201,7 @@ export default function ReviewScreen() {
         retryLabel={validEventId ? 'Back to the event' : 'Find an event'}
         onRetry={() =>
           router.replace(
-            validEventId ? (`/event/${validEventId}` as never) : ('/(tabs)/discover' as never),
+            validEventId ? `/event/${validEventId}` : '/(tabs)/discover',
           )
         }
       />
@@ -268,11 +268,11 @@ export default function ReviewScreen() {
 
     if (placed) {
       if (recoveryOrderId) {
-        router.replace(`/checkout/payment?orderId=${recoveryOrderId}` as never);
+        router.replace(`/checkout/payment?orderId=${recoveryOrderId}`);
       } else if (validEventId) {
-        router.replace(`/event/${validEventId}` as never);
+        router.replace(`/event/${validEventId}`);
       } else {
-        router.replace('/(tabs)/discover' as never);
+        router.replace('/(tabs)/discover');
       }
       return;
     }
@@ -313,10 +313,8 @@ export default function ReviewScreen() {
       sheet.present(intent, placed.id);
       setSheetPresented(true);
     } catch (err) {
-      const code =
-        typeof err === 'object' && err !== null && 'code' in err
-          ? (err as { code?: unknown }).code
-          : undefined;
+      const code: unknown =
+        typeof err === 'object' && err !== null && 'code' in err ? err.code : undefined;
 
       if (code === 'CART_PRICING_CHANGED') {
         setRepriced(true);
@@ -393,11 +391,11 @@ export default function ReviewScreen() {
           // Once placed, Back must not re-enter an editable cart screen.
           if (placed) {
             if (recoveryOrderId) {
-              router.replace(`/checkout/payment?orderId=${recoveryOrderId}` as never);
+              router.replace(`/checkout/payment?orderId=${recoveryOrderId}`);
             } else if (validEventId) {
-              router.replace(`/event/${validEventId}` as never);
+              router.replace(`/event/${validEventId}`);
             } else {
-              router.replace('/(tabs)/discover' as never);
+              router.replace('/(tabs)/discover');
             }
             return;
           }

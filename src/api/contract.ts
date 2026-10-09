@@ -30,6 +30,10 @@ import type {
   SessionTokens,
   SelfieResponse,
   InvitePlusOneInput,
+  MyScheduleQuery,
+  MyScheduleResponse,
+  PublicEventSchedule,
+  SaveScheduleBlockResponse,
   Ticket,
   TicketAddon,
   TicketAddonContext,
@@ -89,9 +93,16 @@ export interface SukunApi {
   };
 
   events: {
-    list(query?: ListEventsQuery): Promise<CursorPage<EventListItem>>;
-    detail(identifier: string): Promise<EventDetail>;
+    list(query?: ListEventsQuery, signal?: AbortSignal): Promise<CursorPage<EventListItem>>;
+    detail(identifier: string, signal?: AbortSignal): Promise<EventDetail>;
     meta(identifier: string): Promise<EventMeta>;
+  };
+
+  schedule: {
+    public(eventIdentifier: string): Promise<PublicEventSchedule>;
+    mine(eventId: string, query?: MyScheduleQuery): Promise<MyScheduleResponse>;
+    save(eventId: string, blockId: string): Promise<SaveScheduleBlockResponse>;
+    remove(eventId: string, blockId: string): Promise<void>;
   };
 
   /**
@@ -162,11 +173,14 @@ export interface SukunApi {
   };
 
   tickets: {
-    list(params?: {
-      statuses?: TicketStatus[];
-      cursor?: string | null;
-      limit?: number;
-    }): Promise<CursorPage<Ticket>>;
+    list(
+      params?: {
+        statuses?: TicketStatus[];
+        cursor?: string | null;
+        limit?: number;
+      },
+      signal?: AbortSignal,
+    ): Promise<CursorPage<Ticket>>;
     detail(ticketId: string): Promise<Ticket>;
     /**
      * Claims a ticket waiting on the caller's number. Needs a complete profile

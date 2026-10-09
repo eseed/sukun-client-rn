@@ -147,11 +147,13 @@ export default function TicketExtrasReviewScreen() {
         errorTitle="This checkout has expired"
         errorMessage="Start again and pick the extras you want."
         retryLabel={ticketId ? 'Back to extras' : 'Your tickets'}
-        onRetry={() =>
-          router.replace(
-            ticketId ? (`/ticket/${ticketId}/extras` as never) : ('/(tabs)/tickets' as never),
-          )
-        }
+        onRetry={() => {
+          if (ticketId) {
+            router.replace(`/ticket/${ticketId}/extras`);
+          } else {
+            router.replace('/(tabs)/tickets');
+          }
+        }}
       />
     </Screen>
   );
@@ -173,6 +175,11 @@ export default function TicketExtrasReviewScreen() {
   }
 
   if (!cartQuery.data && !order) return expired;
+
+  // Ticket lines mean another checkout took this draft over after screen 22 opened it. This screen
+  // lists extras only, so its total would include lines it never shows; screen 22 opens a fresh
+  // cart when it is reached again.
+  if (cartQuery.data && cartQuery.data.tickets.length > 0 && !order) return expired;
 
   const cart = cartQuery.data;
   const ticket = ticketQuery.data;

@@ -125,6 +125,8 @@ export default function RootLayout() {
             <Stack.Screen name="(onboarding)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="event/[slug]" />
+            <Stack.Screen name="event/[slug]/schedule" options={{ headerShown: false }} />
+            <Stack.Screen name="live-event/[eventId]" />
             <Stack.Screen name="checkout" />
             <Stack.Screen name="ticket/[id]" options={{ animation: 'slide_from_bottom' }} />
             {/* Answered with a button, not swiped away: "Not now" is always on screen. */}

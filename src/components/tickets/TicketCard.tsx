@@ -108,67 +108,74 @@ export function TicketCard({
   const cta = callToAction(ticket);
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-    >
-      <ImageSlot source={designAsset('eventHero')} height={130} tint={colors.sage100}>
-        <View style={styles.badge}>
-          <Badge label={badge.label} tone={badge.tone} />
-        </View>
-      </ImageSlot>
-
-      <View style={styles.perforation}>
-        <View style={[styles.notch, styles.notchLeft]} />
-        <View style={[styles.notch, styles.notchRight]} />
-      </View>
-
-      <View style={styles.body}>
-        <Text style={styles.eyebrow}>
-          {ticket.event.title} · {formatDateRangeShort(first, last)}
-        </Text>
-        <Text style={styles.tier}>{ticket.tier.name}</Text>
-        <Text variant="meta">
-          {ticket.orderNumber ? `Order ${ticket.orderNumber} · ` : ''}
-          {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
-        </Text>
-        {addonCount > 0 ? (
-          <Text variant="meta">
-            {addonCount} {addonCount === 1 ? 'add-on' : 'add-ons'} attached
-          </Text>
-        ) : null}
-        <Text style={[styles.cta, cta.muted && styles.ctaMuted]}>{cta.label}</Text>
-        {offersStay ? (
-          <View style={styles.stay}>
-            <ImageSlot
-              source={stay.photoUrl ? { uri: stay.photoUrl } : null}
-              height={STAY_PHOTO_SIZE}
-              style={styles.stayPhoto}
-            />
-            <View style={styles.stayBody}>
-              <Text style={styles.tier}>Accommodation Available</Text>
-              <Button
-                label="Book your stay"
-                variant="accent"
-                size="inline"
-                onPress={stay.onBook}
-                style={styles.stayButton}
-              />
-            </View>
+    <View style={styles.card}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [pressed && styles.pressed]}
+      >
+        <ImageSlot source={designAsset('eventHero')} height={130} tint={colors.sage100}>
+          <View style={styles.badge}>
+            <Badge label={badge.label} tone={badge.tone} />
           </View>
-        ) : null}
-        {/* Only a usable ticket can take extras: they attach to a ticket, and one that has not
-            bound to its holder yet has nothing to attach them to. The stay section's button leads
-            to the same screen, so the row gives way to it rather than offering it twice. */}
-        {usable && onAddExtras && !offersStay ? (
-          <Pressable accessibilityRole="button" onPress={onAddExtras} style={styles.extrasRow}>
-            <Text style={styles.extrasLabel}>Add extras to this ticket</Text>
-            <Text style={styles.extrasChevron}>›</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    </Pressable>
+        </ImageSlot>
+
+        <View style={styles.perforation}>
+          <View style={[styles.notch, styles.notchLeft]} />
+          <View style={[styles.notch, styles.notchRight]} />
+        </View>
+
+        <View style={[styles.body, (offersStay || (usable && onAddExtras)) && styles.bodyWithActions]}>
+          <Text style={styles.eyebrow}>
+            {ticket.event.title} · {formatDateRangeShort(first, last)}
+          </Text>
+          <Text style={styles.tier}>{ticket.tier.name}</Text>
+          <Text variant="meta">
+            {ticket.orderNumber ? `Order ${ticket.orderNumber} · ` : ''}
+            {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
+          </Text>
+          {addonCount > 0 ? (
+            <Text variant="meta">
+              {addonCount} {addonCount === 1 ? 'add-on' : 'add-ons'} attached
+            </Text>
+          ) : null}
+          <Text style={[styles.cta, cta.muted && styles.ctaMuted]}>{cta.label}</Text>
+        </View>
+      </Pressable>
+
+      {offersStay || (usable && onAddExtras) ? (
+        <View style={styles.actions}>
+          {offersStay ? (
+            <View style={styles.stay}>
+              <ImageSlot
+                source={stay.photoUrl ? { uri: stay.photoUrl } : null}
+                height={STAY_PHOTO_SIZE}
+                style={styles.stayPhoto}
+              />
+              <View style={styles.stayBody}>
+                <Text style={styles.tier}>Accommodation Available</Text>
+                <Button
+                  label="Book your stay"
+                  variant="accent"
+                  size="inline"
+                  onPress={stay.onBook}
+                  style={styles.stayButton}
+                />
+              </View>
+            </View>
+          ) : null}
+          {/* Only a usable ticket can take extras: they attach to a ticket, and one that has not
+              bound to its holder yet has nothing to attach them to. The stay section's button leads
+              to the same screen, so the row gives way to it rather than offering it twice. */}
+          {usable && onAddExtras && !offersStay ? (
+            <Pressable accessibilityRole="button" onPress={onAddExtras} style={styles.extrasRow}>
+              <Text style={styles.extrasLabel}>Add extras to this ticket</Text>
+              <Text style={styles.extrasChevron}>›</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -206,6 +213,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 12,
     paddingTop: 12,
+  },
+  actions: {
+    paddingHorizontal: 20,
+    paddingBottom: 18,
   },
   extrasLabel: { color: colors.textPrimary, fontFamily: fontFamily.body, fontSize: 14 },
   extrasChevron: { color: colors.textMuted, fontSize: 20 },
@@ -246,6 +257,9 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 20,
     gap: 8,
+  },
+  bodyWithActions: {
+    paddingBottom: 0,
   },
   eyebrow: {
     fontSize: 11,

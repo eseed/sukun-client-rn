@@ -53,9 +53,11 @@ export default function AnalyticsChoicesScreen() {
         ID to our backend, where it can be linked to your account after phone verification. Meta
         measures our campaigns: it receives app installs and opens, the events you search for and
         view, your checkout and sign-up steps, completed purchases and device details, and may use
-        this activity under its own terms for measurement and advertising. Your Sukun account ID,
-        name, email, and phone number are not sent to Kochava or Meta, and neither requests IDFA,
-        Google Advertising ID, or Apple&apos;s tracking permission.
+        this activity under its own terms for measurement and advertising. The app does not send
+        your Sukun account ID, name, email, or phone number to Kochava or Meta, and neither requests
+        IDFA, Google Advertising ID, or Apple&apos;s tracking permission. Purchases on our website
+        or paid through our team are reported to Meta by our servers, as Privacy &amp; terms
+        describes, and this setting does not change that.
       </Text>
 
       <Card radiusSize={14} style={styles.card}>
