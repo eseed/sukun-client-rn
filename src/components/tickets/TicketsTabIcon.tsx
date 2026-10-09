@@ -3,8 +3,8 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
+  Platform,
   StyleSheet,
-  useAnimatedValue,
   View,
   type ColorValue,
 } from 'react-native';
@@ -22,7 +22,7 @@ const PULSE_MS = 1200;
  * With reduce motion on, the halo stays lit rather than pulsing, so it still says so.
  */
 export function TicketsTabIcon({ color, waiting }: { color: ColorValue; waiting: boolean }) {
-  const pulse = useAnimatedValue(0);
+  const [pulse] = useState(() => new Animated.Value(0));
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export function TicketsTabIcon({ color, waiting }: { color: ColorValue; waiting:
         toValue: 1,
         duration: PULSE_MS,
         easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
+        useNativeDriver: Platform.OS !== 'web',
       }),
     );
     loop.start();

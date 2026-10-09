@@ -16,7 +16,7 @@ import { BackButton, BulletHeading, Screen, StepLabel, Text } from '../../src/co
  * links to.
  */
 
-const EFFECTIVE_DATE = '28 September 2026';
+const EFFECTIVE_DATE = '7 October 2026';
 const CONTACT = 'sukunwellness.co/support';
 
 const SECTIONS: { title: string; body: string }[] = [
@@ -72,6 +72,20 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     /**
+     * What the backend's Meta Conversions API sends (`sukun-backend`,
+     * docs/runbooks/meta-conversions-api.md): website and dashboard purchases, and Android app
+     * purchases from builds before 2.1.0 whose buyer allowed tracking, each with the buyer's
+     * details as SHA-256 hashes (owner approved, 6 October 2026). Purchases made in the iOS app
+     * are never sent this way, because Apple counts hashed contact details sent to an ad network
+     * as tracking, and the app never asks for Apple's tracking permission. Purchases from 2.1.0
+     * on are left to the app's own Meta SDK, which sends no contact details. If the backend's
+     * rules change, change this section in the same release.
+     */
+    title: 'Purchases reported to Meta',
+    body: 'To measure our campaigns, our servers also report some purchases to Meta: tickets bought on the Sukun website, orders you pay for through our team in cash, by Instapay or through Knot, and, if you allowed tracking, purchases made in Android versions of the app before 2.1. Each report carries the order total, currency, what was bought and an order reference. So that Meta can match it to the right person, it also carries your phone number, email, name, date of birth, gender, city, country and Sukun account ID, but only as hashes: one way codes made on our servers, from which the details themselves cannot be read back. Purchases made in this version of the app, and any made in the iOS app, are never reported this way: the app reports its own purchases as described above, without these details. Turning off analytics in the app does not stop reports of website purchases or of orders paid through our team. Meta may use these reports under its own terms and privacy policy for measurement and advertising, and you can manage how Meta uses your activity in your Meta account’s ad settings.',
+  },
+  {
+    /**
      * Guideline 5.1.1(i) requires the policy to "Confirm that any third party with whom an app
      * shares user data ... will provide the same or equal protection of user data as stated in
      * the app's privacy policy". That confirmation was missing entirely, and it is a named,
@@ -79,11 +93,11 @@ const SECTIONS: { title: string; body: string }[] = [
      * processor at once instead of a clause buried in one of them.
      */
     title: 'Who else sees your data',
-    body: 'We share only what each of these needs to do its job: Paymob to take a payment, our messaging provider to deliver your one time code and ticket messages on WhatsApp, our email provider to send receipts, Mixpanel and Microsoft Clarity for the analytics described above, Kochava for install attribution, Meta to measure our campaigns, and our hosting and file storage providers in the European Union. Each of them except Meta is required to protect your data to the same standard this policy sets out, to use it only for the work we ask of them, and not to use it for anything of their own. Meta may use app activity under its own terms and privacy policy for measurement and advertising. We do not sell your data or send it to Kochava for ad targeting.',
+    body: 'We share only what each of these needs to do its job: Paymob to take a payment, our messaging provider to deliver your one time code and ticket messages on WhatsApp, our email provider to send receipts, Mixpanel and Microsoft Clarity for the analytics described above, Kochava for install attribution, Meta to measure our campaigns from app activity and the purchase reports described above, and our hosting and file storage providers in the European Union. Each of them except Meta is required to protect your data to the same standard this policy sets out, to use it only for the work we ask of them, and not to use it for anything of their own. Meta may use app activity and purchase reports under its own terms and privacy policy for measurement and advertising. We do not sell your data or send it to Kochava for ad targeting.',
   },
   {
     title: 'Where your data is held',
-    body: 'Sukun data is stored on servers in the European Union, and our analytics providers are configured to keep European data in Europe, except Meta, which handles the activity it receives under its own privacy policy. We keep your account data for as long as your account exists, and order records for as long as Egyptian tax and accounting rules require.',
+    body: 'Sukun data is stored on servers in the European Union, and our analytics providers are configured to keep European data in Europe, except Meta, which handles the activity and purchase reports it receives under its own privacy policy. We keep your account data for as long as your account exists, and order records for as long as Egyptian tax and accounting rules require.',
   },
   {
     title: 'Deleting your account',

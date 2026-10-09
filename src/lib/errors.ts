@@ -29,6 +29,8 @@ const MESSAGES: Record<string, string> = {
   TIER_NOT_FOUND: 'That pass is no longer available.',
   ORDER_NOT_FOUND: "We couldn't find that order.",
   TICKET_NOT_FOUND: "We couldn't find that ticket.",
+  SCHEDULE_TICKET_REQUIRED: 'An active ticket for this Event is required to use My Schedule.',
+  SCHEDULE_BLOCK_NOT_FOUND: 'This session is no longer on the schedule.',
   TICKET_FORBIDDEN: 'That ticket is not yours.',
   // A granted ticket revoked, or one already claimed on another account, before this claim.
   TICKET_NOT_CLAIMABLE: 'This ticket can no longer be claimed.',

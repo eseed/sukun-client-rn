@@ -9,6 +9,7 @@ import { useAddons, useTickets } from '../../src/hooks/queries';
 import { availableStays, stayPhotos } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { useAuthStore } from '../../src/stores/auth';
+import { LiveEventReturnBanner } from '../../src/components/live-event/live-event-return-banner';
 
 /**
  * Design screen 20 · My tickets.
@@ -51,6 +52,7 @@ export default function TicketsScreen() {
 
   return (
     <Screen scroll edges={{ bottom: false }} contentStyle={styles.content}>
+      <LiveEventReturnBanner />
       <View style={styles.heading}>
         <BulletHeading title="My tickets" size="md" />
       </View>
@@ -88,7 +90,9 @@ export default function TicketsScreen() {
                 ticketCount={count}
                 addonCount={addonCount}
                 onPress={() => router.push(`/ticket/${lead.id}`)}
-                onAddExtras={() => router.push(`/ticket/${lead.id}/extras` as never)}
+                onAddExtras={() =>
+                  router.push(`/ticket/${lead.id}/extras`)
+                }
               />
             ))}
           </View>

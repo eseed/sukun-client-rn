@@ -1,5 +1,5 @@
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src/api/mock';
-import { TULUA_ID } from '../../../src/api/mock/fixtures';
+import { TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
 import { useAuthStore } from '../../../src/stores/auth';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import {
@@ -324,6 +324,35 @@ describe('22 Add extras to this ticket', () => {
 
     create.mockRestore();
   });
+
+  /**
+   * The production case (2026-10-08): an invited guest's draft for the event still held a ticket
+   * checkout from a week before. `POST carts` hands back that draft whatever is in it, so the room
+   * was priced together with those tickets and placing it was refused. A draft with tickets in it
+   * is abandoned and a fresh one opened.
+   */
+  it('opens a fresh cart when the draft for this event still holds tickets', async () => {
+    await signInAndComplete();
+    const stale = await mockApi.carts.create(TULUA_ID);
+    await mockApi.carts.replaceTickets(stale.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+
+    await browseAndContinue(['Dinner voucher']);
+
+    const cartId = useCheckoutStore.getState().cartId;
+    expect(cartId).toBeTruthy();
+    expect(cartId).not.toBe(stale.id);
+    expect((await mockApi.carts.get(stale.id)).status).toBe('abandoned');
+
+    // The extras alone, priced by the server.
+    const pricing = await serverPricing();
+    expect(pricing.ticketLines).toHaveLength(0);
+    expect(pricing.addonsSubtotalEgp).toBe('340.00');
+    expect(pricing.totalEgp).toBe('387.60');
+  });
 });
 
 describe('23 Extras checkout', () => {
@@ -384,6 +413,30 @@ describe('23 Extras checkout', () => {
     expect(screen.queryByText('Pricing your extras...')).toBeNull();
 
     // A way out rather than a dead end: there is nothing to retry, the extras must be picked again.
+    fireEvent.press(screen.getByText('Back to extras'));
+    expect(mockRouter.replace).toHaveBeenCalledWith(`/ticket/${SEEDED_TICKET_ID}/extras`);
+  });
+
+  /**
+   * A ticket checkout took the draft over after screen 22 opened it. This screen lists extras
+   * only, so a total that included those tickets would charge for lines it never shows.
+   */
+  it('will not take payment for a cart another checkout put tickets in', async () => {
+    await signInAndComplete();
+    await browseAndContinue(['Dinner voucher']);
+    const cartId = useCheckoutStore.getState().cartId!;
+    await mockApi.carts.replaceTickets(cartId, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+
+    mockParams.id = SEEDED_TICKET_ID;
+    renderWithProviders(<TicketExtrasReviewScreen />);
+
+    await waitFor(() => expect(screen.getByText('This checkout has expired')).toBeTruthy());
+    expect(screen.queryByText('Total')).toBeNull();
+    expect(screen.queryByText(/^Pay/)).toBeNull();
     fireEvent.press(screen.getByText('Back to extras'));
     expect(mockRouter.replace).toHaveBeenCalledWith(`/ticket/${SEEDED_TICKET_ID}/extras`);
   });
@@ -482,9 +535,7 @@ describe('23 Extras checkout', () => {
     act(() => listener({ status: 'Success' }));
 
     await waitFor(() =>
-      expect(mockRouter.replace).toHaveBeenCalledWith(
-        `/checkout/confirmation?orderId=${order.id}`,
-      ),
+      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/confirmation?orderId=${order.id}`),
     );
 
     initiate.mockRestore();

@@ -1,4 +1,5 @@
 import { normalizePhone, requiresLivingArea } from '../../lib/phone';
+import { overlaps } from '../../lib/live-event';
 import type { SukunApi } from '../contract';
 import type {
   BuyerRoom,
@@ -26,6 +27,12 @@ import type {
   GuestValidationInput,
   GuestValidationResult,
   ListEventsQuery,
+  MyScheduleBlock,
+  MyScheduleQuery,
+  MyScheduleResponse,
+  PublicEventSchedule,
+  SaveScheduleBlockResponse,
+  ScheduleBlock,
   OrderGuest,
   OrderDetail,
   OrderSummary,
@@ -53,6 +60,7 @@ import {
 } from './fixtures';
 import { multiply, toEgp, toPiastres } from './money';
 import { mockConfig, resetMockPaymentConfig } from './config';
+import { tuluaSchedule } from './schedule-fixtures';
 import {
   buildAddonDetail,
   findOption,
@@ -226,6 +234,46 @@ const state: MockState = {
   invitations: new Map(),
 };
 
+const savedScheduleBlocks = new Map<string, Set<string>>();
+
+/**
+ * Local LIVE simulation. The mock ships every event in a non-live state, so the attendee
+ * LIVE experience (resolver, launch redirect, return banner) is unreachable in mock mode
+ * by default. Tests and dev sessions opt an event into `live` here. This never reads a
+ * staging URL: mock mode stays fully local.
+ */
+const liveEventIds = new Set<string>();
+
+/**
+ * Dev-only tracing: `EXPO_PUBLIC_MOCK_LIVE_EVENT=ev-tulua` pretends those mock event ids are
+ * backend-`live` from app start, so the LIVE home can be traced with `expo start` in mock
+ * mode (sign in + complete profile, the resolver does the rest). Tests never set it, so the
+ * mock default stays non-live there.
+ */
+for (const id of (process.env.EXPO_PUBLIC_MOCK_LIVE_EVENT ?? '').split(',')) {
+  const trimmed = id.trim();
+  if (trimmed) liveEventIds.add(trimmed);
+}
+
+/** Pretend these events are backend-`live` for the rest of the mock session. */
+export function setMockLiveEvents(eventIds: string[]): void {
+  liveEventIds.clear();
+  for (const id of eventIds) liveEventIds.add(id);
+}
+
+/** Drop every simulated `live` state. */
+export function clearMockLiveEvents(): void {
+  liveEventIds.clear();
+}
+
+function liveListItem(event: EventListItem): EventListItem {
+  return liveEventIds.has(event.id) ? { ...event, state: 'live' } : event;
+}
+
+function liveDetail(event: EventDetail): EventDetail {
+  return liveEventIds.has(event.id) ? { ...event, state: 'live' } : event;
+}
+
 /** Test/dev seam: reset the mock between runs. */
 export function resetMockState(): void {
   state.user = null;
@@ -250,6 +298,8 @@ export function resetMockState(): void {
   state.ticketAddons.clear();
   state.accommodationTicketIds.clear();
   state.invitations.clear();
+  liveEventIds.clear();
+  savedScheduleBlocks.clear();
   resetCartSequences();
   orderSeq = 482;
   ticketSeq = 4821;
@@ -278,6 +328,53 @@ function buyerHoldsTicketForEvent(eventId: string): boolean {
 
     return guestPhone === null || guestPhone === phone;
   });
+}
+
+function hasActiveOwnedTicket(eventId: string, user: CurrentUser): boolean {
+  return state.tickets.some((ticket) => {
+    if (ticket.event.id !== eventId || ticket.status !== 'active') return false;
+    const ownerPhone = state.ticketOwnerPhones.get(ticket.id);
+    return (
+      ownerPhone === user.phoneNumber ||
+      (!ownerPhone && state.ticketBuyerPhones.get(ticket.id) === user.phoneNumber)
+    );
+  });
+}
+
+function scheduleForEvent(eventIdentifier: string): PublicEventSchedule {
+  const event = findEvent(eventIdentifier);
+  if (event.id === tuluaSchedule.eventId) return tuluaSchedule;
+  return { eventId: event.id, days: [], stages: [], practiceTypes: [], blocks: [] };
+}
+
+function savedBlocksFor(user: CurrentUser, eventId: string): Set<string> {
+  const key = `${user.id}:${eventId}`;
+  let saved = savedScheduleBlocks.get(key);
+  if (!saved) {
+    saved = new Set<string>();
+    savedScheduleBlocks.set(key, saved);
+  }
+  return saved;
+}
+
+/**
+ * Demo seed so the LIVE home's "Your next session" has content in mock mode: the seed Tulua
+ * ticket arrives with its midday Breathwork Journey already saved. Later saves/removes still
+ * go through `schedule.save`/`schedule.remove` (idempotent PUT, 204-style DELETE, conflicts
+ * returned in the response, never thrown), so this never masks those semantics.
+ */
+function seedSavedScheduleFor(user: CurrentUser, eventId: string): void {
+  if (!eventDetails[eventId]) return;
+  const saved = savedBlocksFor(user, eventId);
+  if (saved.size > 0) return;
+  const schedule = scheduleForEvent(eventId);
+  const preferred =
+    schedule.blocks.find((block) => block.id === 'block-breathwork-journey') ??
+    [...schedule.blocks]
+      .sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))
+      .find((block) => Date.parse(block.startAt) > mockConfig.now()) ??
+    [...schedule.blocks].sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))[0];
+  if (preferred) saved.add(preferred.id);
 }
 
 /**
@@ -397,7 +494,7 @@ function findEvent(identifier: string): EventDetail {
     eventDetails[identifier] ??
     Object.values(eventDetails).find((item) => item.slug === identifier);
   if (!event) throw new MockApiError('EVENT_NOT_FOUND', 'Event not found', 404);
-  return event;
+  return liveDetail(event);
 }
 
 /* -------------------------------------------------------------- cart helpers */
@@ -1032,6 +1129,8 @@ export const mockApi: SukunApi = {
         state.tickets = seedTickets(state.user.fullName);
         for (const ticket of state.tickets)
           state.ticketOwnerPhones.set(ticket.id, state.user.phoneNumber);
+        const seedEventId = state.tickets[0]?.event.id;
+        if (seedEventId) seedSavedScheduleFor(state.user, seedEventId);
       }
       // The seed draws a usable ticket, which it is not until the holder has a selfie.
       refreshTicketUsability(state.user);
@@ -1121,7 +1220,7 @@ export const mockApi: SukunApi = {
 
   events: {
     async list(query?: ListEventsQuery): Promise<CursorPage<EventListItem>> {
-      let data = [...eventList];
+      let data = eventList.map(liveListItem);
       if (query?.tag?.length) {
         data = data.filter((e) => e.tags.some((t) => query.tag?.includes(t)));
       }
@@ -1162,6 +1261,83 @@ export const mockApi: SukunApi = {
         endDate: event.endDate,
         venueName: event.venue?.name ?? null,
       });
+    },
+  },
+
+  schedule: {
+    async public(eventIdentifier: string): Promise<PublicEventSchedule> {
+      return delay(scheduleForEvent(eventIdentifier));
+    },
+
+    async mine(eventId: string, query?: MyScheduleQuery): Promise<MyScheduleResponse> {
+      const user = requireUser();
+      if (!hasActiveOwnedTicket(eventId, user)) {
+        throw new MockApiError(
+          'SCHEDULE_TICKET_REQUIRED',
+          'An active Event ticket is required.',
+          403,
+        );
+      }
+      const schedule = scheduleForEvent(eventId);
+      const saved = savedBlocksFor(user, eventId);
+      const selected = schedule.blocks
+        .filter((block) => saved.has(block.id))
+        .filter((block) => !query?.eventDayId || block.eventDayId === query.eventDayId)
+        .filter((block) => !query?.stageId || block.stageId === query.stageId)
+        .filter((block) => !query?.practiceTypeId || block.practiceTypeId === query.practiceTypeId)
+        .sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt));
+      const result = page(selected, query?.cursor, query?.limit, 100);
+      const blocks: MyScheduleBlock[] = result.data.map((block) => ({
+        ...block,
+        conflicts: selected
+          .filter((other) => other.id !== block.id && overlaps(block, other))
+          .map((other) => ({
+            blockId: other.id,
+            title: other.title,
+            startAt: other.startAt,
+            endAt: other.endAt,
+          })),
+      }));
+      return delay({ eventId, blocks, meta: result.meta });
+    },
+
+    async save(eventId: string, blockId: string): Promise<SaveScheduleBlockResponse> {
+      const user = requireUser();
+      if (!hasActiveOwnedTicket(eventId, user)) {
+        throw new MockApiError(
+          'SCHEDULE_TICKET_REQUIRED',
+          'An active Event ticket is required.',
+          403,
+        );
+      }
+      const block = scheduleForEvent(eventId).blocks.find((item) => item.id === blockId);
+      if (!block) throw new MockApiError('SCHEDULE_BLOCK_NOT_FOUND', 'Session not found.', 404);
+      const saved = savedBlocksFor(user, eventId);
+      saved.add(blockId);
+      const conflicts = [...saved]
+        .filter((id) => id !== blockId)
+        .map((id) => scheduleForEvent(eventId).blocks.find((item) => item.id === id))
+        .filter((item): item is ScheduleBlock => Boolean(item && overlaps(block, item)))
+        .map((item) => ({
+          blockId: item.id,
+          title: item.title,
+          startAt: item.startAt,
+          endAt: item.endAt,
+        }));
+      return delay({ saved: true, conflicts });
+    },
+
+    async remove(eventId: string, blockId: string): Promise<void> {
+      const user = requireUser();
+      if (!hasActiveOwnedTicket(eventId, user)) {
+        throw new MockApiError(
+          'SCHEDULE_TICKET_REQUIRED',
+          'An active Event ticket is required.',
+          403,
+        );
+      }
+      savedBlocksFor(user, eventId).delete(blockId);
+      await delay(undefined);
     },
   },
 

@@ -72,7 +72,9 @@ export function usePendingPaymentRecovery() {
       if (here.startsWith('/checkout/payment') || here.startsWith('/checkout/confirmation')) {
         return;
       }
-      router.push(target.href as never);
+      // `recoveryTarget` keeps string hrefs because its tests assert them; the template
+      // literal return type above keeps this call site cast-free.
+      router.push(target.href);
     } finally {
       running.current = false;
     }
@@ -102,7 +104,10 @@ export function usePendingPaymentRecovery() {
 export function recoveryTarget(
   orderId: string,
   status: PaymentStatus,
-): { href: string | null; clear: boolean } {
+): {
+  href: `/checkout/confirmation?orderId=${string}` | `/checkout/payment?orderId=${string}` | null;
+  clear: boolean;
+} {
   switch (status.orderStatus) {
     case 'paid':
       return { href: `/checkout/confirmation?orderId=${orderId}`, clear: true };

@@ -189,7 +189,7 @@ export default function PaymentScreen() {
   }, [closed, validOrderId]);
 
   useEffect(() => {
-    if (!settled) return;
+    if (!settled || !validOrderId) return;
     // `purchase_completed` is sent by the confirmation screen, which every paid order reaches
     // whichever screen watched it settle (see `src/lib/purchase-analytics.ts`).
     reset();
@@ -291,7 +291,11 @@ export default function PaymentScreen() {
       void clearPendingPayment(validOrderId);
       const eventId = order?.eventId;
       reset();
-      router.replace(eventId ? (`/event/${eventId}` as never) : ('/(tabs)/discover' as never));
+      router.replace(
+        eventId
+          ? `/event/${eventId}`
+          : '/(tabs)/discover',
+      );
     } catch (err) {
       if (stillConfirming(err)) return;
       setError(messageForError(err));
@@ -465,12 +469,9 @@ function statusKey(status: { orderStatus: string; paymentStatus: string } | unde
 
 /** The server's error code, for analytics. Codes only: never the message, which can carry input. */
 function errorCodeOf(error: unknown): string {
-  return typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    typeof (error as { code?: unknown }).code === 'string'
-    ? (error as { code: string }).code
-    : 'UNKNOWN';
+  if (typeof error !== 'object' || error === null || !('code' in error)) return 'UNKNOWN';
+  const code: unknown = error.code;
+  return typeof code === 'string' ? code : 'UNKNOWN';
 }
 
 const styles = StyleSheet.create({

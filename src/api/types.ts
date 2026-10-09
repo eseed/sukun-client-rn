@@ -301,6 +301,101 @@ export interface EventDetail {
   priceFromEgp: string | null;
 }
 
+/* ------------------------------------------------------------- schedules */
+
+/** Published public schedule projection for an Event. */
+export interface PublicEventSchedule {
+  eventId: string;
+  days: ScheduleDay[];
+  stages: ScheduleStage[];
+  practiceTypes: SchedulePracticeType[];
+  blocks: ScheduleBlock[];
+}
+
+export interface ScheduleDay {
+  id: string;
+  label: string | null;
+  dayDate: string;
+  startsAt: string;
+  endsAt: string;
+  sortOrder?: number;
+}
+
+export interface ScheduleStage {
+  id: string;
+  name: string;
+  description?: string | null;
+  sortOrder?: number;
+}
+
+export interface SchedulePracticeType {
+  id: string;
+  name: string;
+  sortOrder?: number;
+}
+
+export interface ScheduleFacilitator {
+  id: string;
+  name: string;
+  imageUrl?: string | null;
+  bio?: string | null;
+}
+
+export interface ScheduleMedia {
+  id: string;
+  url: string;
+  altText: string | null;
+  orderIndex: number;
+}
+
+export interface ScheduleBlock {
+  id: string;
+  eventId: string;
+  eventDayId: string;
+  stageId: string;
+  practiceTypeId: string | null;
+  title: string;
+  descriptionHtml: string | null;
+  startAt: string;
+  endAt: string;
+  durationMinutes: number;
+  eventDay: ScheduleDay;
+  stage: ScheduleStage;
+  practiceType: SchedulePracticeType | null;
+  facilitators: ScheduleFacilitator[];
+  media: ScheduleMedia[];
+}
+
+export interface ScheduleConflict {
+  blockId: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+}
+
+export interface MyScheduleBlock extends ScheduleBlock {
+  conflicts: ScheduleConflict[];
+}
+
+export interface MyScheduleQuery {
+  limit?: number;
+  cursor?: string | null;
+  eventDayId?: string;
+  stageId?: string;
+  practiceTypeId?: string;
+}
+
+export interface MyScheduleResponse {
+  eventId: string;
+  blocks: MyScheduleBlock[];
+  meta: CursorPage<never>['meta'];
+}
+
+export interface SaveScheduleBlockResponse {
+  saved: boolean;
+  conflicts: ScheduleConflict[];
+}
+
 export interface ListEventsQuery {
   cursor?: string | null;
   limit?: number;

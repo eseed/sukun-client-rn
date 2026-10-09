@@ -24,7 +24,7 @@ import {
   Text,
   YoutubeEmbed,
 } from '../../src/components/ui';
-import { useAddons, useEvent } from '../../src/hooks/queries';
+import { useAddons, useEvent, usePublicEventSchedule } from '../../src/hooks/queries';
 import { AccommodationBox } from '../../src/components/events/AccommodationBox';
 import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
 import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
@@ -39,6 +39,7 @@ import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
+import { useLiveEventContext } from '../../src/hooks/useLiveEventContext';
 
 const HERO_HEIGHT = 280;
 
@@ -62,6 +63,11 @@ export default function EventDetailScreen() {
     typeof slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(slug) ? slug : undefined;
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
+  const liveContext = useLiveEventContext();
+  // The schedule link shows only once the event has published sessions: loading, failed (a
+  // backend without schedules answers 404) and empty all leave it out, never a dead end.
+  const scheduleQuery = usePublicEventSchedule(eventSlug);
+  const hasSchedule = (scheduleQuery.data?.blocks.length ?? 0) > 0;
 
   // Meta's ViewContent, once per event shown, however often the event is refetched.
   const viewedEventId = useRef<string | null>(null);
@@ -230,6 +236,18 @@ export default function EventDetailScreen() {
         <View style={styles.body}>
           <MarkdownText markdown={description} variant="bodyLead" style={styles.lead} />
 
+          {hasSchedule ? (
+            <View style={styles.scheduleLink}>
+              <Button
+                label="View full schedule"
+                variant="secondary"
+                size="inline"
+                accessibilityLabel={`View the full schedule for ${event.title}`}
+                onPress={() => router.push(`/event/${event.slug}/schedule`)}
+              />
+            </View>
+          ) : null}
+
           {videoIds.length > 0 ? (
             <View style={styles.mediaSection}>
               <Text variant="eyebrow" style={styles.sectionLabel}>
@@ -280,6 +298,18 @@ export default function EventDetailScreen() {
               <Badge label="Early bird selling fast" tone="gold" />
             ) : null}
           </View>
+
+          {liveContext.status === 'ready' && liveContext.context.eventId === event.id ? (
+            <View style={styles.liveCta}>
+              <Button
+                label={`Open LIVE ${event.title}`}
+                size="inline"
+                onPress={() =>
+                  router.push(`/live-event/${event.id}`)
+                }
+              />
+            </View>
+          ) : null}
 
           {/*
             Design screen 07 · the extras teaser.
@@ -574,6 +604,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginBottom: 20,
+  },
+  liveCta: {
+    marginBottom: 20,
+  },
+  scheduleLink: {
+    alignSelf: 'flex-start',
     marginBottom: 20,
   },
   sectionLabel: {

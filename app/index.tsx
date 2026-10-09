@@ -1,12 +1,17 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
 import { useAllowGuestBrowsing } from '../src/stores/flags';
 import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../src/stores/auth';
-import { colors } from '../src/theme/tokens';
+import { colors, radius } from '../src/theme/tokens';
+import { setSessionLiveEventChoice, useLiveEventContext } from '../src/hooks/useLiveEventContext';
+import { Button, Screen, Text } from '../src/components/ui';
 
 /**
- * Entry gate. Sends a signed-in user with a finished profile to the tabs, a signed-in user
- * mid-onboarding back to the step they stopped at, and a first-time visitor to Welcome.
+ * Entry gate. Sends signed-in holders with a LIVE event ticket into that Event, other users
+ * with a finished profile to Discover, users mid-onboarding back to their unfinished step,
+ * and first-time visitors to Welcome. Successful sign-in returns here so both paths share
+ * the same ticket check.
  *
  * Two cases are not a redirect into the flow, and they are the same case twice: someone who
  * has already been asked and already answered. `setupDeferred` is an account that declined a
@@ -28,6 +33,8 @@ export default function Index() {
   const user = useAuthStore((s) => s.user);
   const setupDeferred = useAuthStore((s) => s.setupDeferred);
   const guestBrowsing = useAuthStore((s) => s.guestBrowsing);
+  const [selectedEventId, setSelectedEventId] = useState<string>();
+  const liveEvent = useLiveEventContext(status === 'signed-in', selectedEventId);
 
   if (status === 'loading') {
     return (
@@ -49,8 +56,52 @@ export default function Index() {
     return <Redirect href="/(onboarding)/welcome" />;
   }
 
-  // A finished profile is the common case and beats every other check.
-  if (user.profileComplete) {
+  if (status === 'signed-in' && user) {
+    // LIVE mode is an app-ready destination only: an unfinished profile still owes its
+    // onboarding step first (plan section 7). The resolver is awaited either way so an
+    // incomplete account does not race past the ticket check into onboarding.
+    if (user.profileComplete && liveEvent.status === 'ready') {
+      return (
+        <Redirect
+          href={`/live-event/${liveEvent.context.eventId}`}
+        />
+      );
+    }
+    if (user.profileComplete && liveEvent.status === 'choose') {
+      return (
+        <Screen scroll contentStyle={styles.chooser}>
+          <View style={styles.chooserStack}>
+          <Text variant="titleMd" accessibilityRole="header">Choose your LIVE Event</Text>
+          <Text variant="bodyMuted">You have active tickets for more than one Event happening now.</Text>
+          {liveEvent.choices.map(({ event, ticket }) => (
+            <View key={event.id} style={styles.choice}>
+              <Text variant="titleSm">{event.title}</Text>
+              <Text variant="bodyMuted">{event.venueName ?? 'Venue details unavailable'} · {ticket.tier.name}</Text>
+              <Button
+                label={`Open ${event.title}`}
+                onPress={() => {
+                  setSessionLiveEventChoice(user.id, event.id);
+                  setSelectedEventId(event.id);
+                }}
+              />
+            </View>
+          ))}
+          </View>
+        </Screen>
+      );
+    }
+    if (liveEvent.status === 'loading') {
+      return (
+        <View style={styles.splash}>
+          <ActivityIndicator color={colors.textPrimary} />
+        </View>
+      );
+    }
+  }
+
+  // A finished profile with no matching LIVE ticket reaches the public catalogue.
+  if (user?.profileComplete) {
+    // Resolver failures must not strand the attendee at launch.
     return <Redirect href="/(tabs)/discover" />;
   }
 
@@ -68,4 +119,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.bgPage,
   },
+  chooser: { paddingHorizontal: 24 },
+  chooserStack: { gap: 16 },
+  choice: { gap: 10, padding: 16, borderRadius: radius.card, backgroundColor: colors.bgSurface, borderColor: colors.borderDefault, borderWidth: 1 },
 });

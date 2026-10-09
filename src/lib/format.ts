@@ -6,6 +6,29 @@
 
 export const TIMEZONE = 'Africa/Cairo';
 
+/** Format an event timestamp in the app's event timezone. */
+export function formatTime(isoTimestamp: string): string {
+  return new Intl.DateTimeFormat('en', {
+    timeZone: TIMEZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(isoTimestamp));
+}
+
+/**
+ * Schedule times as the LIVE screens draw them (reference pack screens 01-05): 24-hour
+ * `"10:00"`, in Africa/Cairo. Separate from `formatTime` (12-hour, app-wide) so existing
+ * screens keep their convention.
+ */
+export function formatScheduleTime(isoTimestamp: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(isoTimestamp));
+}
+
 /** `"3200.00"` → `"3,200.00 EGP"`. */
 export function formatEgp(amount: string, options?: { withCurrency?: boolean }): string {
   const withCurrency = options?.withCurrency ?? true;
@@ -106,6 +129,52 @@ export function formatDateRangeShort(startIso: string, endIso: string): string {
   if (s.month === e.month && s.day === e.day) return `${s.day} ${MONTHS_SHORT[s.month]}`;
   if (s.month === e.month) return `${s.day}–${e.day} ${MONTHS_SHORT[s.month]}`;
   return `${s.day} ${MONTHS_SHORT[s.month]} – ${e.day} ${MONTHS_SHORT[e.month]}`;
+}
+
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * A calendar day with its weekday, as the schedule's day pills write it:
+ * `"2026-10-23"` → `"Fri 23 Oct"`. The website's `formatWeekdayDate`.
+ */
+export function formatWeekdayDate(isoDate: string): string {
+  const { day, month, year } = parts(isoDate);
+  const weekday = WEEKDAYS_SHORT[new Date(Date.UTC(year, month, day)).getUTCDay()];
+  return `${weekday} ${day} ${MONTHS_SHORT[month]}`;
+}
+
+/** A session's length: `45` → `"45 min"`, `60` → `"1 h"`, `75` → `"1 h 15 min"`. */
+export function formatDuration(totalMinutes: number): string {
+  const minutes = Math.max(0, Math.round(totalMinutes));
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return `${rest} min`;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
+const CAIRO_CLOCK = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TIMEZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/**
+ * An instant as the Cairo clock shows it, written the way the schedule's calendar labels its
+ * hours: `"2PM"`, `"2:35PM"`, `"12AM"`. The website's `formatClockTime`; an unreadable timestamp
+ * gives an empty string.
+ */
+export function formatClockTime(isoInstant: string): string {
+  const instant = new Date(isoInstant);
+  if (Number.isNaN(instant.getTime())) return '';
+  const clock = CAIRO_CLOCK.formatToParts(instant);
+  const hour = Number(clock.find((part) => part.type === 'hour')?.value ?? 0) % 24;
+  const minute = Number(clock.find((part) => part.type === 'minute')?.value ?? 0);
+  const suffix = hour < 12 ? 'AM' : 'PM';
+  const twelve = hour % 12 === 0 ? 12 : hour % 12;
+  return minute === 0
+    ? `${twelve}${suffix}`
+    : `${twelve}:${String(minute).padStart(2, '0')}${suffix}`;
 }
 
 /** `"1994-03-12"` → `"12/03/1994"` for the date-of-birth field. */

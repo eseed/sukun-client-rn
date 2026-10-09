@@ -55,7 +55,7 @@ export default function AddonsBrowseScreen() {
           errorTitle="This checkout has expired"
           errorMessage="Start again from the event to pick your tickets and extras."
           retryLabel="Find an event"
-          onRetry={() => router.replace('/(tabs)/discover' as never)}
+          onRetry={() => router.replace('/(tabs)/discover')}
         />
       </Screen>
     );
@@ -79,7 +79,8 @@ export default function AddonsBrowseScreen() {
     );
   }
 
-  const toReview = () => router.push(`/checkout/review?eventId=${validEventId}` as never);
+  const toReview = () =>
+    router.push(`/checkout/review?eventId=${validEventId}`);
 
   if (addonsQuery.isError) {
     return (
@@ -138,7 +139,7 @@ export default function AddonsBrowseScreen() {
               addon={addon}
               picked={picked.some((line) => line.addonId === addon.id)}
               onPress={() =>
-                router.push(`/checkout/addon/${addon.id}?eventId=${validEventId}` as never)
+                router.push(`/checkout/addon/${addon.id}?eventId=${validEventId}`)
               }
             />
           ))}
@@ -163,8 +164,8 @@ export default function AddonsBrowseScreen() {
           onPress={() =>
             router.push(
               pickedCount > 0
-                ? (`/checkout/assign?eventId=${validEventId}` as never)
-                : (`/checkout/review?eventId=${validEventId}` as never),
+                ? `/checkout/assign?eventId=${validEventId}`
+                : `/checkout/review?eventId=${validEventId}`,
             )
           }
           style={styles.continue}

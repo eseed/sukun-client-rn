@@ -1,10 +1,13 @@
 import {
+  formatClockTime,
   formatCountdown,
   formatDate,
   formatDateOfBirth,
   formatDateRange,
   formatDateRangeShort,
+  formatDuration,
   formatEgp,
+  formatWeekdayDate,
   initials,
   parseDateOfBirth,
 } from '../format';
@@ -54,6 +57,30 @@ describe('date formatting', () => {
 
   it('shortens for ticket cards', () => {
     expect(formatDateRangeShort('2026-10-23', '2026-10-24')).toBe('23–24 Oct');
+  });
+});
+
+describe('schedule formatting', () => {
+  it("writes a schedule day with its weekday, whatever the device's time zone", () => {
+    expect(formatWeekdayDate('2026-10-06')).toBe('Tue 6 Oct');
+    expect(formatWeekdayDate('2026-10-23')).toBe('Fri 23 Oct');
+    expect(formatWeekdayDate('2027-01-01')).toBe('Fri 1 Jan');
+  });
+
+  it('writes a session length in hours and minutes', () => {
+    expect(formatDuration(40)).toBe('40 min');
+    expect(formatDuration(60)).toBe('1 h');
+    expect(formatDuration(75)).toBe('1 h 15 min');
+    expect(formatDuration(135)).toBe('2 h 15 min');
+  });
+
+  it('reads an hour mark on the Cairo clock, as the calendar labels its hours', () => {
+    // Cairo is UTC+3 in September 2026 (summer time) and UTC+2 in January.
+    expect(formatClockTime('2026-09-27T11:35:00.000Z')).toBe('2:35PM');
+    expect(formatClockTime('2026-09-27T11:00:00.000Z')).toBe('2PM');
+    expect(formatClockTime('2026-01-15T22:05:00.000Z')).toBe('12:05AM');
+    expect(formatClockTime('2026-01-15T10:00:00.000Z')).toBe('12PM');
+    expect(formatClockTime('not a date')).toBe('');
   });
 });
 

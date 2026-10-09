@@ -1,6 +1,15 @@
-import type { CurrentUser } from '../../src/api/types';
+import { api } from '../../src/api';
+import type { CursorPage, CurrentUser, EventDetail, EventListItem, Ticket } from '../../src/api/types';
+import { seedTickets, TULUA_ID } from '../../src/api/mock/fixtures';
+import {
+  MOCK_OTP_CODE,
+  mockConfig,
+  mockApi,
+  resetMockState,
+  setMockLiveEvents,
+} from '../../src/api/mock';
 import { useAuthStore } from '../../src/stores/auth';
-import { renderWithProviders } from '../../src/test-utils';
+import { renderWithProviders, waitFor } from '../../src/test-utils';
 import Index from '../index';
 
 /**
@@ -59,6 +68,10 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 describe('Launch redirect', () => {
   it('holds on the splash while the session is being restored', () => {
     renderWithProviders(<Index />);
@@ -82,10 +95,137 @@ describe('Launch redirect', () => {
     expect(hrefs).toEqual(['/(tabs)/discover']);
   });
 
-  it('sends a finished account straight to Discover', () => {
+  it('checks for a LIVE ticket before sending a finished account to Discover', async () => {
     useAuthStore.setState({ status: 'signed-in', user: user() });
     renderWithProviders(<Index />);
-    expect(hrefs).toEqual(['/(tabs)/discover']);
+    await waitFor(() => expect(hrefs).toEqual(['/(tabs)/discover']));
+  });
+
+  it('opens a LIVE event when the signed-in account has its active ticket', async () => {
+    const event: EventListItem = {
+      id: 'event-live',
+      slug: 'tulua-festival-2026',
+      title: 'Tulua Wellness Festival 2026',
+      tagline: null,
+      coverImageUrl: null,
+      state: 'live',
+      startDate: '2026-10-06',
+      endDate: '2026-10-07',
+      venueName: 'Ain Sokhna',
+      priceFromEgp: null,
+      tags: [],
+      isSoldOut: false,
+    };
+    const ticket = {
+      ...seedTickets('Attendee')[0]!,
+      event: { ...seedTickets('Attendee')[0]!.event, id: event.id, slug: event.slug },
+    } as Ticket;
+    const page = <T,>(data: T[]): CursorPage<T> => ({
+      data,
+      meta: { limit: 100, hasNextPage: false, nextCursor: null },
+    });
+    jest.spyOn(api.tickets, 'list').mockResolvedValue(page([ticket]));
+    jest.spyOn(api.events, 'list').mockResolvedValue(page([event]));
+    jest
+      .spyOn(api.events, 'detail')
+      .mockResolvedValue({ ...event, state: 'live' } as unknown as EventDetail);
+
+    useAuthStore.setState({ status: 'signed-in', user: user() });
+    renderWithProviders(<Index />);
+
+    await waitFor(() => expect(hrefs).toEqual(['/live-event/event-live']));
+  });
+
+  it('checks the ticketed Event directly when the public LIVE list omits it', async () => {
+    const event: EventListItem = {
+      id: 'event-live',
+      slug: 'tulua-festival-2026',
+      title: 'Tulua Wellness Festival 2026',
+      tagline: null,
+      coverImageUrl: null,
+      state: 'live',
+      startDate: '2026-10-06',
+      endDate: '2026-10-07',
+      venueName: 'Ain Sokhna',
+      priceFromEgp: null,
+      tags: [],
+      isSoldOut: false,
+    };
+    const seededTicket = seedTickets('Attendee')[0]!;
+    const ticket = {
+      ...seededTicket,
+      event: { ...seededTicket.event, id: event.id, slug: event.slug },
+    } as Ticket;
+    const page = <T,>(data: T[]): CursorPage<T> => ({
+      data,
+      meta: { limit: 100, hasNextPage: false, nextCursor: null },
+    });
+    jest.spyOn(api.tickets, 'list').mockResolvedValue(page([ticket]));
+    jest.spyOn(api.events, 'list').mockResolvedValue(page([]));
+    jest
+      .spyOn(api.events, 'detail')
+      .mockResolvedValue({
+        ...event,
+        state: 'live',
+        venue: null,
+        tiers: [],
+      } as unknown as EventDetail);
+
+    useAuthStore.setState({ status: 'signed-in', user: user() });
+    renderWithProviders(<Index />);
+
+    await waitFor(() => expect(hrefs).toEqual(['/live-event/event-live']));
+    expect(api.events.detail).toHaveBeenCalledWith(event.slug, expect.anything());
+  });
+
+  it('lands on LIVE Event Home for an owned ticket when the mock simulates live', async () => {
+    // No spies and no staging URL: the real mock backend with a locally simulated live
+    // event, the way a dev session exercises the attendee switch.
+    resetMockState();
+    const prevLatency = mockConfig.latencyMs;
+    mockConfig.latencyMs = 0;
+    try {
+      setMockLiveEvents([TULUA_ID]);
+      await mockApi.auth.requestOtp('+201012345678');
+      await mockApi.auth.verifyOtp('+201012345678', MOCK_OTP_CODE);
+      await mockApi.profile.update({
+        fullName: 'Yasmin El Sayed',
+        email: 'yasmin@email.com',
+        dateOfBirth: '1994-03-12',
+        gender: 'female',
+        areaId: 'ar-maadi',
+      });
+      const me = await mockApi.auth.me();
+      expect(me.profileComplete).toBe(true);
+
+      useAuthStore.setState({ status: 'signed-in', user: me });
+      renderWithProviders(<Index />);
+
+      await waitFor(() => expect(hrefs).toEqual([`/live-event/${TULUA_ID}`]));
+    } finally {
+      resetMockState();
+      mockConfig.latencyMs = prevLatency;
+    }
+  });
+
+  it('waits for the ticket check before routing an incomplete signed-in account', async () => {
+    let resolveTicketPage!: (page: CursorPage<Ticket>) => void;
+    const pending = new Promise<CursorPage<Ticket>>((resolve) => {
+      resolveTicketPage = resolve;
+    });
+    const emptyPage = <T,>(data: T[]): CursorPage<T> => ({
+      data,
+      meta: { limit: 100, hasNextPage: false, nextCursor: null },
+    });
+    jest.spyOn(api.tickets, 'list').mockReturnValue(pending);
+    jest.spyOn(api.events, 'list').mockResolvedValue(emptyPage([]));
+
+    useAuthStore.setState({ status: 'signed-in', user: owesProfile() });
+    renderWithProviders(<Index />);
+
+    expect(hrefs).toEqual([]);
+    resolveTicketPage(emptyPage([]));
+    await waitFor(() => expect(hrefs).toEqual(['/(onboarding)/profile']));
   });
 
   /**
@@ -93,29 +233,29 @@ describe('Launch redirect', () => {
    * a projection with fields omitted. Routing on the mirror alone once sent a complete user
    * back through onboarding.
    */
-  it('trusts the server over a partial local mirror', () => {
+  it('trusts the server over a partial local mirror', async () => {
     useAuthStore.setState({
       status: 'signed-in',
       user: user({ fullName: null, email: null, profileComplete: true }),
     });
     renderWithProviders(<Index />);
-    expect(hrefs).toEqual(['/(tabs)/discover']);
+    await waitFor(() => expect(hrefs).toEqual(['/(tabs)/discover']));
   });
 
-  it('resumes an unfinished account at the step it still owes', () => {
+  it('resumes an unfinished account at the step it still owes after the ticket check', async () => {
     useAuthStore.setState({ status: 'signed-in', user: owesProfile() });
     renderWithProviders(<Index />);
-    expect(hrefs).toEqual(['/(onboarding)/profile']);
+    await waitFor(() => expect(hrefs).toEqual(['/(onboarding)/profile']));
   });
 
   /**
    * A missing selfie is not an unfinished registration any more. It is asked for on the
    * entry pass that needs it (CLAUDE.md rule 3), so launch must not route anyone to a camera.
    */
-  it('does not send an account without a selfie into onboarding', () => {
+  it('does not send an account without a selfie into onboarding', async () => {
     useAuthStore.setState({ status: 'signed-in', user: user({ selfieUploaded: false }) });
     renderWithProviders(<Index />);
-    expect(hrefs).toEqual(['/(tabs)/discover']);
+    await waitFor(() => expect(hrefs).toEqual(['/(tabs)/discover']));
   });
 
   /**
@@ -123,16 +263,16 @@ describe('Launch redirect', () => {
    * so Welcome and its "Skip login" link are out of reach: putting the same demand back in
    * front of them on every cold start walls a registered user out of a public catalogue.
    */
-  it('lets an account that already declined a step go straight to browsing', () => {
+  it('lets an account that already declined a step go straight to browsing after the ticket check', async () => {
     useAuthStore.setState({ status: 'signed-in', user: owesProfile(), setupDeferred: true });
     renderWithProviders(<Index />);
-    expect(hrefs).toEqual(['/(tabs)/discover']);
+    await waitFor(() => expect(hrefs).toEqual(['/(tabs)/discover']));
   });
 
   /** The deferral is spent once the step is done, and must not shadow a later redirect. */
-  it('stops honouring a deferral once the profile is finished', () => {
+  it('stops honouring a deferral once the profile is finished', async () => {
     useAuthStore.setState({ status: 'signed-in', user: user(), setupDeferred: true });
     renderWithProviders(<Index />);
-    expect(hrefs).toEqual(['/(tabs)/discover']);
+    await waitFor(() => expect(hrefs).toEqual(['/(tabs)/discover']));
   });
 });

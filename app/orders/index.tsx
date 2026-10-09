@@ -43,7 +43,7 @@ export default function OrdersScreen() {
             <Pressable
               key={order.id}
               accessibilityRole="button"
-              onPress={() => router.push({ pathname: '/orders/[id]', params: { id: order.id } })}
+              onPress={() => router.push(`/orders/${order.id}`)}
               style={({ pressed }) => [pressed && styles.pressed]}
             >
               <Card style={styles.card}>

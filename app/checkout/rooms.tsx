@@ -109,7 +109,7 @@ export default function RoomsScreen() {
         const who = attendee.attendeeType === 'buyer' ? 'you' : 'in this cart';
         return {
           key: attendee.cartAttendeeId,
-          target: { cartAttendeeId: attendee.cartAttendeeId } as CartAddonRecipient,
+          target: { cartAttendeeId: attendee.cartAttendeeId },
           name: attendee.name,
           note: tierName ? `${tierName} · ${who}` : who,
           hasAccommodation: false,
@@ -182,11 +182,7 @@ export default function RoomsScreen() {
         errorTitle="This checkout has expired"
         errorMessage="Start again from the event to pick your tickets and extras."
         retryLabel={validEventId ? 'Back to the event' : 'Find an event'}
-        onRetry={() =>
-          router.replace(
-            validEventId ? (`/event/${validEventId}` as never) : ('/(tabs)/discover' as never),
-          )
-        }
+        onRetry={() => router.replace(validEventId ? `/event/${validEventId}` : '/(tabs)/discover')}
       />
     </Screen>
   );
@@ -200,7 +196,10 @@ export default function RoomsScreen() {
         errorTitle="That room is no longer in your cart"
         errorMessage="Pick a room again from the extras step."
         retryLabel="Back to extras"
-        onRetry={() => router.replace(`/checkout/addons?eventId=${validEventId}` as never)}
+        onRetry={() => {
+          if (validEventId) router.replace(`/checkout/addons?eventId=${validEventId}`);
+          else router.replace('/(tabs)/discover');
+        }}
       />
     </Screen>
   );
@@ -334,11 +333,12 @@ export default function RoomsScreen() {
       return;
     }
 
-    router.push(`/checkout/review?eventId=${validEventId}` as never);
+    router.push(`/checkout/review?eventId=${validEventId}`);
   }
 
-  const singleRoom = roomLines.length === 1 && roomLines[0]!.quantity === 1;
-  const onlyOccupancy = roomLines.length === 1 ? occupancyOf(roomLines[0]!) : 0;
+  const firstRoomLine = roomLines.length === 1 ? roomLines[0] : undefined;
+  const singleRoom = firstRoomLine?.quantity === 1;
+  const onlyOccupancy = firstRoomLine ? occupancyOf(firstRoomLine) : 0;
   const shortfall = shortfallMessage();
 
   return (
