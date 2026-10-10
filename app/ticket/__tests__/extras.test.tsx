@@ -1,5 +1,5 @@
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src/api/mock';
-import { TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
+import { eventDetails, TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
 import { useAuthStore } from '../../../src/stores/auth';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import {
@@ -352,6 +352,44 @@ describe('22 Add extras to this ticket', () => {
     expect(pricing.ticketLines).toHaveLength(0);
     expect(pricing.addonsSubtotalEgp).toBe('340.00');
     expect(pricing.totalEgp).toBe('387.60');
+  });
+});
+
+describe('VAT-inclusive extras', () => {
+  afterEach(() => {
+    eventDetails[TULUA_ID]!.vatInclusive = false;
+  });
+
+  it('captions the catalogue once when the event prices include VAT', async () => {
+    eventDetails[TULUA_ID]!.vatInclusive = true;
+    await signInAndComplete();
+    await renderBrowse();
+
+    await waitFor(() => expect(screen.getAllByText('Prices include VAT')).toHaveLength(1));
+  });
+
+  it('shows no caption for an event that adds VAT at checkout', async () => {
+    await signInAndComplete();
+    await renderBrowse();
+
+    expect(screen.queryByText('Prices include VAT')).toBeNull();
+  });
+
+  it('reviews an inclusive basket with "Includes VAT" and no VAT row or amount', async () => {
+    eventDetails[TULUA_ID]!.vatInclusive = true;
+    await signInAndComplete();
+    await browseAndContinue(['Dinner voucher']);
+    await renderReview();
+
+    const pricing = await serverPricing();
+    expect(pricing.vatInclusive).toBe(true);
+    expect(pricing.totalEgp).toBe('340.00');
+
+    await waitFor(() => expect(screen.getByText('Includes VAT')).toBeTruthy());
+    expect(screen.getByText('Total')).toBeTruthy();
+    expect(screen.queryByText('VAT (14%)')).toBeNull();
+    expect(screen.queryByText(`${pricing.vatEgp} EGP`)).toBeNull();
+    expect(screen.getByText('Pay 340.00 EGP')).toBeTruthy();
   });
 });
 

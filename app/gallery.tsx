@@ -25,6 +25,7 @@ import {
 import { ConicRing } from '../src/components/ui/ConicRing';
 import { OtpInput } from '../src/components/ui/OtpInput';
 import { colors, palette, space } from '../src/theme/tokens';
+import { IncludesVatNote } from '../src/components/checkout/VatNotes';
 
 /**
  * Component gallery — every base component and token in one place, so a change to the design
@@ -142,6 +143,12 @@ export default function GalleryScreen() {
           <SummaryRow label="VAT (14%)" value="403.20 EGP" tone="muted" />
           <SummaryRow label="Promo · SUKUN10" value="−320.00 EGP" tone="positive" />
           <SummaryRow label="Total" value="3,283.20 EGP" emphasis />
+        </Card>
+        {/* An event whose prices include VAT: no VAT row and no amount, a note under the total. */}
+        <Card radiusSize={14} style={styles.card}>
+          <SummaryRow label="Full Weekend Pass × 2" value="3,200.00 EGP" />
+          <SummaryRow label="Total" value="3,200.00 EGP" emphasis />
+          <IncludesVatNote />
         </Card>
         <ListRow label="Privacy policy & terms" />
         <ListRow label="Delete account" tone="danger" />

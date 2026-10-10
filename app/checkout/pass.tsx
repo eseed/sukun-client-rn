@@ -14,6 +14,7 @@ import {
   Text,
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
+import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { track } from '../../src/lib/analytics';
 import { trackMetaAddTickets } from '../../src/lib/meta-events';
 import { messageForError } from '../../src/lib/errors';
@@ -190,6 +191,8 @@ export default function ChoosePassScreen() {
             </View>
           </SelectableCard>
         ))}
+        {/* Inclusive prices are the whole price, so the buyer is told nothing is added later. */}
+        <PricesIncludeVat event={event} />
       </View>
 
       <Text variant="eyebrow" style={styles.quantityLabel}>

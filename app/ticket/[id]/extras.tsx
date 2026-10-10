@@ -19,10 +19,12 @@ import {
 } from '../../../src/components/ui';
 import {
   useCartPreview,
+  useEvent,
   useReplaceCartAddons,
   useTicket,
   useTicketAddonContext,
 } from '../../../src/hooks/queries';
+import { PricesIncludeVat } from '../../../src/components/checkout/VatNotes';
 import { useOpenExtrasCart } from '../../../src/hooks/useTicketExtrasCart';
 import { describeOption, describePriceWindow, isAccommodation } from '../../../src/lib/addons';
 import { messageForError } from '../../../src/lib/errors';
@@ -56,6 +58,8 @@ export default function TicketExtrasScreen() {
   // A second call: `TicketAddonContext` carries ids only, and artboard 22 names the ticket being
   // added to. With several tickets in an account, nothing else on screen says which one this is.
   const ticketQuery = useTicket(ticketId);
+  // Only for whether the event's prices include VAT, which the extras context does not carry.
+  const eventQuery = useEvent(contextQuery.data?.eventId);
   // Never the draft as `POST carts` hands it back: one left with tickets in it would be priced
   // and placed with those tickets (see `useOpenExtrasCart`).
   const extrasCart = useOpenExtrasCart();
@@ -258,6 +262,8 @@ export default function TicketExtrasScreen() {
         </Card>
       ) : null}
 
+      <PricesIncludeVat event={eventQuery.data} style={styles.vatCaption} />
+
       {context.catalog.map((addon) => (
         <View key={addon.id} style={styles.group}>
           <Text variant="eyebrow" style={styles.sectionLabel}>
@@ -402,6 +408,7 @@ const styles = StyleSheet.create({
   ticketBody: { flex: 1, gap: space.s1, justifyContent: 'center' },
   ticketTier: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
   existing: { marginBottom: space.s4, gap: space.s1 },
+  vatCaption: { marginBottom: space.s4 },
   group: { marginBottom: space.s4 },
   sectionLabel: { marginBottom: space.s2 },
   optionBody: { flex: 1, gap: space.s1, marginLeft: space.s3 },

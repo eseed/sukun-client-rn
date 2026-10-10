@@ -6,6 +6,8 @@ import type { Area, CurrentUser, EventDetail, EventListItem, Ticket } from '../t
  */
 
 export const VAT_RATE = '0.14';
+/** The same rate as the public event endpoints send it: a percent, not a fraction. */
+export const VAT_PERCENT = '14.00';
 
 export const areas: Area[] = [
   // First, as the backend sorts it (sort_order 1, ahead of the launch list's 10). The answer for
@@ -165,6 +167,8 @@ export const eventDetails: Record<string, EventDetail> = {
     terms: 'Tickets are non-refundable and non-transferable.',
     cancellationPolicy: 'No refunds. Event may be rescheduled for weather.',
     vatEnabled: true,
+    vatInclusive: false,
+    vatRate: VAT_PERCENT,
     maxTicketsPerOrder: 6,
     salesOpenAt: '2026-06-01T09:00:00.000Z',
     salesCloseAt: '2026-10-22T21:00:00.000Z',
@@ -253,6 +257,8 @@ export const eventDetails: Record<string, EventDetail> = {
     terms: 'Tickets are non-refundable and non-transferable.',
     cancellationPolicy: 'No refunds.',
     vatEnabled: true,
+    vatInclusive: false,
+    vatRate: VAT_PERCENT,
     maxTicketsPerOrder: 4,
     salesOpenAt: '2026-07-01T09:00:00.000Z',
     salesCloseAt: '2026-08-09T15:00:00.000Z',
@@ -304,6 +310,8 @@ export const eventDetails: Record<string, EventDetail> = {
     terms: 'Tickets are non-refundable and non-transferable.',
     cancellationPolicy: 'No refunds.',
     vatEnabled: true,
+    vatInclusive: false,
+    vatRate: VAT_PERCENT,
     maxTicketsPerOrder: 4,
     salesOpenAt: '2026-07-15T09:00:00.000Z',
     salesCloseAt: '2026-09-04T21:00:00.000Z',

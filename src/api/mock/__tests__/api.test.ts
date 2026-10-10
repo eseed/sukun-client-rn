@@ -7,7 +7,14 @@ import {
   resetMockState,
   setMockLiveEvents,
 } from '..';
-import { SOUND_BATH_ID, TIER_DAY1, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../fixtures';
+import {
+  eventDetails,
+  SOUND_BATH_ID,
+  TIER_DAY1,
+  TIER_SOUND_GA,
+  TIER_WEEKEND,
+  TULUA_ID,
+} from '../fixtures';
 
 /** Drives the mock's clock so webhook timing can be asserted without sleeping. */
 let clock = Date.parse('2026-08-12T12:00:00.000Z');
@@ -217,6 +224,24 @@ describe('cart pricing', () => {
     expect(pricing.netEgp).toBe(subtractStrings(pricing.subtotalEgp!, pricing.discountEgp!));
     expect(pricing.totalEgp).toBe(addStrings(pricing.netEgp!, pricing.vatEgp!));
     expect(pricing.ticketsSubtotalEgp).toBe(pricing.subtotalEgp);
+  });
+
+  it('prices a VAT-inclusive event at the net, with the VAT read out of it', async () => {
+    eventDetails[SOUND_BATH_ID]!.vatInclusive = true;
+    try {
+      const { pricing } = await previewFor({
+        eventId: SOUND_BATH_ID,
+        items: [{ tierId: TIER_SOUND_GA, quantity: 1 }],
+      });
+
+      expect(pricing.vatInclusive).toBe(true);
+      expect(pricing.netEgp).toBe('450.00');
+      expect(pricing.totalEgp).toBe(pricing.netEgp);
+      // Informational: the part of the 450.00 that is tax, never added on top.
+      expect(pricing.vatEgp).toBe('55.26');
+    } finally {
+      eventDetails[SOUND_BATH_ID]!.vatInclusive = false;
+    }
   });
 
   it('separates ticket and addon subtotals', async () => {

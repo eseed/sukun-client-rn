@@ -28,8 +28,11 @@ const REFRESH_PATH = 'mobile/auth/refresh';
  *
  * - 2: claims a ticket an admin granted itself, on `app/claim.tsx`. Builds before it get granted
  *   tickets claimed for them when they load their tickets.
+ * - 3: shows a VAT-inclusive event's prices as inclusive (`vatInclusive`): no VAT row, an
+ *   "Includes VAT" note under the total. Builds before it get a VAT rate of 0 and no VAT amount on
+ *   inclusive orders, so they show no VAT row rather than adding it on top.
  */
-export const MOBILE_CLIENT_REVISION = 2;
+export const MOBILE_CLIENT_REVISION = 3;
 const CLIENT_REVISION_HEADER = 'X-Sukun-Client-Revision';
 
 interface RefreshResult {
