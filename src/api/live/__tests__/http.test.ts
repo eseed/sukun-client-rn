@@ -118,8 +118,9 @@ describe('live HTTP auth resilience', () => {
     await http.request('mobile/tickets/t-1/claim', { method: 'POST' });
 
     // Revision 2 claims granted tickets itself; without it the backend claims them for the app.
-    expect(http.MOBILE_CLIENT_REVISION).toBe(2);
-    expect(seen.map((headers) => headers['X-Sukun-Client-Revision'])).toEqual(['2', '2']);
+    // Revision 3 shows VAT-inclusive prices; without it the backend sends inclusive orders no VAT.
+    expect(http.MOBILE_CLIENT_REVISION).toBe(3);
+    expect(seen.map((headers) => headers['X-Sukun-Client-Revision'])).toEqual(['3', '3']);
   });
 
   it('does not set JSON content type for multipart uploads', async () => {

@@ -49,3 +49,15 @@ export function applyRate(base: string, rate: string): string {
   const scaledRate = parseInt(whole, 10) * scale + (frac ? parseInt(frac, 10) : 0);
   return toEgp(Math.round((toPiastres(base) * scaledRate) / scale));
 }
+
+/**
+ * The VAT already inside a VAT-inclusive amount, `gross × rate / (1 + rate)`, rounded half up to
+ * the piastre, as the server's `includedVatPiastres` does: 3,500.00 at 14% holds 429.82.
+ */
+export function includedVat(gross: string, rate: string): string {
+  const [whole = '0', frac = ''] = rate.trim().split('.');
+  const scale = 10 ** frac.length;
+  const scaledRate = parseInt(whole, 10) * scale + (frac ? parseInt(frac, 10) : 0);
+  const divisor = scale + scaledRate;
+  return toEgp(Math.floor((2 * toPiastres(gross) * scaledRate + divisor) / (2 * divisor)));
+}

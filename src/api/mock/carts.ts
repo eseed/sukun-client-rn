@@ -13,7 +13,15 @@ import type {
 } from '../types';
 import { addonForOption, findOption, snapshot } from './addons';
 import { addonScopedPromoOptionIds } from './addon-fixtures';
-import { applyRate, clampDiscount, multiply, subtract, sum, toPiastres } from './money';
+import {
+  applyRate,
+  clampDiscount,
+  includedVat,
+  multiply,
+  subtract,
+  sum,
+  toPiastres,
+} from './money';
 
 /**
  * The mock cart: draft state, advisory validation, and server-authoritative pricing.
@@ -305,6 +313,8 @@ export interface PricingContext {
   tierPrice: (tierId: string) => string;
   tierName: (tierId: string) => string;
   vatEnabled: boolean;
+  /** The event's prices already contain VAT: the total is the net, and VAT is read out of it. */
+  vatInclusive: boolean;
   vatRate: string;
   promo: {
     lookup: (code: string) => { discountEgp: string; tierIds?: string[] } | undefined;
@@ -313,7 +323,8 @@ export interface PricingContext {
 
 /**
  * Prices a cart the way the server does: lines, then the promo against only the subtotal it is
- * scoped to, then VAT on what is left, then the total.
+ * scoped to, then VAT on what is left, then the total. On a VAT-inclusive event the total is what is left,
+ * and the VAT is the part of it that is tax.
  */
 export function priceCart(cart: MockCart, context: PricingContext): CartPricing {
   const ticketLines: CartPricingLine[] = cart.items.map((item) => {
@@ -372,7 +383,12 @@ export function priceCart(cart: MockCart, context: PricingContext): CartPricing 
   const discountEgp = promoBreakdown?.discountEgp ?? '0.00';
   const netEgp = subtract(subtotalEgp, discountEgp);
   const vatRate = context.vatEnabled ? context.vatRate : '0.0000';
-  const vatEgp = context.vatEnabled ? applyRate(netEgp, context.vatRate) : '0.00';
+  const vatInclusive = context.vatEnabled && context.vatInclusive;
+  const vatEgp = !context.vatEnabled
+    ? '0.00'
+    : vatInclusive
+      ? includedVat(netEgp, context.vatRate)
+      : applyRate(netEgp, context.vatRate);
 
   return {
     status: 'complete',
@@ -386,7 +402,8 @@ export function priceCart(cart: MockCart, context: PricingContext): CartPricing 
     netEgp,
     vatRate,
     vatEgp,
-    totalEgp: sum([netEgp, vatEgp]),
+    vatInclusive,
+    totalEgp: vatInclusive ? netEgp : sum([netEgp, vatEgp]),
     pricingConfirmationToken: null,
   };
 }

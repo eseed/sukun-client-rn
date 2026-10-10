@@ -14,6 +14,7 @@ import {
   SummaryRow,
   Text,
 } from '../../../src/components/ui';
+import { IncludesVatNote } from '../../../src/components/checkout/VatNotes';
 import {
   useApplyCartPromo,
   useCart,
@@ -391,8 +392,9 @@ export default function TicketExtrasReviewScreen() {
             />
           ) : null}
 
-          {/* No VAT row at all when the event does not charge it. A 0.00 line reads like a bug. */}
-          {pricing.vatEgp && vatPercent > 0 ? (
+          {/* No VAT row at all when the event does not charge it. A 0.00 line reads like a bug.
+              Nor when its prices include VAT: the buyer is told so under the total, no amount. */}
+          {pricing.vatEgp && vatPercent > 0 && !pricing.vatInclusive ? (
             <SummaryRow
               label={`VAT (${vatPercent}%)`}
               value={formatEgp(pricing.vatEgp)}
@@ -403,6 +405,7 @@ export default function TicketExtrasReviewScreen() {
           {pricing.totalEgp ? (
             <SummaryRow label="Total" value={formatEgp(pricing.totalEgp)} emphasis />
           ) : null}
+          {pricing.totalEgp && pricing.vatInclusive ? <IncludesVatNote /> : null}
         </Card>
       ) : null}
 

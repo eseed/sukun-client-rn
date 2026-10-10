@@ -290,6 +290,13 @@ export interface EventDetail {
   terms: string | null;
   cancellationPolicy: string | null;
   vatEnabled: boolean;
+  /**
+   * The event's tier and extra prices already contain VAT, so checkout adds nothing on top and
+   * the VAT shown is the part of the total that is tax. Only meaningful with `vatEnabled`.
+   */
+  vatInclusive: boolean;
+  /** The event's VAT rate as a PERCENT string, e.g. `"14.00"`. Not the cart's `"0.1400"`. */
+  vatRate: string;
   maxTicketsPerOrder: number;
   salesOpenAt: string | null;
   salesCloseAt: string | null;
@@ -468,6 +475,11 @@ export interface OrderDetail {
   netEgp: string;
   vatRate: string;
   vatEgp: string;
+  /**
+   * Snapshotted per order. When true, `totalEgp` equals `netEgp` and `vatEgp` is the VAT already
+   * inside it, shown for information, never added. Absent means false, the additive display.
+   */
+  vatInclusive?: boolean;
   totalEgp: string;
   currency: string;
   holdExpiresAt: string;
@@ -923,6 +935,11 @@ export interface CartPricing {
   netEgp?: string;
   vatRate?: string;
   vatEgp?: string;
+  /**
+   * When true, `totalEgp` equals `netEgp` and `vatEgp` is the VAT already inside it, shown for
+   * information, never added. Absent means false, the additive display.
+   */
+  vatInclusive?: boolean;
   totalEgp?: string;
   /** Short-lived, roughly five minutes. Place Order needs the one from the preview shown. */
   pricingConfirmationToken: string | null;

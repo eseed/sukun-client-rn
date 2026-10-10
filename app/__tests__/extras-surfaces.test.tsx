@@ -1,5 +1,5 @@
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
-import { TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
+import { eventDetails, TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
 import type { OrderAddon, TicketAddon, TicketAddonStatus } from '../../src/api/types';
 import { useAuthStore } from '../../src/stores/auth';
 import { fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
@@ -56,6 +56,10 @@ beforeEach(() => {
   for (const key of Object.keys(mockParams)) delete mockParams[key];
   mockRouter.push.mockClear();
   useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
+});
+
+afterEach(() => {
+  eventDetails[TULUA_ID]!.vatInclusive = false;
 });
 
 afterAll(() => {
@@ -325,9 +329,30 @@ describe('19 · Order receipt', () => {
     expect(screen.getByText('Add-ons')).toBeTruthy();
     // The percentage comes off the order's own VAT rate, never out of the money.
     expect(screen.getByText('VAT (14%)')).toBeTruthy();
+    expect(screen.queryByText('Includes VAT')).toBeNull();
     expect(screen.getByText('Paid')).toBeTruthy();
     expect(screen.queryByText('Order details')).toBeNull();
     expect(screen.queryByText('Passes')).toBeNull();
+  });
+
+  /**
+   * An order from an event whose prices include VAT keeps that on the receipt, snapshotted on the
+   * order: the amount paid with an "Includes VAT" note, and no VAT row or VAT amount.
+   */
+  it('marks an inclusive order paid with "Includes VAT" and no VAT row', async () => {
+    eventDetails[TULUA_ID]!.vatInclusive = true;
+    await signInAndComplete();
+    const { order } = await buyTheDesignsExtras();
+    expect(order.vatInclusive).toBe(true);
+    expect(order.totalEgp).toBe(order.netEgp);
+    mockParams.id = order.id;
+
+    renderWithProviders(<OrderDetailScreen />);
+
+    await waitFor(() => expect(screen.getByText('Paid')).toBeTruthy());
+    expect(screen.getByText('Includes VAT')).toBeTruthy();
+    expect(screen.queryByText('VAT (14%)')).toBeNull();
+    expect(screen.queryByText(`${order.vatEgp} EGP`)).toBeNull();
   });
 
   it('shows each add-on line with its dates and who it was bought for', async () => {

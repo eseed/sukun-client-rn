@@ -26,6 +26,7 @@ import {
 } from '../../src/components/ui';
 import { useAddons, useEvent, usePublicEventSchedule } from '../../src/hooks/queries';
 import { AccommodationBox } from '../../src/components/events/AccommodationBox';
+import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
 import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
 import { availableStays, describeAddonKinds } from '../../src/lib/addons';
@@ -420,6 +421,7 @@ export default function EventDetailScreen() {
             <Text style={styles.barPrice}>
               {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
             </Text>
+            {event.priceFromEgp ? <PricesIncludeVat event={event} /> : null}
           </View>
         )}
         <Button

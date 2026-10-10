@@ -15,6 +15,7 @@ import {
   Text,
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
+import { IncludesVatNote } from '../../src/components/checkout/VatNotes';
 import { HoldTimer } from '../../src/components/checkout/HoldTimer';
 import {
   useApplyCartPromo,
@@ -475,8 +476,9 @@ export default function ReviewScreen() {
           />
         ) : null}
 
-        {/* No VAT row at all when the event does not charge it — a 0.00 line reads like a bug. */}
-        {pricing?.vatEgp && vatPercent > 0 ? (
+        {/* No VAT row at all when the event does not charge it — a 0.00 line reads like a bug.
+            Nor when its prices include VAT: the buyer is told so under the total, with no amount. */}
+        {pricing?.vatEgp && vatPercent > 0 && !pricing.vatInclusive ? (
           <SummaryRow
             label={`VAT (${vatPercent}%)`}
             value={formatEgp(pricing.vatEgp)}
@@ -487,6 +489,7 @@ export default function ReviewScreen() {
         {pricing?.totalEgp ? (
           <SummaryRow label="Total" value={formatEgp(pricing.totalEgp)} emphasis />
         ) : null}
+        {pricing?.totalEgp && pricing.vatInclusive ? <IncludesVatNote /> : null}
       </Card>
 
       {droppedPromo ? (

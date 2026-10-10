@@ -1,4 +1,13 @@
-import { applyRate, clampDiscount, multiply, subtract, sum, toEgp, toPiastres } from '../money';
+import {
+  applyRate,
+  clampDiscount,
+  includedVat,
+  multiply,
+  subtract,
+  sum,
+  toEgp,
+  toPiastres,
+} from '../money';
 
 /**
  * Money is handled as integer piastres so nothing ever rides on a float. These cases are the
@@ -33,5 +42,12 @@ describe('money', () => {
     expect(applyRate('650.00', '0.14')).toBe('91.00');
     // 0.145 → rounds up rather than truncating.
     expect(applyRate('1.00', '0.145')).toBe('0.15');
+  });
+
+  it('reads the VAT out of an inclusive amount, half up, as the server does', () => {
+    // The backend's own example: 3,500.00 at 14% holds 429.82.
+    expect(includedVat('3500.00', '0.14')).toBe('429.82');
+    expect(includedVat('450.00', '0.14')).toBe('55.26');
+    expect(includedVat('0.00', '0.14')).toBe('0.00');
   });
 });

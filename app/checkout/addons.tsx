@@ -12,7 +12,8 @@ import {
   Text,
 } from '../../src/components/ui';
 import { AddonCard, ADDON_TYPE_LABEL } from '../../src/components/checkout/AddonCard';
-import { useAddons } from '../../src/hooks/queries';
+import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
+import { useAddons, useEvent } from '../../src/hooks/queries';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
 import { messageForError } from '../../src/lib/errors';
@@ -40,6 +41,8 @@ export default function AddonsBrowseScreen() {
   const access = useCheckoutAccess();
   const steps = useCheckoutSteps(validEventId);
   const addonsQuery = useAddons(validEventId);
+  // Only for whether the event's prices include VAT, which the extras list itself does not carry.
+  const eventQuery = useEvent(validEventId);
   const picked = useCheckoutStore((s) => s.addons);
 
   // Answered before either loading guard: `useAddons` is disabled without an event id, and a
@@ -127,6 +130,7 @@ export default function AddonsBrowseScreen() {
       <Text style={styles.lead}>
         Extras are optional. You can skip this and just take the ticket.
       </Text>
+      <PricesIncludeVat event={eventQuery.data} style={styles.vatCaption} />
 
       {grouped.map((group) => (
         <View key={group.type} style={styles.group}>
@@ -180,6 +184,7 @@ const styles = StyleSheet.create({
   back: { marginBottom: space.s3 },
   heading: { marginTop: space.s2 },
   lead: { color: colors.textMuted, marginTop: space.s2, marginBottom: space.s4 },
+  vatCaption: { marginBottom: space.s4 },
   group: { marginBottom: space.s4 },
   groupLabel: { marginBottom: space.s2 },
   spacer: { flex: 1, minHeight: space.s4 },
