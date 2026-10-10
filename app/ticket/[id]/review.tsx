@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import {
   BackButton,
@@ -26,9 +26,10 @@ import {
   useTicket,
   useTicketAddonContext,
 } from '../../../src/hooks/queries';
+import { useCartNotEditableRecovery } from '../../../src/hooks/useCartNotEditableRecovery';
 import { usePaymobSheet } from '../../../src/hooks/usePaymobSheet';
 import { describeOption } from '../../../src/lib/addons';
-import { messageForError } from '../../../src/lib/errors';
+import { heldOrderIdFromError, messageForError } from '../../../src/lib/errors';
 import { formatEgp } from '../../../src/lib/format';
 import { track } from '../../../src/lib/analytics';
 import { trackMetaAddPaymentInfo, trackMetaInitiateCheckout } from '../../../src/lib/meta-events';
@@ -65,6 +66,7 @@ export default function TicketExtrasReviewScreen() {
   // The catalogue is the only thing that can say what a priced line's dates are: the pricing line
   // carries an option id, not a description.
   const contextQuery = useTicketAddonContext(ticketId);
+  const recoverFromCartNotEditable = useCartNotEditableRecovery(contextQuery.data?.eventId);
   const cartQuery = useCart(cartId ?? undefined);
   const preview = useCartPreview();
   const applyPromo = useApplyCartPromo();
@@ -82,12 +84,21 @@ export default function TicketExtrasReviewScreen() {
 
   const { mutateAsync: takePrice } = preview;
 
+  // The arrival price reads the recovery through a ref: it changes once the event id loads and
+  // again once an order is placed, and neither is a reason to price the cart a second time.
+  const recoverRef = useRef(recoverFromCartNotEditable);
+  useEffect(() => {
+    recoverRef.current = recoverFromCartNotEditable;
+  }, [recoverFromCartNotEditable]);
+
   useEffect(() => {
     if (!cartId) return;
     // Prices the cart on arrival. The result is read straight off the mutation rather than copied
     // into state: a second copy means the screen goes on showing the previous total while a new
     // one is being fetched, which is the one moment it must not do that.
-    takePrice(cartId).catch((err: unknown) => setError(messageForError(err)));
+    takePrice(cartId).catch((err: unknown) => {
+      if (!recoverRef.current(err)) setError(messageForError(err));
+    });
   }, [cartId, takePrice]);
 
   /**
@@ -251,7 +262,7 @@ export default function TicketExtrasReviewScreen() {
     try {
       await preview.mutateAsync(id);
     } catch (err) {
-      setError(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setError(messageForError(err));
     }
   }
 
@@ -267,7 +278,7 @@ export default function TicketExtrasReviewScreen() {
       await refresh(cartId);
     } catch (err) {
       track('promo_failed', { event_id: contextQuery.data?.eventId ?? '', promo_code: code });
-      setPromoError(promoRefusal(err, code));
+      if (!recoverFromCartNotEditable(err)) setPromoError(promoRefusal(err, code));
     }
   }
 
@@ -279,7 +290,7 @@ export default function TicketExtrasReviewScreen() {
       await removePromo.mutateAsync(cartId);
       await refresh(cartId);
     } catch (err) {
-      setPromoError(messageForError(err));
+      if (!recoverFromCartNotEditable(err)) setPromoError(messageForError(err));
     }
   }
 
@@ -336,6 +347,24 @@ export default function TicketExtrasReviewScreen() {
       if (code === 'CART_PRICING_CHANGED') {
         setRepriced(true);
         await refresh(cartId);
+        return;
+      }
+
+      if (recoverFromCartNotEditable(err)) return;
+
+      /**
+       * An unpaid order for this event already holds it, most often one whose card sheet was
+       * cancelled, so a second one is refused. The refusal names that order, and the payment
+       * screen is where it can be paid or cancelled, the same way out `app/checkout/review.tsx`
+       * gives. Reporting the conflict here left the buyer with nothing to tap.
+       */
+      const heldOrderId = heldOrderIdFromError(err);
+      if (heldOrderId) {
+        track('checkout_resumed_held_order', {
+          event_id: contextQuery.data?.eventId ?? '',
+          order_id: heldOrderId,
+        });
+        router.replace(`/checkout/payment?orderId=${heldOrderId}`);
         return;
       }
 

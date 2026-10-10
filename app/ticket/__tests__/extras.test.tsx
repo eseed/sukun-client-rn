@@ -135,6 +135,33 @@ async function renderReview() {
   await waitFor(() => expect(screen.getByText('Review & pay')).toBeTruthy());
 }
 
+/** Accepts the terms and taps Pay, once the server's price has made it live. */
+async function acceptTermsAndPay() {
+  await waitFor(() => expect(screen.getByText('Pay 387.60 EGP')).toBeTruthy());
+  fireEvent.press(
+    screen.getByText('I understand extras are non-refundable and are redeemed at the event.'),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Pay 387.60 EGP' })).not.toBeDisabled(),
+  );
+  fireEvent.press(screen.getByText('Pay 387.60 EGP'));
+}
+
+/**
+ * An unpaid ticket order for Tulua, placed through the api and never paid: what a cancelled card
+ * sheet leaves behind, holding the event until it is paid or its hold lapses.
+ */
+async function placeUnpaidTicketOrder() {
+  const cart = await mockApi.carts.create(TULUA_ID);
+  await mockApi.carts.replaceTickets(cart.id, {
+    buyerTierId: null,
+    items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+    guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+  });
+  const preview = await mockApi.carts.preview(cart.id);
+  return mockApi.carts.placeOrder(cart.id, preview.pricing.pricingConfirmationToken!);
+}
+
 beforeEach(() => {
   resetMockState();
   mockConfig.latencyMs = 0;
@@ -577,5 +604,66 @@ describe('23 Extras checkout', () => {
     );
 
     initiate.mockRestore();
+  });
+
+  /**
+   * An unpaid order for the event already holds it, so placing this one is refused with
+   * `CART_ACTIVE_ORDER_EXISTS`. The refusal names that order, and the buyer is sent to pay or
+   * cancel it, as the ticket checkout does, instead of being told about a conflict with nothing
+   * to tap.
+   */
+  it('sends the buyer to the unpaid order already holding the event', async () => {
+    await signInAndComplete();
+    const held = await placeUnpaidTicketOrder();
+
+    await browseAndContinue(['Dinner voucher']);
+    await renderReview();
+    await acceptTermsAndPay();
+
+    await waitFor(() =>
+      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${held.id}`),
+    );
+    expect(screen.queryByText('You already have an order in progress for this event.')).toBeNull();
+    expect(mockPaymob.presentPayVC!).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The cart closed between pricing and paying. With no order of its own to go to, the stale
+   * checkout is dropped and the buyer starts again from the event, as the ticket checkout does.
+   */
+  it('starts again from the event when the cart closes before Pay', async () => {
+    await signInAndComplete();
+    await browseAndContinue(['Dinner voucher']);
+    await renderReview();
+
+    const refuse = jest
+      .spyOn(mockApi.carts, 'placeOrder')
+      .mockRejectedValue(Object.assign(new Error('closed'), { code: 'CART_NOT_EDITABLE' }));
+
+    await acceptTermsAndPay();
+
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/event/${TULUA_ID}`));
+    expect(useCheckoutStore.getState().cartId).toBeNull();
+    expect(mockPaymob.presentPayVC!).not.toHaveBeenCalled();
+    refuse.mockRestore();
+  });
+
+  /** A promo edit on a cart closed elsewhere recovers the same way, rather than as a promo error. */
+  it('starts again from the event when a promo lands on a closed cart', async () => {
+    await signInAndComplete();
+    await browseAndContinue(['Dinner voucher']);
+    await renderReview();
+    await waitFor(() => expect(screen.getByText('387.60 EGP')).toBeTruthy());
+
+    await mockApi.carts.abandon(useCheckoutStore.getState().cartId!);
+
+    fireEvent.changeText(screen.getByLabelText('Promo code'), 'dinner50');
+    fireEvent.press(screen.getByText('Apply'));
+
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/event/${TULUA_ID}`));
+    expect(useCheckoutStore.getState().cartId).toBeNull();
+    expect(
+      screen.queryByText('This checkout is no longer available. Start again from the event.'),
+    ).toBeNull();
   });
 });
