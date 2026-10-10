@@ -1,6 +1,12 @@
 import { AppState } from 'react-native';
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
-import { SOUND_BATH_ID, TIER_SOUND_GA, TIER_WEEKEND, TULUA_ID } from '../../src/api/mock/fixtures';
+import {
+  eventDetails,
+  SOUND_BATH_ID,
+  TIER_SOUND_GA,
+  TIER_WEEKEND,
+  TULUA_ID,
+} from '../../src/api/mock/fixtures';
 import { missingProfileFields, resumeAfterOnboarding, useAuthStore } from '../../src/stores/auth';
 import { useFlagsStore } from '../../src/stores/flags';
 import { useCheckoutStore } from '../../src/stores/checkout';
@@ -150,6 +156,11 @@ beforeEach(() => {
   });
   useFlagsStore.setState({ status: 'ready', allowGuestBrowsing: true });
   useCheckoutStore.getState().reset();
+});
+
+// A test that switches an event to VAT-inclusive prices leaves the fixtures as it found them.
+afterEach(() => {
+  for (const event of Object.values(eventDetails)) event.vatInclusive = false;
 });
 
 interface CartCheckoutInput {
@@ -391,6 +402,18 @@ describe('07 Event detail', () => {
     expect(screen.getByText('From')).toBeTruthy();
     expect(screen.getByText('950.00 EGP')).toBeTruthy();
     expect(screen.getByText('Get tickets')).toBeTruthy();
+    // VAT is added at checkout for this event, so nothing claims the price includes it.
+    expect(screen.queryByText('Prices include VAT')).toBeNull();
+  });
+
+  it('says the from-price includes VAT when the event prices that way', async () => {
+    eventDetails[TULUA_ID]!.vatInclusive = true;
+    mockParams.slug = 'tulua';
+    await signInAndComplete();
+    renderWithProviders(<EventDetailScreen />);
+
+    await waitFor(() => expect(screen.getByText('950.00 EGP')).toBeTruthy());
+    expect(screen.getByText('Prices include VAT')).toBeTruthy();
   });
 });
 
@@ -424,6 +447,36 @@ describe('08 Choose your pass', () => {
     // 1,600 × 2 is the server's sum to make, and it has nothing to price yet.
     expect(screen.queryByText('3,200.00 EGP')).toBeNull();
     expect(screen.queryByText('Subtotal')).toBeNull();
+    expect(screen.queryByText('Prices include VAT')).toBeNull();
+  });
+
+  it('captions the tiers once when the event prices include VAT', async () => {
+    eventDetails[TULUA_ID]!.vatInclusive = true;
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+
+    await waitFor(() => expect(screen.getByText('Full Weekend Pass')).toBeTruthy());
+    expect(screen.getAllByText('Prices include VAT')).toHaveLength(1);
+  });
+
+  it('shows no caption when the event does not charge VAT at all', async () => {
+    eventDetails[TULUA_ID]!.vatInclusive = true;
+    eventDetails[TULUA_ID]!.vatEnabled = false;
+    try {
+      mockParams.eventId = TULUA_ID;
+      await signInAndComplete();
+      useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+      renderWithProviders(<ChoosePassScreen />);
+
+      await waitFor(() => expect(screen.getByText('Full Weekend Pass')).toBeTruthy());
+      expect(screen.queryByText('Prices include VAT')).toBeNull();
+    } finally {
+      eventDetails[TULUA_ID]!.vatEnabled = true;
+    }
   });
 });
 
@@ -1018,6 +1071,60 @@ describe('10 Review & pay', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue to payment' })).not.toBeDisabled(),
     );
+  });
+
+  /**
+   * An event whose prices include VAT is charged the prices it shows. The owner's call: the
+   * buyer is told the total includes VAT and nothing more, so there is no VAT row and no VAT
+   * amount anywhere, only a note under the server's total.
+   */
+  it('shows an inclusive total with an "Includes VAT" note and no VAT row or amount', async () => {
+    eventDetails[TULUA_ID]!.vatInclusive = true;
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(2);
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 2 }],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+      ],
+    });
+
+    renderWithProviders(<ReviewScreen />);
+
+    await waitFor(() => expect(screen.getByText('Full Weekend Pass × 2')).toBeTruthy());
+    expect(screen.getByText('Total')).toBeTruthy();
+    expect(screen.getByText('Includes VAT')).toBeTruthy();
+    // The ticket line, the subtotal and the total: the server charges exactly the prices shown.
+    expect(screen.getAllByText('3,200.00 EGP')).toHaveLength(3);
+    expect(screen.queryByText('VAT (14%)')).toBeNull();
+    // The server's informational VAT (392.98 inside 3,200.00) is never shown to the buyer.
+    expect(screen.queryByText('392.98 EGP')).toBeNull();
+    expect(screen.queryByText('3,648.00 EGP')).toBeNull();
+  });
+
+  it('keeps the additive VAT row and no inclusive note for an event that adds VAT', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+
+    renderWithProviders(<ReviewScreen />);
+
+    await waitFor(() => expect(screen.getByText('1,824.00 EGP')).toBeTruthy());
+    expect(screen.getByText('VAT (14%)')).toBeTruthy();
+    expect(screen.queryByText('Includes VAT')).toBeNull();
   });
 
   /**

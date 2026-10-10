@@ -14,7 +14,8 @@ import {
   Text,
 } from '../../../src/components/ui';
 import { ADDON_TYPE_LABEL } from '../../../src/components/checkout/AddonCard';
-import { useAddon } from '../../../src/hooks/queries';
+import { PricesIncludeVat } from '../../../src/components/checkout/VatNotes';
+import { useAddon, useEvent } from '../../../src/hooks/queries';
 import { useCheckoutAccess } from '../../../src/hooks/useCheckoutAccess';
 import { messageForError } from '../../../src/lib/errors';
 import { formatDate, formatEgp } from '../../../src/lib/format';
@@ -102,6 +103,8 @@ export default function AddonDetailScreen() {
 
   const access = useCheckoutAccess();
   const addonQuery = useAddon(validEventId, addonId);
+  // Only for whether the event's prices include VAT, which the extra itself does not carry.
+  const eventQuery = useEvent(validEventId);
   const addon = addonQuery.data;
 
   const picked = useCheckoutStore((s) => s.addons.find((line) => line.addonId === addonId));
@@ -273,6 +276,7 @@ export default function AddonDetailScreen() {
           {windowSentence}
         </Text>
       ) : null}
+      <PricesIncludeVat event={eventQuery.data} style={styles.window} />
 
       {accommodation ? (
         <>

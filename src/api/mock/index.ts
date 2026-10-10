@@ -90,6 +90,9 @@ import {
  *   net   = subtotal − discount
  *   vat   = net × vatRate
  *   total = net + vat
+ * or, on an event whose prices include VAT (`vatInclusive`):
+ *   vat   = net × vatRate / (1 + vatRate)
+ *   total = net
  */
 
 const OTP_CODE = '4242';
@@ -557,6 +560,7 @@ function pricingContext(cart: MockCart) {
     tierPrice: (tierId: string) => findTier(cart.eventId, tierId).priceEgp,
     tierName: (tierId: string) => findTier(cart.eventId, tierId).name,
     vatEnabled: event?.vatEnabled ?? true,
+    vatInclusive: event?.vatInclusive ?? false,
     vatRate: VAT_RATE,
     promo: { lookup: (code: string) => promoCodes[code] },
   };
@@ -1671,6 +1675,7 @@ export const mockApi: SukunApi = {
         netEgp: pricing.netEgp ?? '0.00',
         vatRate: pricing.vatRate ?? '0.0000',
         vatEgp: pricing.vatEgp ?? '0.00',
+        vatInclusive: pricing.vatInclusive ?? false,
         totalEgp: pricing.totalEgp ?? '0.00',
         currency: 'EGP',
         holdExpiresAt: iso(HOLD_MINUTES * 60 * 1000),

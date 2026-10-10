@@ -12,6 +12,7 @@ import {
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
 import { RoomSpotsPanel } from '../../src/components/tickets/RoomSpotsPanel';
+import { IncludesVatNote } from '../../src/components/checkout/VatNotes';
 import type { OrderAddon } from '../../src/api/types';
 import { useCancelOrder, useEvent, useOrder } from '../../src/hooks/queries';
 import { describeOrderAddonRecipients, ticketAddonStatusLabel } from '../../src/lib/addons';
@@ -196,8 +197,9 @@ export default function OrderDetailScreen() {
                     tone="positive"
                   />
                 ) : null}
-                {/* No VAT row when the event does not charge it: a 0.00 line reads like a bug. */}
-                {data.vatEgp !== '0.00' && vatPercent > 0 ? (
+                {/* No VAT row when the event does not charge it: a 0.00 line reads like a bug.
+                    Nor when the order's prices include VAT: a note under the total says so. */}
+                {data.vatEgp !== '0.00' && vatPercent > 0 && !data.vatInclusive ? (
                   <SummaryRow
                     label={`VAT (${vatPercent}%)`}
                     value={formatEgp(data.vatEgp)}
@@ -210,6 +212,7 @@ export default function OrderDetailScreen() {
                   value={formatEgp(data.totalEgp)}
                   emphasis
                 />
+                {data.vatInclusive ? <IncludesVatNote /> : null}
               </Card>
 
               {paid && data.addons.some((addon) => addon.room) ? (
