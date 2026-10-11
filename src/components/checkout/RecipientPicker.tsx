@@ -18,7 +18,7 @@ import { useCartNotEditableRecovery } from '../../hooks/useCartNotEditableRecove
 import { isSendableAddonLine } from '../../lib/addons';
 import { messageForCode, messageForError } from '../../lib/errors';
 import { formatPhoneLocal } from '../../lib/phone';
-import { useCheckoutStore } from '../../stores/checkout';
+import { personKey, ticketsInput, useCheckoutStore } from '../../stores/checkout';
 import { colors, space } from '../../theme/tokens';
 import {
   Badge,
@@ -443,6 +443,7 @@ export function useAddTicketToCart(eventId: string | undefined) {
   const quantity = useCheckoutStore((s) => s.quantity);
   const guests = useCheckoutStore((s) => s.guests);
   const buyerTakesTicket = useCheckoutStore((s) => s.buyerTakesTicket);
+  const otherTiers = useCheckoutStore((s) => s.otherTiers);
   const addons = useCheckoutStore((s) => s.addons);
   // Not `setQuantity`: that one clears the addon draft, which is the whole thing being protected
   // here. `addGuestSeat` buys the seat and keeps the extras.
@@ -473,10 +474,14 @@ export function useAddTicketToCart(eventId: string | undefined) {
     try {
       const verdict = await validateGuests.mutateAsync({
         eventId,
-        guests: nextGuests.map((guest) => ({ phoneNumber: guest.phoneNumber })),
+        // Children have no number to check.
+        guests: nextGuests
+          .filter((guest) => !guest.child)
+          .map((guest) => ({ phoneNumber: guest.phoneNumber })),
       });
       if (!verdict.valid) {
-        const mine = verdict.issues.find((issue) => issue.guestIndex === nextGuests.length - 1);
+        const adults = nextGuests.filter((guest) => !guest.child);
+        const mine = verdict.issues.find((issue) => issue.guestIndex === adults.length - 1);
         return {
           ticketAdded: false,
           problem: messageForCode(mine?.error ?? verdict.issues[0]?.error),
@@ -495,15 +500,12 @@ export function useAddTicketToCart(eventId: string | undefined) {
     try {
       refreshed = await replaceTickets.mutateAsync({
         cartId,
-        tickets: {
-          buyerTierId: buyerTakesTicket ? tierId : null,
-          items: [{ tierId, quantity: quantity + 1 }],
-          guests: nextGuests.map((guest) => ({
-            phoneNumber: guest.phoneNumber,
-            name: guest.name,
-            tierId,
-          })),
-        },
+        // The new guest on the main pass; every other pass and child as they were.
+        tickets: ticketsInput(
+          tierId,
+          { quantity: quantity + 1, guests: nextGuests, buyerTakesTicket },
+          otherTiers,
+        ),
       });
     } catch (err) {
       if (recoverFromCartNotEditable(err)) return { ticketAdded: false, problem: null };
@@ -564,8 +566,9 @@ export function reassignToRefreshedCart<T extends { assignments?: CartAddonAssig
   before: readonly CartAttendee[],
   after: readonly CartAttendee[],
 ): T[] {
-  const phoneOf = new Map(before.map((a) => [a.cartAttendeeId, a.phoneNumber]));
-  const idOf = new Map(after.map((a) => [a.phoneNumber, a.cartAttendeeId]));
+  // By number and name: a child has a name and no number.
+  const phoneOf = new Map(before.map((a) => [a.cartAttendeeId, personKey(a)]));
+  const idOf = new Map(after.map((a) => [personKey(a), a.cartAttendeeId]));
 
   function remap<R extends CartAddonRecipient>(target: R): R | null {
     if (target.cartAttendeeId === undefined) return target;
