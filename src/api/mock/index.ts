@@ -2,6 +2,7 @@ import { normalizePhone, requiresLivingArea } from '../../lib/phone';
 import { overlaps } from '../../lib/live-event';
 import type { SukunApi } from '../contract';
 import type {
+  GroupQuote,
   BuyerRoom,
   ClaimAvailability,
   PlusOneGuestStatus,
@@ -71,8 +72,10 @@ import {
 import {
   applyAddons,
   applyTickets,
+  groupStepReached,
   nextCartId,
   priceCart,
+  quoteGroup,
   promoNoLongerApplies,
   resetCartSequences,
   toCartResponse,
@@ -563,7 +566,88 @@ function pricingContext(cart: MockCart) {
     vatInclusive: event?.vatInclusive ?? false,
     vatRate: VAT_RATE,
     promo: { lookup: (code: string) => promoCodes[code] },
+    groupDiscounts: event?.groupDiscounts,
   };
+}
+
+/** The pass a cart line is on (`cart-item-<tierId>`). */
+function tierOfAttendee(cartTicketItemId: string, cart: MockCart): string {
+  return cartTicketItemId.replace(/^cart-item-/, '') || cart.items[0]?.tierId || '';
+}
+
+/** Each pass's price at every group size reaching a step, as the public event sends it. */
+function withGroupPrices(event: EventDetail): EventDetail {
+  if (!event.groupDiscounts?.length) return event;
+  return {
+    ...event,
+    tiers: event.tiers.map((tier) => ({
+      ...tier,
+      groupPrices: Array.from({ length: event.maxTicketsPerOrder }, (_, index) => index + 1)
+        .map((quantity) => ({
+          quantity,
+          quote: quoteGroup(
+            event.groupDiscounts,
+            [{ unitPriceEgp: tier.priceEgp, quantity }],
+            event.maxTicketsPerOrder,
+          ),
+        }))
+        .filter(({ quote }) => quote.percent !== null)
+        .map(({ quantity, quote }) => ({
+          quantity,
+          percent: quote.percent ?? '0.00',
+          subtotalEgp: quote.subtotalEgp,
+          discountEgp: quote.discountEgp,
+          ticketsTotalEgp: quote.ticketsTotalEgp,
+        })),
+    })),
+  };
+}
+
+/**
+ * The children of a tickets request, checked as the backend checks them: a children's pass, a
+ * name of their own, and exactly one adult to come with (the buyer's ticket here, an adult guest
+ * here, or a ticket the buyer holds).
+ */
+function assertChildren(cart: MockCart, input: ReplaceCartTicketsInput): void {
+  const names = new Set<string>();
+  for (const guest of input.guests) {
+    if (guest.child !== true) {
+      if (guest.guardianGuestIndex !== undefined || guest.guardianTicketId !== undefined) {
+        throw new MockApiError('CART_TICKET_ITEM_NOT_FOUND', 'Only a child comes with an adult.', 400);
+      }
+      continue;
+    }
+    const tier = findEvent(cart.eventId).tiers.find((candidate) => candidate.id === guest.tierId);
+    const name = guest.name.trim().toLowerCase();
+    const guardian =
+      guest.guardianGuestIndex !== undefined ? input.guests[guest.guardianGuestIndex] : null;
+    const guardians =
+      (guest.guardianGuestIndex !== undefined ? 1 : 0) + (guest.guardianTicketId ? 1 : 0);
+    const holdsGuardianTicket =
+      !guest.guardianTicketId ||
+      state.tickets.some(
+        (ticket) =>
+          ticket.id === guest.guardianTicketId &&
+          ticket.event.id === cart.eventId &&
+          ticket.status === 'active',
+      );
+    if (
+      !tier?.isChildren ||
+      !name ||
+      names.has(name) ||
+      guardians > 1 ||
+      (guest.guardianGuestIndex !== undefined && (!guardian || guardian.child === true)) ||
+      (guardians === 0 && !input.buyerTierId) ||
+      !holdsGuardianTicket
+    ) {
+      throw new MockApiError(
+        'CART_TICKET_ITEM_NOT_FOUND',
+        'Each child needs a name of their own and an adult to come with.',
+        400,
+      );
+    }
+    names.add(name);
+  }
 }
 
 /**
@@ -1252,7 +1336,22 @@ export const mockApi: SukunApi = {
     },
 
     async detail(identifier: string): Promise<EventDetail> {
-      return delay(findEvent(identifier));
+      return delay(withGroupPrices(findEvent(identifier)));
+    },
+
+    async groupQuote(
+      identifier: string,
+      items: { tierId: string; quantity: number }[],
+    ): Promise<GroupQuote> {
+      const event = findEvent(identifier);
+      const lines = items.map((item) => {
+        const tier = event.tiers.find((candidate) => candidate.id === item.tierId);
+        if (!tier || item.quantity < 1) {
+          throw new MockApiError('CART_TICKET_ITEM_NOT_FOUND', 'That pass is not on sale.', 400);
+        }
+        return { unitPriceEgp: tier.priceEgp, quantity: item.quantity };
+      });
+      return delay(quoteGroup(event.groupDiscounts, lines, event.maxTicketsPerOrder), 0.3);
     },
 
     async meta(identifier: string): Promise<EventMeta> {
@@ -1429,7 +1528,14 @@ export const mockApi: SukunApi = {
         );
       }
 
-      const guestCheck = await mockApi.orders.validateGuests(cart.eventId, input.guests);
+      assertChildren(cart, input);
+      // Children have no number: only adults are checked as guests.
+      const guestCheck = await mockApi.orders.validateGuests(
+        cart.eventId,
+        input.guests
+          .filter((guest) => guest.child !== true)
+          .map((guest) => ({ ...guest, phoneNumber: guest.phoneNumber ?? '' })),
+      );
       if (!guestCheck.valid) {
         throw new MockApiError(
           'GUEST_VALIDATION_FAILED',
@@ -1443,6 +1549,15 @@ export const mockApi: SukunApi = {
         phoneNumber: user.phoneNumber,
         email: user.email,
       });
+      // A group discount reached replaces the code, as the backend does, and says so.
+      if (cart.promoCode && groupStepReached(event.groupDiscounts, totalQuantity)) {
+        cart.promoAdjustment = {
+          removed: true,
+          reason: 'PROMO_REPLACED_BY_GROUP_DISCOUNT',
+          previousPromoCode: cart.promoCode,
+        };
+        cart.promoCode = null;
+      }
       detachPromoIfStranded(cart);
       return delay(toCartResponse(cart, validateCartHere(cart)), 0.8);
     },
@@ -1555,6 +1670,14 @@ export const mockApi: SukunApi = {
 
       if (!promoCodes[normalized]) {
         throw new MockApiError('PROMO_CODE_NOT_FOUND', 'That promo code is not valid.', 404);
+      }
+      const ticketCount = cart.items.reduce((total, item) => total + item.quantity, 0);
+      if (groupStepReached(findEvent(cart.eventId).groupDiscounts, ticketCount)) {
+        throw new MockApiError(
+          'PROMO_GROUP_DISCOUNT_APPLIES',
+          'A group discount already applies to this order.',
+          400,
+        );
       }
 
       cart.promoCode = normalized;
@@ -1690,12 +1813,21 @@ export const mockApi: SukunApi = {
           };
         }),
         guests: cart.attendees
-          .filter((attendee) => attendee.attendeeType === 'guest')
+          .filter((attendee) => attendee.attendeeType === 'guest' && !attendee.isChild)
           .map((attendee) => ({
-            phoneNumber: attendee.phoneNumber,
+            phoneNumber: attendee.phoneNumber ?? '',
             name: attendee.name,
-            tierId: cart.items[0]?.tierId ?? '',
+            tierId: tierOfAttendee(attendee.cartTicketItemId, cart),
           })),
+        children: cart.attendees
+          .filter((attendee) => attendee.isChild)
+          .map((attendee) => ({
+            name: attendee.name,
+            tierId: tierOfAttendee(attendee.cartTicketItemId, cart),
+          })),
+        groupDiscount: pricing.groupDiscount
+          ? { ...pricing.groupDiscount, nextTier: null }
+          : null,
         addons: cart.addons.map((line) => toOrderAddon(cart, line, pricing)),
       };
 
