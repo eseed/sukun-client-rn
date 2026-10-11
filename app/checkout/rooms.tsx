@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import {
   Badge,
   BackButton,
@@ -29,7 +29,9 @@ import { messageForError } from '../../src/lib/errors';
 import { formatDate, formatEgp } from '../../src/lib/format';
 import { formatPhoneLocal } from '../../src/lib/phone';
 import { useCheckoutStore, type DraftAddon } from '../../src/stores/checkout';
-import { colors, space } from '../../src/theme/tokens';
+import { colors, radius, space } from '../../src/theme/tokens';
+import { groupForRoom, peopleInOrder } from '../../src/lib/roommates';
+import { track } from '../../src/lib/analytics';
 import type { CartAddonInput, CartAddonRecipient, CartAttendee } from '../../src/api/types';
 
 /**
@@ -62,6 +64,8 @@ interface Person {
   name: string;
   note: string;
   hasAccommodation: boolean;
+  /** A child's guardian in this cart (their key): "Fill with my group" keeps them together. */
+  guardianKey?: string;
 }
 
 export default function RoomsScreen() {
@@ -104,15 +108,20 @@ export default function RoomsScreen() {
 
   const people: Person[] = useMemo(
     () => [
-      ...attendees.map((attendee) => {
+      // You first, then each adult with the children who come with them.
+      ...peopleInOrder(attendees).map((attendee) => {
         const tierName = tierNameFor(attendee);
-        const who = attendee.attendeeType === 'buyer' ? 'you' : 'in this cart';
+        const who =
+          attendee.attendeeType === 'buyer' ? 'you' : attendee.isChild ? 'child' : 'in this cart';
         return {
           key: attendee.cartAttendeeId,
           target: { cartAttendeeId: attendee.cartAttendeeId },
           name: attendee.name,
           note: tierName ? `${tierName} · ${who}` : who,
           hasAccommodation: false,
+          ...(attendee.guardianCartAttendeeId
+            ? { guardianKey: attendee.guardianCartAttendeeId }
+            : {}),
         };
       }),
       ...external,
@@ -255,6 +264,18 @@ export default function RoomsScreen() {
     setAddonRooms(line.optionId, next);
   }
 
+  /** "Fill with my group": the people given, in order, into the room's free places. */
+  function fill(line: DraftAddon, roomIndex: number, targets: CartAddonRecipient[]) {
+    const rooms = line.rooms ?? [];
+    setAddonRooms(
+      line.optionId,
+      rooms.map((room, index) =>
+        index === roomIndex ? { occupants: [...room.occupants, ...targets] } : room,
+      ),
+    );
+    track('rooms_filled_with_group', { event_id: validEventId ?? '', count: targets.length });
+  }
+
   // Somebody in every room is enough: roommates are optional and can be added after paying.
   const allPlaced =
     allResolved &&
@@ -364,6 +385,7 @@ export default function RoomsScreen() {
           placed={placed}
           onReport={report}
           onToggle={(roomIndex, target) => toggle(line, roomIndex, target)}
+          onFill={(roomIndex, targets) => fill(line, roomIndex, targets)}
         />
       ))}
 
@@ -413,6 +435,7 @@ function RoomLineCard({
   placed,
   onReport,
   onToggle,
+  onFill,
 }: {
   eventId: string;
   line: DraftAddon;
@@ -420,6 +443,7 @@ function RoomLineCard({
   placed: Set<string>;
   onReport: (optionId: string, facts: LineFacts) => void;
   onToggle: (roomIndex: number, target: CartAddonRecipient) => void;
+  onFill: (roomIndex: number, targets: CartAddonRecipient[]) => void;
 }) {
   const addonQuery = useAddon(eventId, line.addonId);
   const option = addonQuery.data?.options.find((item) => item.id === line.optionId);
@@ -477,6 +501,49 @@ function RoomLineCard({
 
           <PeopleHeading />
 
+          {(() => {
+            // Everyone who can still go in a room, as the rows below would let them.
+            const free = people.filter(
+              (person) =>
+                !placed.has(key(person.target)) &&
+                !person.hasAccommodation &&
+                !current.occupants.some((occupant) => key(occupant) === key(person.target)),
+            );
+            const space = occupancy - current.occupants.length;
+            if (occupancy < 2 || space < 1 || free.length < 1) return null;
+            const taking = groupForRoom(
+              free,
+              space,
+              current.occupants.map((occupant) => key(occupant)),
+            );
+            if (taking.length < 1) return null;
+            const title =
+              taking.length === free.length && current.occupants.length === 0
+                ? 'Fill with my group'
+                : `Add ${taking.length === 1 ? taking[0]!.name : `${taking.length} from my group`}`;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={title}
+                onPress={() =>
+                  onFill(
+                    roomIndex,
+                    taking.map((person) => person.target),
+                  )
+                }
+                style={({ pressed }) => [styles.fillGroup, pressed && styles.pressed]}
+              >
+                <Text style={styles.fillGroupTitle}>{title}</Text>
+                {/* One person is named in the title already. */}
+                {taking.length > 1 ? (
+                  <Text variant="metaSm" color={colors.groupOfferInk}>
+                    {taking.map((person) => person.name).join(', ')}
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })()}
+
           {people.map((person) => {
             const inThisRoom = current.occupants.some(
               (occupant) => key(occupant) === key(person.target),
@@ -533,4 +600,14 @@ const styles = StyleSheet.create({
   personName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
   spacer: { flex: 1, minHeight: space.s4 },
   rule: { marginBottom: space.s3 },
+  // The group discount's warm tone, so "my group" reads as the same idea.
+  fillGroup: {
+    borderRadius: radius.field,
+    backgroundColor: colors.groupOfferFrom,
+    paddingVertical: space.s3,
+    paddingHorizontal: space.s4,
+    gap: 2,
+  },
+  fillGroupTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  pressed: { opacity: 0.85 },
 });

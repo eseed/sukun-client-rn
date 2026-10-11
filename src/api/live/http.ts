@@ -31,8 +31,11 @@ const REFRESH_PATH = 'mobile/auth/refresh';
  * - 3: shows a VAT-inclusive event's prices as inclusive (`vatInclusive`): no VAT row, an
  *   "Includes VAT" note under the total. Builds before it get a VAT rate of 0 and no VAT amount on
  *   inclusive orders, so they show no VAT row rather than adding it on top.
+ * - 4: shows a group discount (`pricing.groupDiscount`) in place of a promo, and buys children's
+ *   passes (a name and a guardian, no number). Only carts opened by it are offered the event's
+ *   group discount; builds before it keep their promo field and price as before.
  */
-export const MOBILE_CLIENT_REVISION = 3;
+export const MOBILE_CLIENT_REVISION = 4;
 const CLIENT_REVISION_HEADER = 'X-Sukun-Client-Revision';
 
 interface RefreshResult {

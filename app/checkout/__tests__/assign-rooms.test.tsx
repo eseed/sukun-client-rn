@@ -1,6 +1,6 @@
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src/api/mock';
 import { ADDON_ACCOMMODATION, ADDON_MEALS } from '../../../src/api/mock/addon-fixtures';
-import { TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
+import { TIER_KIDS, TIER_WEEKEND, TULUA_ID } from '../../../src/api/mock/fixtures';
 import { useAuthStore } from '../../../src/stores/auth';
 import { useCheckoutStore, type DraftAddon } from '../../../src/stores/checkout';
 import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../../src/test-utils';
@@ -743,6 +743,52 @@ describe('13 Assign add-ons', () => {
 });
 
 describe('14 Room occupancy', () => {
+  it('fills a room with my group, you first and a child with the adult they come with', async () => {
+    await signInAsBuyer();
+    const cart = await mockApi.carts.create(TULUA_ID);
+    await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: TIER_WEEKEND,
+      items: [
+        { tierId: TIER_WEEKEND, quantity: 2 },
+        { tierId: TIER_KIDS, quantity: 1 },
+      ],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { name: 'Lina', tierId: TIER_KIDS, child: true, guardianGuestIndex: 0 },
+      ],
+    });
+    const store = useCheckoutStore.getState();
+    store.start(TULUA_ID, TIER_WEEKEND);
+    store.setBuyerTakesTicket(true);
+    store.setQuantity(2);
+    store.setOtherTierCount(TIER_KIDS, 1);
+    store.upsertAddon(lodgeDouble(2));
+    store.setCartId(cart.id);
+    mockParams.eventId = TULUA_ID;
+
+    renderWithProviders(<RoomsScreen />);
+
+    // You, then Nour, then the child who comes with Nour.
+    await waitFor(() => expect(screen.getAllByText('Kids Weekend Pass · child').length).toBe(2));
+    // Room 1 has room for you, but not for Nour and Lina together.
+    await act(async () => {
+      fireEvent.press(screen.getAllByLabelText('Add Yasmin El Sayed')[0]!);
+    });
+    expect(screen.getByText('1 of 2 assigned')).toBeTruthy();
+    // Room 2 takes Nour and Lina in one tap.
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Fill with my group'));
+    });
+    expect(screen.getByText('2 of 2 assigned')).toBeTruthy();
+    const rooms = useCheckoutStore.getState().addons[0]!.rooms!;
+    const attendees = (await mockApi.carts.get(cart.id)).attendees;
+    const idOf = (name: string) => attendees.find((one) => one.name === name)!.cartAttendeeId;
+    expect(rooms[1]!.occupants).toEqual([
+      { cartAttendeeId: idOf('Nour Hassan') },
+      { cartAttendeeId: idOf('Lina') },
+    ]);
+  });
+
   it('names the room, and lets the buyer on with the roommate left for later', async () => {
     await signInAsBuyer();
     await seedCheckout({

@@ -96,6 +96,7 @@ export const BREATH_ID = 'ev-breathwork';
 export const TIER_WEEKEND = 'tier-tulua-weekend';
 export const TIER_DAY1 = 'tier-tulua-day1';
 export const TIER_DAY2 = 'tier-tulua-day2';
+export const TIER_KIDS = 'tier-tulua-kids';
 export const TIER_SOUND_GA = 'tier-sound-ga';
 export const TIER_BREATH_GA = 'tier-breath-ga';
 
@@ -230,6 +231,28 @@ export const eventDetails: Record<string, EventDetail> = {
         quantityRemaining: 80,
         days: [{ id: 'day-tulua-2', dayDate: '2026-10-24', label: 'Day 2' }],
       },
+      {
+        id: TIER_KIDS,
+        name: 'Kids Weekend Pass',
+        description: 'Ages 4 to 12',
+        priceEgp: '600.00',
+        availabilityStatus: 'available',
+        isPurchasable: true,
+        available: 40,
+        quantityRemaining: 40,
+        days: [
+          { id: 'day-tulua-1', dayDate: '2026-10-23', label: 'Day 1' },
+          { id: 'day-tulua-2', dayDate: '2026-10-24', label: 'Day 2' },
+        ],
+        isChildren: true,
+      },
+    ],
+    // Group discounts (tickets only): 3 tickets 15% off, 4 tickets 20%, 5 or more 25%. They start
+    // at 3 so the suite's two-ticket orders keep their promo and their prices.
+    groupDiscounts: [
+      { minTickets: 3, percent: '15.00' },
+      { minTickets: 4, percent: '20.00' },
+      { minTickets: 5, percent: '25.00' },
     ],
     priceFromEgp: '950.00',
   },

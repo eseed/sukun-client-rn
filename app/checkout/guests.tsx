@@ -1,32 +1,27 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import type { CountryCode } from 'libphonenumber-js/mobile';
 import {
-  Avatar,
-  avatarColor,
   BackButton,
   BulletHeading,
   Button,
-  CheckCircle,
-  CountryPrefix,
-  CountrySheet,
   OptionSheet,
-  QuantityStepper,
+  PhoneField,
+  ResourceState,
   Screen,
-  SearchIcon,
+  SelectField,
   StepLabel,
   Text,
+  TextField,
 } from '../../src/components/ui';
-import {
-  canReadContacts,
-  useContacts,
-  type PhoneContact,
-  type PickedContact,
-} from '../../src/hooks/useContacts';
+import { GroupSavingNote } from '../../src/components/checkout/GroupDiscount';
+import { useContacts, type PickedContact } from '../../src/hooks/useContacts';
 import {
   useCart,
   useCreateCart,
   useEvent,
+  useGroupQuote,
   useReplaceCartAddons,
   useReplaceCartTickets,
   useValidateGuests,
@@ -38,400 +33,505 @@ import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRe
 import { track } from '../../src/lib/analytics';
 import { messageForCode, messageForError } from '../../src/lib/errors';
 import {
+  countryOf,
   DEFAULT_COUNTRY,
-  formatNationalInput,
   formatPhoneLocal,
+  nationalDigitsOf,
   normalizePhone,
   phoneErrorMessage,
   phoneProblem,
-  sanitizeNationalInput,
   toE164,
 } from '../../src/lib/phone';
-import type { CountryCode } from 'libphonenumber-js/mobile';
 import { useAuthStore } from '../../src/stores/auth';
-import { guestSlots, useCheckoutStore } from '../../src/stores/checkout';
-import { useHoldsTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
-import { colors, fontFamily } from '../../src/theme/tokens';
+import {
+  type DraftGuest,
+  guestSlots,
+  ticketsInput,
+  useCheckoutStore,
+} from '../../src/stores/checkout';
+import {
+  useHoldsTicketForEvent,
+  useOwnTicketForEvent,
+} from '../../src/hooks/useHoldsTicketForEvent';
+import { colors, fontFamily, radius, space } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
 
-/**
- * A long address book cannot all be rendered at once, and a picker that stutters is a picker
- * nobody gets through. Everything past this is reached by searching.
- */
-const MAX_VISIBLE_CONTACTS = 25;
+/** One ticket holder as typed: a name and a WhatsApp number. */
+interface PersonRow {
+  key: string;
+  name: string;
+  country: CountryCode;
+  national: string;
+  fromContacts: boolean;
+  /**
+   * A child's guardian, as "Comes with" offers it: `buyer`, `row:<key>` (an adult friend
+   * here) or `ticket:<id>` (the buyer's own ticket from before). Empty means the first offered.
+   */
+  guardian?: string;
+  /** The pass this friend's ticket is on, so rows keep the order they were added in. */
+  tierId?: string;
+}
+
+interface RowErrors {
+  name?: string;
+  phone?: string;
+}
+
+const BLANK_ROW: PersonRow = {
+  key: '',
+  name: '',
+  country: DEFAULT_COUNTRY,
+  national: '',
+  fromContacts: false,
+};
+
+let rowKey = 0;
+function newRow(seed?: Partial<PersonRow>): PersonRow {
+  rowKey += 1;
+  return {
+    key: `person-${rowKey}`,
+    name: '',
+    country: DEFAULT_COUNTRY,
+    national: '',
+    fromContacts: false,
+    ...seed,
+  };
+}
+
+/** A number already known (a draft guest, a contact) as the row's country and digits. */
+function rowFromNumber(phoneNumber: string, name: string, fromContacts: boolean): PersonRow {
+  return newRow({
+    name,
+    country: (countryOf(phoneNumber) as CountryCode | null) ?? DEFAULT_COUNTRY,
+    national: nationalDigitsOf(phoneNumber),
+    fromContacts,
+  });
+}
+
+/** The row's number in E.164, or null while it is not a valid one. */
+function e164Of(row: Pick<PersonRow, 'country' | 'national'>): string | null {
+  if (phoneProblem(row.national, row.country) !== null) return null;
+  return normalizePhone(toE164(row.national, row.country), row.country);
+}
+
+function nameProblem(name: string): string | undefined {
+  return name.trim().length >= 2 ? undefined : 'Enter their full name';
+}
+
+function phoneRowProblem(row: PersonRow): string | undefined {
+  const problem = phoneProblem(row.national, row.country);
+  if (problem === null) return undefined;
+  return problem === 'empty'
+    ? 'Enter their WhatsApp number'
+    : (phoneErrorMessage(row.national, row.country) ?? messageForCode('GUEST_PHONE_INVALID'));
+}
 
 /**
- * Design screen 09 · Checkout, guests.
+ * Design screen 09 · Checkout, "Who's coming?" (owner's call, 2026-10-11; the website's
+ * `GuestsPage`). Every ticket holder on one form: the buyer first ("You", read only), then a row
+ * per friend with a full name and a WhatsApp number, typed or filled from the phone's contacts.
+ * A child on a children's pass has a name and "Comes with" (an adult here, or the buyer's ticket
+ * from before), and no number: they come in on that adult's QR. Friends are added or taken off
+ * here, a ticket each. A buyer who already holds a ticket has no row: every ticket is a friend's.
  *
- * Guests are attached by phone number. A ticket may exist before its owner does — it binds
- * when that number registers (CLAUDE.md rule 2). Nothing on this screen reveals whether a
- * number already has an account: every contact row looks and behaves the same (rule 4).
- *
- * Two invariants keep this screen from ever dead-ending, because contacts permission has
- * more states than a yes/no:
- *
- *   1. Everyone already attached is drawn from the *draft*, never from the address book. A
- *      guest stays visible, and removable, whether contacts were later revoked, narrowed to
- *      a limited selection, or never read at all.
- *   2. Manual entry is always on screen. It needs no permission, so there is always a way
- *      forward no matter what the OS says.
+ * Continue checks the adults with the server (your own number, a friend who already has a
+ * ticket) and builds the cart. Nothing here reveals whether a number is registered (rule 4):
+ * every row looks and behaves the same.
  */
 export default function GuestsScreen() {
+  const { eventId } = useLocalSearchParams<{ eventId: string }>();
+  const validEventId =
+    typeof eventId === 'string' && /^[A-Za-z0-9_-]+$/.test(eventId) ? eventId : undefined;
+  // The form is laid out from whether the buyer already holds a ticket (their own row, or a
+  // friend's in its place), so it waits for that answer rather than rebuilding under the buyer.
+  const { isPending } = useHoldsTicketForEvent(validEventId ?? null);
+  if (isPending) {
+    return (
+      <Screen>
+        <ResourceState status="loading" loadingLabel="Loading who's coming..." />
+      </Screen>
+    );
+  }
+  return <GuestsForm />;
+}
+
+function GuestsForm() {
   const router = useRouter();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const validEventId =
     typeof eventId === 'string' && /^[A-Za-z0-9_-]+$/.test(eventId) ? eventId : undefined;
   const access = useCheckoutAccess();
 
-  const quantity = useCheckoutStore((s) => s.quantity);
   const tierId = useCheckoutStore((s) => s.tierId);
+  const quantity = useCheckoutStore((s) => s.quantity);
   const setQuantity = useCheckoutStore((s) => s.setQuantity);
-  const guests = useCheckoutStore((s) => s.guests);
-  const removeGuest = useCheckoutStore((s) => s.removeGuest);
-  const addGuest = useCheckoutStore((s) => s.addGuest);
-  // Their own number is theirs already, so it is never a guest. Catching it here beats a
-  // refusal from the server two screens later.
-  const buyerPhone = useAuthStore((s) => s.user?.phoneNumber ?? null);
-
-  const {
-    contacts,
-    access: contactsAccess,
-    loading: contactsLoading,
-    request: requestContacts,
-    pickContact,
-    openSettings,
-    canPickContact,
-  } = useContacts();
-  const validateGuests = useValidateGuests();
+  const draftGuests = useCheckoutStore((s) => s.guests);
+  const replaceGuests = useCheckoutStore((s) => s.replaceGuests);
+  const otherTiers = useCheckoutStore((s) => s.otherTiers);
+  const setOtherTierCount = useCheckoutStore((s) => s.setOtherTierCount);
+  const setBuyerTakesTicket = useCheckoutStore((s) => s.setBuyerTakesTicket);
   const cartId = useCheckoutStore((s) => s.cartId);
   const setCartId = useCheckoutStore((s) => s.setCartId);
-  const addons = useCheckoutStore((s) => s.addons);
   const setAddons = useCheckoutStore((s) => s.setAddons);
+  const user = useAuthStore((s) => s.user);
+  const buyerPhone = user?.phoneNumber ?? null;
+
+  const { pickContact, canPickContact } = useContacts();
+  const validateGuests = useValidateGuests();
   const cartQuery = useCart(cartId ?? undefined);
   const createCart = useCreateCart();
   const replaceTickets = useReplaceCartTickets();
   const replaceAddons = useReplaceCartAddons();
   const recoverFromCartNotEditable = useCartNotEditableRecovery(validEventId);
   const steps = useCheckoutSteps(validEventId);
+  const { data: event } = useEvent(validEventId);
 
-  const [manual, setManual] = useState('');
-  const [search, setSearch] = useState('');
-  // Sticky once they touch the stepper, so adding a ticket here does not hide the control
-  // that would take it back off. Arriving with more than one ticket leaves the screen as it was.
-  const [ticketsAdjusted, setTicketsAdjusted] = useState(false);
-  const [manualCountry, setManualCountry] = useState<CountryCode>(DEFAULT_COUNTRY);
-  const [countrySheetOpen, setCountrySheetOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Per-guest refusals from validation, keyed by number so they survive a re-order of the
-  // list and disappear the moment that guest is swapped out.
-  const [issues, setIssues] = useState<Record<string, string>>({});
-  // The person the OS picker handed back, held only while they are asked which of several
-  // numbers the ticket is for. One number needs no question and never lands here.
-  const [numberChoice, setNumberChoice] = useState<PickedContact | null>(null);
-
-  // Already holding a ticket for this event means none of these are yours, so every one of
-  // them is a guest slot rather than quantity minus your own.
+  // Already holding a ticket for this event means none of these are yours.
   const { holdsTicket, isPending: holdsTicketPending } = useHoldsTicketForEvent(
     validEventId ?? null,
   );
-  const setBuyerTakesTicket = useCheckoutStore((s) => s.setBuyerTakesTicket);
-
-  // The draft caps how many guests it will hold, so it needs the same answer this screen uses
-  // to count slots - otherwise it silently drops the guest attached to the buyer's own seat.
+  // A child can come with the buyer's ticket from before.
+  const ownTicket = useOwnTicketForEvent(validEventId ?? null);
+  const youTakeTicket = !holdsTicket;
   useEffect(() => {
-    if (!holdsTicketPending) setBuyerTakesTicket(!holdsTicket);
-  }, [holdsTicket, holdsTicketPending, setBuyerTakesTicket]);
+    if (!holdsTicketPending) setBuyerTakesTicket(youTakeTicket);
+  }, [holdsTicketPending, setBuyerTakesTicket, youTakeTicket]);
 
-  // Worth knowing which permission state buyers actually land in, since this is the step that
-  // strands them. The status only, never a name or a number (CLAUDE.md, analytics).
-  const reportedAccess = useRef<string | null>(null);
-  useEffect(() => {
-    if (contactsAccess === 'unasked' || reportedAccess.current === contactsAccess) return;
-    reportedAccess.current = contactsAccess;
-    track('contacts_access', { access: contactsAccess, contact_count: contacts.length });
-  }, [contactsAccess, contacts.length]);
-
-  const slots = guestSlots(quantity, !holdsTicket);
-  const picked = guests.length;
-  const full = picked >= slots;
-
-  // The same ceiling step 1 enforces: the event's per-order cap, and what the tier has left.
-  // Until the event loads there is no ceiling to trust, so the stepper cannot go up.
-  const { data: event } = useEvent(validEventId);
-  const tier = event?.tiers.find((item) => item.id === tierId);
-  const quantityLimit = event
-    ? Math.min(event.maxTicketsPerOrder, tier?.quantityRemaining ?? event.maxTicketsPerOrder)
-    : quantity;
-  // Every slot is spoken for, so the only way to bring one more person is one more ticket.
-  // Offering it here saves a trip back to step 1.
-  const showTicketPicker = slots === 0 || ticketsAdjusted || (full && !holdsTicket);
-
-  const selectedNumbers = useMemo(() => new Set(guests.map((g) => g.phoneNumber)), [guests]);
-
-  /**
-   * The attached guests, straight from the draft. Deliberately not derived from `contacts`:
-   * that is what used to make a guest unremovable once the address book went away.
-   */
-  const attached: PhoneContact[] = useMemo(
-    () =>
-      guests.map((guest) => ({
-        id: `guest:${guest.phoneNumber}`,
-        name: guest.name,
-        phoneNumber: guest.phoneNumber,
-      })),
-    [guests],
+  const slots = guestSlots(quantity, youTakeTicket);
+  // Which pass each friend's ticket is on: the main pass's first (beyond the buyer's own), then
+  // every other pass's in the event's order (owner's call 2026-10-11: groups can mix passes).
+  const othersCount = Object.values(otherTiers).reduce((sum, count) => sum + count, 0);
+  const mainFriendSlots = Math.max(0, quantity - othersCount - (youTakeTicket ? 1 : 0));
+  const orderedOthers = Object.entries(otherTiers).sort(
+    ([left], [right]) =>
+      (event?.tiers.findIndex((tier) => tier.id === left) ?? 0) -
+      (event?.tiers.findIndex((tier) => tier.id === right) ?? 0),
   );
+  const passOrderTiers: string[] = [
+    ...Array.from({ length: mainFriendSlots }, () => tierId ?? ''),
+    ...orderedOthers.flatMap(([id, count]) => Array.from({ length: count }, () => id)),
+  ].slice(0, slots);
+  const mixed = orderedOthers.length > 0;
+  // Mixed passes are priced by the server as a whole for the saving note.
+  const mixedQuote = useGroupQuote(
+    validEventId,
+    mixed && tierId
+      ? [
+          ...(quantity - othersCount > 0 ? [{ tierId, quantity: quantity - othersCount }] : []),
+          ...orderedOthers.map(([id, count]) => ({ tierId: id, quantity: count })),
+        ]
+      : null,
+  );
+  const tierOf = (id: string) => event?.tiers.find((tier) => tier.id === id);
 
-  /** Contacts not yet attached, narrowed by the search box. */
-  const suggestions: PhoneContact[] = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const digits = query.replace(/\D/g, '');
-
-    const available = contacts.filter(
-      (contact) => !selectedNumbers.has(contact.phoneNumber) && contact.phoneNumber !== buyerPhone,
-    );
-
-    if (!query) return available;
-    return available.filter(
-      (contact) =>
-        contact.name.toLowerCase().includes(query) ||
-        (digits.length > 0 && contact.phoneNumber.includes(digits)),
-    );
-  }, [buyerPhone, contacts, search, selectedNumbers]);
-
-  const visible = suggestions.slice(0, MAX_VISIBLE_CONTACTS);
-  const hidden = suggestions.length - visible.length;
-
-  /**
-   * Under limited access the list above holds only the handful of people already shared, so
-   * everything it says about what it did not find has to be read in that light.
-   */
-  const sharedSubsetOnly = contactsAccess === 'limited';
-
-  /** Any change to who is attached invalidates the last verdict from the server. */
-  function clearVerdict() {
-    setError(null);
-  }
-
-  function onAttach(contact: PhoneContact) {
-    clearVerdict();
-    if (full) {
-      setError(
-        `You have ${slots} guest ${slots === 1 ? 'slot' : 'slots'} on this order. Remove someone first, or add a ticket.`,
-      );
-      return;
+  // The draft's friends, each back in a slot on their own pass.
+  const [friends, setFriends] = useState<PersonRow[]>(() => {
+    const unused = [...draftGuests];
+    const rows: PersonRow[] = [];
+    for (const [index, slotTier] of passOrderTiers.entries()) {
+      const at = unused.findIndex((guest) => (guest.tierId ?? tierId) === slotTier);
+      const guest = at >= 0 ? unused.splice(at, 1)[0] : undefined;
+      const row = guest
+        ? guest.child
+          ? {
+              ...BLANK_ROW,
+              key: `friend-slot-${index}`,
+              name: guest.name,
+              guardian: guest.guardian ?? '',
+            }
+          : rowFromNumber(guest.phoneNumber, guest.name, guest.fromContacts)
+        : { ...BLANK_ROW, key: `friend-slot-${index}` };
+      rows.push({ ...row, tierId: slotTier });
     }
-    if (contact.phoneNumber === buyerPhone) {
-      setError(messageForCode('GUEST_IS_BUYER'));
-      return;
-    }
-    addGuest({ phoneNumber: contact.phoneNumber, name: contact.name, fromContacts: true });
-    setSearch('');
-  }
-
-  function onRemove(phoneNumber: string) {
-    clearVerdict();
-    setIssues(({ [phoneNumber]: _removed, ...rest }) => rest);
-    removeGuest(phoneNumber);
-  }
-
-  function onAddManual() {
-    clearVerdict();
-    // Judged against the country the picker is showing, not against Egypt: a number that is
-    // perfectly good in Germany is not a typo, and the message says what is actually wrong.
-    const problem = phoneProblem(manual, manualCountry);
-    if (problem !== null) {
-      setError(
-        problem === 'empty'
-          ? 'Enter their mobile number.'
-          : (phoneErrorMessage(manual, manualCountry) ?? messageForCode('GUEST_PHONE_INVALID')),
-      );
-      return;
-    }
-    const e164 = normalizePhone(toE164(manual, manualCountry), manualCountry);
-    if (!e164) {
-      setError(messageForCode('GUEST_PHONE_INVALID'));
-      return;
-    }
-    if (e164 === buyerPhone) {
-      setError(messageForCode('GUEST_IS_BUYER'));
-      return;
-    }
-    if (selectedNumbers.has(e164)) {
-      setError(messageForCode('GUEST_DUPLICATE'));
-      return;
-    }
-    if (full) {
-      setError(
-        `You have ${slots} guest ${slots === 1 ? 'slot' : 'slots'} on this order. Remove someone first, or add a ticket.`,
-      );
-      return;
-    }
-    // A number typed by hand may well be in the address book too; keep that name if it is.
-    const known = contacts.find((contact) => contact.phoneNumber === e164);
-    addGuest({
-      phoneNumber: e164,
-      name: known?.name ?? formatPhoneLocal(e164),
-      fromContacts: Boolean(known),
+    // A child's guardian is kept by row here, so it follows the friend while their number is edited.
+    return rows.map((row) => {
+      if (!row.guardian?.startsWith('phone:')) return row;
+      const number = row.guardian.slice('phone:'.length);
+      const adult = rows.find((other) => !other.guardian && e164Of(other) === number);
+      return { ...row, guardian: adult ? `row:${adult.key}` : '' };
     });
-    setManual('');
+  });
+  // One row per friend's ticket: rows nobody has typed in yet are blank, made when first edited.
+  const shownFriends = Array.from(
+    { length: slots },
+    (_, index) => friends[index] ?? { ...BLANK_ROW, key: `friend-slot-${index}` },
+  );
+  // Which pass each row is on: its own while that pass still has the ticket, else whatever is
+  // left, in pass order. A friend added here goes last instead of among their pass's rows.
+  const slotTiers: string[] = (() => {
+    const left = [...passOrderTiers];
+    const taken = shownFriends.map((row) => {
+      const at = row.tierId === undefined ? -1 : left.indexOf(row.tierId);
+      return at >= 0 ? left.splice(at, 1)[0]! : null;
+    });
+    return taken.map((tier) => tier ?? left.shift() ?? '');
+  })();
+
+  const [errors, setErrors] = useState<Record<string, RowErrors>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  // The server's refusals, by number, so they follow the person if the rows move.
+  const [serverIssues, setServerIssues] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [numberChoice, setNumberChoice] = useState<{
+    rowKey: string;
+    contact: PickedContact;
+  } | null>(null);
+
+  const tier = event?.tiers.find((item) => item.id === tierId);
+  // The order's cap, and what the main pass has left beside the other passes' tickets.
+  const quantityLimit = event
+    ? Math.min(
+        event.maxTicketsPerOrder,
+        othersCount + (tier?.quantityRemaining ?? event.maxTicketsPerOrder),
+      )
+    : quantity;
+  // At least one ticket: the buyer's own, or one for a friend once they hold a ticket.
+  const minQuantity = 1;
+
+  if (access.loading || access.blocked)
+    return (
+      <Screen>
+        <View />
+      </Screen>
+    );
+
+  if (!validEventId || !tierId) {
+    return (
+      <Screen contentStyle={styles.content}>
+        <BackButton onPress={() => router.back()} style={styles.back} />
+        <Text variant="titleSm">Checkout link is incomplete</Text>
+        <Text variant="bodyMuted" style={styles.blurb}>
+          Go back and choose an event again.
+        </Text>
+      </Screen>
+    );
+  }
+  const checkoutEventId = validEventId;
+  const mainTierId = tierId;
+
+  function updateFriend(key: string, change: Partial<PersonRow>) {
+    const index = shownFriends.findIndex((row) => row.key === key);
+    if (index < 0) return;
+    setFormError(null);
+    setFriends((rows) => {
+      const next = [...rows];
+      // Keyed as the blank row was, so the field being typed in keeps its focus.
+      while (next.length <= index) next.push({ ...BLANK_ROW, key: `friend-slot-${next.length}` });
+      next[index] = { ...next[index]!, ...change };
+      return next;
+    });
+    setErrors(({ [key]: _cleared, ...rest }) => rest);
   }
 
-  /**
-   * Attaches somebody the OS picker handed over. They are not in `contacts` and never will
-   * be: the picker grants no access, it just passes on the one person who was tapped. So the
-   * guards the list gets for free (already attached, already yours) are applied here instead.
-   */
-  function attachPicked(name: string, phoneNumber: string) {
-    if (phoneNumber === buyerPhone) {
-      setError(messageForCode('GUEST_IS_BUYER'));
-      return;
-    }
-    if (selectedNumbers.has(phoneNumber)) {
-      setError(messageForCode('GUEST_DUPLICATE'));
-      return;
-    }
-    if (full) {
-      setError(
-        `You have ${slots} guest ${slots === 1 ? 'slot' : 'slots'} on this order. Remove someone first, or add a ticket.`,
-      );
-      return;
-    }
-    addGuest({ phoneNumber, name: name || formatPhoneLocal(phoneNumber), fromContacts: true });
-    setSearch('');
+  function addFriend() {
+    if (quantity >= quantityLimit) return;
+    setFormError(null);
+    // A friend on the main pass, at the bottom where the button is.
+    setFriends([
+      ...shownFriends.map((row, index) => ({ ...row, tierId: slotTiers[index] })),
+      newRow({ tierId: mainTierId }),
+    ]);
+    setQuantity(quantity + 1);
   }
 
-  /**
-   * The OS picker: the whole address book, one person back. iOS needs no permission for it;
-   * Android needs READ_CONTACTS to read the choice back and asks for it before opening.
-   *
-   * A dismissal is an answer, not a fault, so it says nothing. Everything else does, because
-   * a sheet that closes leaving no guest and no reason reads as a broken screen.
-   */
-  async function onPickContact() {
-    clearVerdict();
+  function removeFriend(key: string) {
+    if (quantity <= minQuantity) return;
+    setFormError(null);
+    const index = shownFriends.findIndex((row) => row.key === key);
+    const slotTier = slotTiers[index];
+    setFriends((rows) => rows.filter((_, rowIndex) => rowIndex !== index));
+    // The rows below move up a place, so their messages would point at the wrong person.
+    setErrors({});
+    // Their ticket comes off their own pass.
+    if (slotTier && slotTier !== mainTierId)
+      setOtherTierCount(slotTier, (otherTiers[slotTier] ?? 1) - 1);
+    else setQuantity(quantity - 1);
+  }
+
+  /** Fills a friend's row from the phone's contacts (the OS picker: one person, no list). */
+  async function fillFromContacts(key: string) {
     const result = await pickContact();
-
     if (result.status === 'cancelled') return;
-    if (result.status === 'failed') {
-      setError("We couldn't open your contacts. Add their number below instead.");
+    if (result.status === 'no-number') {
+      setFormError(`${result.name || 'That contact'} has no mobile number saved. Type it instead.`);
       return;
     }
     if (result.status === 'no-permission') {
-      setError(
+      setFormError(
         result.canAskAgain
-          ? 'Sukun needs access to your contacts to open your address book. Add their number below instead.'
-          : 'Contacts access is turned off for Sukun. Turn it on in Settings, or add their number below.',
+          ? 'Sukun needs access to your contacts to open your address book. Type their details instead.'
+          : 'Contacts access is turned off for Sukun. Turn it on in Settings, or type their details.',
       );
       return;
     }
-    if (result.status === 'no-number') {
-      setError(
-        `${result.name || 'That contact'} has no mobile number saved. Add their number below instead.`,
-      );
+    if (result.status !== 'picked') {
+      setFormError("We couldn't open your contacts. Type their details instead.");
       return;
     }
+    const only = result.contact.numbers.length === 1 ? result.contact.numbers[0] : undefined;
+    if (only) {
+      const row = rowFromNumber(only, result.contact.name, true);
+      updateFriend(key, {
+        name: row.name,
+        country: row.country,
+        national: row.national,
+        fromContacts: true,
+      });
+    } else {
+      // A ticket binds to exactly one number, so several are a question worth asking.
+      setNumberChoice({ rowKey: key, contact: result.contact });
+    }
+  }
 
-    const { contact } = result;
-    const only = contact.numbers.length === 1 ? contact.numbers[0] : undefined;
-    // One number is not a question worth asking. Several is: a ticket binds to exactly one,
-    // and picking the wrong one hands the ticket to a landline.
-    if (only) attachPicked(contact.name, only);
-    else setNumberChoice(contact);
+  function isChildSlot(index: number): boolean {
+    return Boolean(tierOf(slotTiers[index] ?? '')?.isChildren);
+  }
+
+  /**
+   * Who a child can come with (owner's call, 2026-10-11): the buyer's own ticket here, an adult
+   * friend here (once they have a name or number), or the buyer's ticket from before.
+   */
+  function guardianOptions(): { value: string; label: string }[] {
+    const options: { value: string; label: string }[] = [];
+    if (youTakeTicket) options.push({ value: 'buyer', label: 'You' });
+    else if (ownTicket) options.push({ value: `ticket:${ownTicket.id}`, label: 'You' });
+    shownFriends.forEach((row, index) => {
+      if (isChildSlot(index)) return;
+      const number = e164Of(row);
+      const label = row.name.trim() || (number ? formatPhoneLocal(number) : '');
+      if (!label) return;
+      options.push({ value: `row:${row.key}`, label });
+    });
+    return options;
+  }
+
+  /** The draft keeps a friend guardian by number (`phone:<E.164>`), as the cart is built. */
+  function draftGuardian(value: string): string {
+    if (!value.startsWith('row:')) return value;
+    const adult = shownFriends.find((row) => row.key === value.slice('row:'.length));
+    const number = adult ? e164Of(adult) : null;
+    return number ? `phone:${number}` : 'buyer';
+  }
+
+  /** A child's guardian as chosen, or the first one offered. */
+  function guardianOf(row: PersonRow, options: { value: string }[]): string | null {
+    const chosen = row.guardian ? options.find((option) => option.value === row.guardian) : null;
+    return (chosen ?? options[0])?.value ?? null;
+  }
+
+  /** Everything wrong on the form, row by row, or nothing. */
+  function check(): Record<string, RowErrors> {
+    const found: Record<string, RowErrors> = {};
+    const seen = new Set<string>();
+    const childNames = new Set<string>();
+    const options = guardianOptions();
+    for (const [index, row] of shownFriends.entries()) {
+      if (isChildSlot(index)) {
+        // A child: a name (one per child) and someone to come with, no number.
+        let name = nameProblem(row.name);
+        const key = row.name.trim().toLowerCase();
+        if (!name && childNames.has(key)) name = 'Two children have this name. Add a surname.';
+        childNames.add(key);
+        const phone = guardianOf(row, options) ? undefined : 'Add an adult for them to come with';
+        if (name || phone) found[row.key] = { name, phone };
+        continue;
+      }
+      const name = nameProblem(row.name);
+      let phone = phoneRowProblem(row);
+      const number = e164Of(row);
+      if (!phone && number) {
+        if (number === buyerPhone) phone = messageForCode('GUEST_IS_BUYER');
+        else if (seen.has(number)) phone = messageForCode('GUEST_DUPLICATE');
+        seen.add(number);
+      }
+      if (name || phone) found[row.key] = { name, phone };
+    }
+    return found;
   }
 
   async function onContinue() {
-    clearVerdict();
-    if (!validEventId) {
-      setError('This checkout link is incomplete. Go back and choose an event again.');
+    setFormError(null);
+    setServerIssues({});
+    const found = check();
+    setErrors(found);
+    if (Object.keys(found).length > 0) {
+      setFormError('Fill in a full name and WhatsApp number for everyone.');
       return;
     }
 
-    // Every ticket that is not the buyer's own belongs to someone, and the order api refuses
-    // an allocation that does not add up. Holding it here keeps that refusal from landing on
-    // the review screen, a step too late to pick anybody.
-    if (guests.length < slots) {
-      setError(
-        holdsTicket
-          ? slots === 1
-            ? 'You already have a ticket for this event, so this one is for a guest. Pick who it is for.'
-            : `You already have a ticket for this event, so every ticket here is a guest's. Pick ${slots}.`
-          : `Attach a guest to each ticket beyond your own. ${picked} of ${slots} picked.`,
-      );
-      return;
-    }
+    const options = guardianOptions();
+    const nextGuests: DraftGuest[] = shownFriends.map((row, index) => {
+      const slotTier = slotTiers[index];
+      const onPass = slotTier && slotTier !== mainTierId ? { tierId: slotTier } : {};
+      if (isChildSlot(index)) {
+        return {
+          phoneNumber: '',
+          name: row.name.trim(),
+          fromContacts: false,
+          child: true,
+          guardian: draftGuardian(guardianOf(row, options) ?? 'buyer'),
+          ...onPass,
+        };
+      }
+      return {
+        phoneNumber: e164Of(row)!,
+        name: row.name.trim(),
+        fromContacts: row.fromContacts,
+        ...onPass,
+      };
+    });
+    replaceGuests(nextGuests);
 
-    if (guests.length > 0) {
-      try {
+    // Children have no number to check; the server checks their guardian with the cart.
+    const adults = nextGuests.filter((guest) => !guest.child);
+    setSaving(true);
+    try {
+      if (adults.length > 0) {
         const result = await validateGuests.mutateAsync({
-          eventId: validEventId,
-          guests: guests.map((g) => ({ phoneNumber: g.phoneNumber })),
+          eventId: checkoutEventId,
+          guests: adults.map((guest) => ({ phoneNumber: guest.phoneNumber })),
         });
         if (!result.valid) {
-          // Pin each refusal to the guest it is about, so "someone here has a ticket already"
-          // becomes "this person does" and can be swapped for somebody else.
+          // Pin each refusal to the person it is about, so it can be swapped for somebody else.
           const byNumber: Record<string, string> = {};
           for (const issue of result.issues) {
-            const guest = guests[issue.guestIndex];
+            const guest = adults[issue.guestIndex];
             if (guest) byNumber[guest.phoneNumber] = issue.error;
           }
-          setIssues(byNumber);
-          const named = Object.keys(byNumber).length;
-          setError(
-            named === 1
+          setServerIssues(byNumber);
+          setFormError(
+            Object.keys(byNumber).length === 1
               ? messageForCode(result.issues[0]?.error)
-              : 'Some of these guests cannot be added. Swap them for someone else.',
+              : 'Some of these friends cannot be added. Swap them for someone else.',
           );
           return;
         }
-        setIssues({});
-      } catch (err) {
-        setError(messageForError(err));
-        return;
       }
-    }
 
-    // The cart is created here, not on the pass screen: this is the first point at which the
-    // selection is complete enough to send, and `PUT /tickets` needs every recipient at once.
-    try {
-      const cart = cartId ? { id: cartId } : await createCart.mutateAsync(validEventId);
+      // The cart is created here: the first point at which the selection is complete enough to
+      // send, and `PUT /tickets` needs every recipient at once.
+      const cart = cartId ? { id: cartId } : await createCart.mutateAsync(checkoutEventId);
       setCartId(cart.id);
 
-      // Snapshotted before the edit. `PUT /carts/:id/tickets` wipes the cart's extras and makes
-      // no promise that a person keeps the same `cartAttendeeId`, so this copy and the attendee
-      // list it points at are the only way back to what the buyer picked.
-      const draft = addons.map((line) => ({ ...line }));
+      // Snapshotted before the edit: `PUT /carts/:id/tickets` wipes the cart's extras and makes
+      // no promise that a person keeps the same `cartAttendeeId`.
+      const state = useCheckoutStore.getState();
+      const draft = state.addons.map((line) => ({ ...line }));
       const before = cartQuery.data?.attendees ?? [];
-
       const refreshed = await replaceTickets.mutateAsync({
         cartId: cart.id,
-        tickets: {
-          buyerTierId: holdsTicket ? null : tierId,
-          items: [{ tierId: tierId as string, quantity }],
-          guests: guests.map((guest) => ({
-            phoneNumber: guest.phoneNumber,
-            name: guest.name,
-            tierId: tierId as string,
-          })),
-        },
+        tickets: ticketsInput(
+          mainTierId,
+          { quantity: state.quantity, guests: state.guests, buyerTakesTicket: youTakeTicket },
+          state.otherTiers,
+        ),
       });
 
-      /*
-        Coming back through this step used to throw the extras away outright. Stepping back to
-        swap one guest and stepping forward again is not a decision to abandon a room and three
-        dinners, and nothing said it had happened.
-
-        The draft is re-pointed at the refreshed cart instead, matching people by phone number.
-        Somebody dropped from the order loses their units rather than carrying an id the server
-        has discarded, which leaves that line short and sends the buyer back to the assignment
-        step to finish it: visible, and about the one person who actually changed.
-      */
+      // Stepping back to swap one person is not a decision to drop the extras: they are
+      // re-pointed at the refreshed cart, and only the person who changed loses theirs.
       if (draft.length > 0) {
         const reassigned = reassignToRefreshedCart(draft, before, refreshed.attendees);
         setAddons(reassigned);
-
-        // Only lines the server will take. A half-assigned one is normal here and is refused
-        // outright by that endpoint; it goes up when the assignment step finishes it.
         const sendable = reassigned.filter(isSendableAddonLine);
         if (sendable.length > 0) {
           await replaceAddons.mutateAsync({
@@ -448,48 +548,28 @@ export default function GuestsScreen() {
       }
     } catch (err) {
       if (recoverFromCartNotEditable(err)) return;
-      setError(messageForError(err));
+      setFormError(messageForError(err));
       return;
+    } finally {
+      setSaving(false);
     }
 
     track('guests_added', {
-      event_id: validEventId,
-      guest_count: guests.length,
-      contacts_guest_count: guests.filter((g) => g.fromContacts).length,
-      manual_guest_count: guests.filter((g) => !g.fromContacts).length,
+      event_id: checkoutEventId,
+      guest_count: nextGuests.length,
+      contacts_guest_count: adults.filter((guest) => guest.fromContacts).length,
+      manual_guest_count: adults.filter((guest) => !guest.fromContacts).length,
+      child_count: nextGuests.length - adults.length,
     });
 
     router.push(
       steps.hasAddons
-        ? `/checkout/addons?eventId=${validEventId}`
-        : `/checkout/review?eventId=${validEventId}`,
+        ? `/checkout/addons?eventId=${checkoutEventId}`
+        : `/checkout/review?eventId=${checkoutEventId}`,
     );
   }
 
-  if (access.loading)
-    return (
-      <Screen>
-        <View />
-      </Screen>
-    );
-  if (access.blocked)
-    return (
-      <Screen>
-        <View />
-      </Screen>
-    );
-
-  if (!validEventId) {
-    return (
-      <Screen contentStyle={styles.content}>
-        <BackButton onPress={() => router.back()} style={styles.back} />
-        <Text variant="titleSm">Checkout link is incomplete</Text>
-        <Text variant="bodyMuted" style={styles.blurb}>
-          Go back and choose an event again.
-        </Text>
-      </Screen>
-    );
-  }
+  const hasChildren = slotTiers.some((id) => tierOf(id)?.isChildren);
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -497,202 +577,166 @@ export default function GuestsScreen() {
 
       <StepLabel>{`Checkout · step 2 of ${steps.total}`}</StepLabel>
       <View style={styles.heading}>
-        <BulletHeading title="Bringing anyone?" size="md" />
+        <BulletHeading title="Who's coming?" size="md" />
       </View>
 
       <Text variant="bodyMuted" style={styles.blurb}>
-        {slots === 0
-          ? 'This ticket is yours. Add more if friends are coming.'
-          : holdsTicket
-            ? slots === 1
-              ? 'You already have a ticket, so this one is for a guest.'
-              : `You already have a ticket, so all ${slots} of these are for your guests.`
-            : `${slots} of your ${quantity} tickets ${slots === 1 ? 'is' : 'are'} for a guest.`}
+        {hasChildren
+          ? 'A full name for everyone, and a WhatsApp number for each adult: tickets arrive on WhatsApp. Children come in with an adult.'
+          : !youTakeTicket
+            ? 'You already have a ticket, so these are all for friends. Tickets arrive on WhatsApp.'
+            : slots === 0
+              ? 'This ticket is yours. Add friends if they are coming.'
+              : `A full name and WhatsApp number for each of the ${quantity} tickets. Tickets arrive on WhatsApp.`}
       </Text>
 
-      {showTicketPicker ? (
-        <View style={styles.friends}>
-          <Text style={styles.listHeaderLabel}>Go with friends</Text>
-          <Text variant="metaSm" color={colors.textMuted}>
-            Every ticket you add is a guest you attach by phone number.
-          </Text>
-          <View style={styles.friendsRow}>
-            <Text style={styles.friendsCount}>
-              {quantity} {quantity === 1 ? 'ticket' : 'tickets'}
-            </Text>
-            <QuantityStepper
-              value={quantity}
-              min={1}
-              max={quantityLimit}
-              onChange={(next) => {
-                clearVerdict();
-                // Changing the ticket count re-cuts the guest list inside the draft, so the
-                // last verdict no longer describes this order.
-                setIssues({});
-                setTicketsAdjusted(true);
-                setQuantity(next);
-              }}
-            />
-          </View>
-        </View>
-      ) : null}
-
-      {slots > 0 ? (
-        <>
-          <View style={styles.listHeader}>
-            <Text style={styles.listHeaderLabel}>Guests</Text>
-            <Text style={styles.listHeaderCount}>
-              {picked} of {slots} picked
-            </Text>
-          </View>
-
-          {attached.length > 0 ? (
-            <View style={styles.attached}>
-              {attached.map((guest) => (
-                <GuestRow
-                  key={guest.id}
-                  contact={guest}
-                  selected
-                  issue={issues[guest.phoneNumber]}
-                  onPress={() => onRemove(guest.phoneNumber)}
-                />
-              ))}
+      <View style={styles.people}>
+        {youTakeTicket ? (
+          <View style={styles.person}>
+            <Text style={styles.personLabel}>You</Text>
+            <View style={styles.readOnly}>
+              <Text style={styles.readOnlyName}>{user?.fullName || 'You'}</Text>
+              <Text variant="metaSm" color={colors.textMuted}>
+                {buyerPhone ? formatPhoneLocal(buyerPhone) : ''}
+              </Text>
             </View>
-          ) : null}
+          </View>
+        ) : null}
 
-          {canReadContacts(contactsAccess) && contacts.length > 0 ? (
-            <>
-              <View style={styles.searchRow}>
-                <SearchIcon />
-                <TextInput
-                  value={search}
-                  onChangeText={setSearch}
-                  placeholder="Search your contacts"
-                  placeholderTextColor={colors.textMuted}
-                  autoCorrect={false}
-                  style={styles.searchField}
-                  accessibilityLabel="Search contacts"
-                />
-                {search.length > 0 ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear contact search"
-                    onPress={() => setSearch('')}
-                    hitSlop={8}
-                  >
-                    <Text style={styles.clearSearch}>Clear</Text>
-                  </Pressable>
-                ) : null}
+        {shownFriends.map((row, index) => {
+          const slotTier = tierOf(slotTiers[index] ?? '');
+          const child = Boolean(slotTier?.isChildren);
+          // Counted per kind, so it reads "Friend 1", "Friend 2", "Child 1".
+          const ordinal = slotTiers
+            .slice(0, index + 1)
+            .filter((id) => Boolean(tierOf(id)?.isChildren) === child).length;
+          const rowErrors = errors[row.key];
+          const number = child ? null : e164Of(row);
+          const issue = number ? serverIssues[number] : undefined;
+          const options = child ? guardianOptions() : [];
+          const label = `${child ? 'Child' : 'Friend'} ${ordinal}`;
+          return (
+            <View key={row.key} style={styles.person} testID={`person-${label}`}>
+              <View style={styles.personHeader}>
+                <Text style={styles.personLabel}>
+                  {label}
+                  {mixed && slotTier ? (
+                    <Text style={styles.personPass}>{` · ${slotTier.name}`}</Text>
+                  ) : null}
+                </Text>
+                <View style={styles.personActions}>
+                  {canPickContact && !child ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Choose ${label} from contacts`}
+                      hitSlop={8}
+                      onPress={() => void fillFromContacts(row.key)}
+                    >
+                      <Text style={styles.personLink}>From contacts</Text>
+                    </Pressable>
+                  ) : null}
+                  {quantity > minQuantity ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${label}`}
+                      hitSlop={8}
+                      onPress={() => removeFriend(row.key)}
+                    >
+                      <Text style={styles.personLink}>Remove</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
-
-              {visible.map((contact) => (
-                <GuestRow
-                  key={contact.id}
-                  contact={contact}
-                  selected={false}
-                  onPress={() => onAttach(contact)}
+              <TextField
+                label="Full name"
+                value={row.name}
+                autoCapitalize="words"
+                autoCorrect={false}
+                textContentType="name"
+                accessibilityLabel={`${label} full name`}
+                onChangeText={(name) => updateFriend(row.key, { name })}
+                error={rowErrors?.name ?? null}
+              />
+              {child ? (
+                // No number for a child: they come in with an adult's QR.
+                <View>
+                  <SelectField
+                    label="Comes with"
+                    value={guardianOf(row, options)}
+                    options={options}
+                    placeholder="Add an adult first"
+                    onChange={(guardian) => updateFriend(row.key, { guardian })}
+                    error={rowErrors?.phone ?? null}
+                  />
+                  <Text variant="metaSm" color={colors.textMuted} style={styles.hint}>
+                    They come in with this adult&apos;s QR code.
+                  </Text>
+                </View>
+              ) : (
+                <PhoneField
+                  label="WhatsApp number"
+                  country={row.country}
+                  onCountryChange={(country) => updateFriend(row.key, { country, national: '' })}
+                  national={row.national}
+                  onNationalChange={(national) => updateFriend(row.key, { national })}
+                  error={rowErrors?.phone ?? (issue ? messageForCode(issue) : null)}
                 />
-              ))}
-
-              {hidden > 0 ? (
-                <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
-                  {`Showing ${visible.length} of ${suggestions.length}.`}
-                </Text>
-              ) : null}
-
-              {suggestions.length === 0 ? (
-                <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
-                  {search.trim().length === 0
-                    ? 'Everyone here is already attached.'
-                    : // "No match." would be untrue under limited access: the search only ever
-                      // ran against the handful of people shared with the app.
-                      sharedSubsetOnly
-                      ? 'No match in the contacts you shared.'
-                      : 'No match.'}
-                </Text>
-              ) : null}
-            </>
-          ) : null}
-
-          <ContactsAccessFooter
-            access={contactsAccess}
-            loading={contactsLoading}
-            contactCount={contacts.length}
-            canPickContact={canPickContact}
-            onRequest={requestContacts}
-            onPickContact={() => void onPickContact()}
-            onOpenSettings={openSettings}
-          />
-
-          <View style={styles.manualRow}>
-            <View style={styles.manualInput}>
-              <CountryPrefix
-                country={manualCountry}
-                onPress={() => setCountrySheetOpen(true)}
-                compact
-              />
-              <TextInput
-                value={formatNationalInput(manual, manualCountry)}
-                onChangeText={(value) => setManual(sanitizeNationalInput(value, manualCountry))}
-                placeholder="Add by phone number"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="phone-pad"
-                style={styles.manualField}
-                accessibilityLabel="Guest phone number"
-              />
+              )}
             </View>
-            <Pressable
-              accessibilityRole="button"
-              onPress={onAddManual}
-              style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
-            >
-              <Text style={styles.addLabel}>Add</Text>
-            </Pressable>
-          </View>
-        </>
+          );
+        })}
+      </View>
+
+      {quantity < quantityLimit ? (
+        <Button
+          label={slots === 0 ? 'Bring a friend' : 'Add another friend'}
+          variant="secondary"
+          onPress={addFriend}
+          style={styles.addFriend}
+        />
       ) : null}
 
-      <CountrySheet
-        visible={countrySheetOpen}
-        selectedCode={manualCountry}
-        onSelect={(code) => {
-          if (code !== manualCountry) setManual('');
-          setManualCountry(code as CountryCode);
-        }}
-        onClose={() => setCountrySheetOpen(false)}
+      <GroupSavingNote
+        tiers={event?.groupDiscounts}
+        groupPrices={tier?.groupPrices}
+        quantity={quantity}
+        maxTickets={quantityLimit}
+        {...(mixed ? { quote: mixedQuote.data ?? null } : {})}
+        style={styles.saving}
       />
 
-      {/*
-        Someone saved with a mobile, a landline and a work line is one contact and three
-        numbers, and a ticket binds to exactly one of them. Guessing picks the landline often
-        enough to be worth the question.
-      */}
       <OptionSheet
         visible={numberChoice !== null}
-        title={numberChoice?.name || 'Which number?'}
-        options={(numberChoice?.numbers ?? []).map((number) => ({
+        title={numberChoice?.contact.name || 'Which number?'}
+        options={(numberChoice?.contact.numbers ?? []).map((number) => ({
           value: number,
           label: formatPhoneLocal(number),
         }))}
         selectedValue={null}
         onSelect={(number) => {
-          if (numberChoice) attachPicked(numberChoice.name, number);
+          if (!numberChoice) return;
+          const row = rowFromNumber(number, numberChoice.contact.name, true);
+          updateFriend(numberChoice.rowKey, {
+            name: row.name,
+            country: row.country,
+            national: row.national,
+            fromContacts: true,
+          });
         }}
         onClose={() => setNumberChoice(null)}
       />
 
-      {error ? (
+      {formError ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.error}>
-          {error}
+          {formError}
         </Text>
       ) : null}
 
       <Button
         label="Continue"
-        onPress={onContinue}
-        loading={validateGuests.isPending}
-        // `holdsTicket` reads false until the ticket check settles, which understates the slot
-        // count by one. Leaving early on that number sends an order a guest short.
+        onPress={() => void onContinue()}
+        loading={saving}
+        // Until the ticket check settles, the buyer's own row may be one too many.
         disabled={holdsTicketPending}
         style={styles.continue}
       />
@@ -700,331 +744,52 @@ export default function GuestsScreen() {
   );
 }
 
-/**
- * One person, whether they came from the address book or a typed number. Attached guests use
- * the identical row: the only difference is that pressing one takes them off the order.
- */
-function GuestRow({
-  contact,
-  selected,
-  issue,
-  onPress,
-}: {
-  contact: PhoneContact;
-  selected: boolean;
-  issue?: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
-      accessibilityLabel={selected ? `Remove ${contact.name}` : `Add ${contact.name} as a guest`}
-      onPress={onPress}
-      style={[
-        styles.contactRow,
-        selected ? styles.contactSelected : styles.contactIdle,
-        issue ? styles.contactInvalid : null,
-      ]}
-    >
-      <Avatar
-        name={contact.name}
-        size={38}
-        background={avatarColor(contact.phoneNumber)}
-        foreground={colors.creme}
-      />
-      <View style={styles.contactBody}>
-        <Text style={styles.contactName}>{contact.name}</Text>
-        <Text style={styles.contactPhone}>{formatPhoneLocal(contact.phoneNumber)}</Text>
-        {issue ? (
-          <Text variant="metaSm" color={colors.rose700}>
-            {messageForCode(issue)}
-          </Text>
-        ) : null}
-      </View>
-      <CheckCircle selected={selected} />
-    </Pressable>
-  );
-}
-
-/**
- * The one control whose job is to get contacts working, whatever state they are in: an ask the
- * OS will still honour, a trip to Settings when it will not, the OS picker under limited
- * access, or a retry when the read itself failed. Each button says what it does, so only the
- * two states a button cannot explain on its own carry a line of text.
- *
- * Nothing here is a dead end, and none of it is the only way forward, because the number field
- * below never stops working.
- */
-function ContactsAccessFooter({
-  access,
-  loading,
-  contactCount,
-  canPickContact,
-  onRequest,
-  onPickContact,
-  onOpenSettings,
-}: {
-  access: ReturnType<typeof useContacts>['access'];
-  loading: boolean;
-  contactCount: number;
-  canPickContact: boolean;
-  onRequest: () => void;
-  onPickContact: () => void;
-  onOpenSettings: () => void;
-}) {
-  if (access === 'unasked' || access === 'undetermined') {
-    return (
-      <Button
-        label="Add from Contacts"
-        variant="secondary"
-        onPress={onRequest}
-        loading={loading}
-        style={styles.contactsButton}
-      />
-    );
-  }
-
-  if (access === 'denied') {
-    return (
-      <Button
-        label="Turn on contacts"
-        variant="secondary"
-        onPress={onRequest}
-        loading={loading}
-        style={styles.contactsButton}
-      />
-    );
-  }
-
-  if (access === 'blocked') {
-    return (
-      <>
-        <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
-          {Platform.OS === 'ios'
-            ? 'Contacts are off for Sukun. Turning them on in Settings restarts the app.'
-            : 'Contacts are off for Sukun.'}
-        </Text>
-        <Button
-          label="Open Settings"
-          variant="secondary"
-          onPress={onOpenSettings}
-          style={styles.contactsButton}
-        />
-      </>
-    );
-  }
-
-  if (access === 'unavailable') {
-    return (
-      <>
-        <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
-          {"We couldn't read your contacts."}
-        </Text>
-        <Button
-          label="Try again"
-          variant="secondary"
-          onPress={onRequest}
-          loading={loading}
-          style={styles.contactsButton}
-        />
-      </>
-    );
-  }
-
-  return (
-    <>
-      {contactCount === 0 ? (
-        <Text variant="metaSm" color={colors.textMuted} style={styles.emptyText}>
-          No mobile numbers in your contacts.
-        </Text>
-      ) : null}
-      {/*
-        Limited access only. The list above is the shared subset and cannot grow from in here,
-        so this is the way to reach the rest: the OS's own picker, which shows the whole
-        address book and passes back the one person tapped without granting anything.
-      */}
-      {canPickContact && access === 'limited' ? (
-        <Button
-          label="Choose from all contacts"
-          variant="secondary"
-          onPress={onPickContact}
-          style={styles.contactsButton}
-        />
-      ) : null}
-    </>
-  );
-}
-
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 24,
-  },
-  back: {
-    marginBottom: 18,
-  },
-  heading: {
-    marginTop: 6,
-    marginBottom: 8,
-  },
-  blurb: {
-    marginBottom: 20,
-  },
-  friends: {
-    borderWidth: 1.5,
+  content: { paddingHorizontal: 24, paddingBottom: 32 },
+  back: { marginBottom: 18 },
+  heading: { marginTop: 6, marginBottom: 10 },
+  blurb: { marginBottom: 18 },
+  people: { gap: space.s3 },
+  person: {
+    borderWidth: 1,
     borderColor: colors.borderDefault,
+    borderRadius: radius.card,
     backgroundColor: colors.bgSurface,
-    borderRadius: 12,
-    padding: 16,
-    gap: 10,
-    marginBottom: 20,
+    padding: space.s4,
+    gap: space.s3,
   },
-  friendsRow: {
+  personHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: space.s3,
   },
-  friendsCount: {
+  personLabel: {
     flexShrink: 1,
-    fontSize: 14,
-    fontFamily: fontFamily.bodyMedium,
-    color: colors.textPrimary,
-  },
-  listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
-  },
-  listHeaderLabel: {
-    flexShrink: 1,
-    fontSize: 12,
-    letterSpacing: 12 * 0.08,
+    fontSize: 11,
+    letterSpacing: 11 * 0.16,
     textTransform: 'uppercase',
-    color: colors.textMuted,
-  },
-  listHeaderCount: {
-    flexShrink: 0,
-    fontSize: 12,
     fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
   },
-  attached: {
-    gap: 6,
-    marginBottom: 12,
-  },
-  emptyText: {
-    paddingVertical: 8,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: colors.borderDefault,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: colors.bgSurface,
-    marginBottom: 8,
-  },
-  searchField: {
-    flex: 1,
+  personPass: {
+    textTransform: 'none',
+    letterSpacing: 0,
     fontFamily: fontFamily.body,
-    fontSize: 14,
-    color: colors.textPrimary,
-    padding: 0,
-  },
-  clearSearch: {
-    fontSize: 12,
-    fontFamily: fontFamily.bodyMedium,
     color: colors.textMuted,
   },
-  contactsButton: {
-    marginTop: 12,
-  },
-  contactsNotice: {
-    marginTop: 10,
-  },
-  contactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    marginBottom: 6,
-  },
-  contactIdle: {
-    borderColor: colors.borderDefault,
-    backgroundColor: colors.bgSurface,
-  },
-  contactSelected: {
-    borderColor: colors.black,
-    backgroundColor: colors.creme,
-  },
-  contactInvalid: {
-    borderColor: colors.rose700,
-  },
-  contactBody: {
-    flex: 1,
-  },
-  contactName: {
-    fontSize: 14,
+  personActions: { flexDirection: 'row', gap: space.s4 },
+  personLink: {
+    fontSize: 13,
     fontFamily: fontFamily.bodyMedium,
     color: colors.textPrimary,
+    textDecorationLine: 'underline',
   },
-  contactPhone: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  continue: {
-    marginTop: 24,
-  },
-  manualRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 20,
-  },
-  manualInput: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1.5,
-    borderColor: colors.borderStrong,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: colors.bgSurface,
-  },
-  manualField: {
-    flex: 1,
-    fontFamily: fontFamily.body,
-    fontSize: 14,
-    color: colors.textPrimary,
-    padding: 0,
-  },
-  addButton: {
-    justifyContent: 'center',
-    backgroundColor: colors.black,
-    borderRadius: 12,
-    paddingHorizontal: 20,
-  },
-  addLabel: {
-    color: colors.creme,
-    fontSize: 12,
-    fontFamily: fontFamily.bodyMedium,
-    letterSpacing: 12 * 0.08,
-    textTransform: 'uppercase',
-  },
-  pressed: {
-    opacity: 0.85,
-  },
-  error: {
-    marginTop: 12,
-  },
+  readOnly: { gap: 2 },
+  readOnlyName: { fontSize: 15, fontFamily: fontFamily.bodyMedium, color: colors.textPrimary },
+  hint: { marginTop: 6 },
+  addFriend: { marginTop: space.s4 },
+  saving: { marginTop: space.s4 },
+  error: { marginTop: space.s4 },
+  continue: { marginTop: space.s5 },
 });
