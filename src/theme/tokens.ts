@@ -56,6 +56,16 @@ export const colors = {
   borderInvalid: palette.rose300,
 
   /*
+   * Group discount: the website's offer card (`sukun-client-web/src/styles/tokens.css`), composed
+   * from the design system's colours: a wash from gold100 to rose100, rose700 ink, and the step
+   * ladder's track (rose700 at 16%).
+   */
+  groupOfferFrom: palette.gold100,
+  groupOfferTo: palette.rose100,
+  groupOfferInk: palette.rose700,
+  groupStepTrack: 'rgba(110,41,15,0.16)',
+
+  /*
    * The dark entry pass (design screen 21 · Entry pass / QR) draws its rules and its secondary
    * type as creme at low opacity on black. The design system names no token for either, so they
    * are recorded here rather than open-coded in the screen.
