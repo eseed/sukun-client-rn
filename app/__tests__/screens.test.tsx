@@ -2,6 +2,7 @@ import { AppState } from 'react-native';
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
 import {
   eventDetails,
+  promoCodes,
   SOUND_BATH_ID,
   TIER_DAY1,
   TIER_KIDS,
@@ -1060,6 +1061,59 @@ describe('09 Guests', () => {
 });
 
 describe('10 Review & pay', () => {
+  /** Three guests' tickets reach the first step: 15% off the tickets, in place of a promo. */
+  async function groupOfThree(promo?: string) {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(3);
+    useCheckoutStore.getState().setBuyerTakesTicket(false);
+    const cart = await startCartCheckout({
+      eventId: TULUA_ID,
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    if (promo) {
+      await mockApi.carts.applyPromo(cart.id, promo);
+      useCheckoutStore.getState().setPromoCode(promo);
+    }
+    await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 3 }],
+      guests: [
+        { phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201033445566', name: 'Omar Fathy', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201044556677', name: 'Hana Said', tierId: TIER_WEEKEND },
+      ],
+    });
+  }
+
+  it('shows the group discount where a promo would be, and no promo field', async () => {
+    await groupOfThree();
+    renderWithProviders(<ReviewScreen />);
+
+    await waitFor(() => expect(screen.getByText('Full Weekend Pass × 3')).toBeTruthy());
+    // 15% of 4,800, off the tickets only; VAT on what is left: 4,080 × 14%.
+    expect(screen.getByText('Group discount · 15% off')).toBeTruthy();
+    expect(screen.getByText('−720.00 EGP')).toBeTruthy();
+    expect(screen.getByText('571.20 EGP')).toBeTruthy();
+    expect(screen.getByText('4,651.20 EGP')).toBeTruthy();
+    expect(screen.getByText('15% group discount applied')).toBeTruthy();
+    expect(screen.queryByLabelText('Promo code')).toBeNull();
+  });
+
+  it('says the group discount replaced a code the buyer had applied', async () => {
+    const promo = Object.keys(promoCodes)[0]!;
+    await groupOfThree(promo);
+    renderWithProviders(<ReviewScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText(`Your group discount applies instead of ${promo}.`)).toBeTruthy(),
+    );
+    expect(useCheckoutStore.getState().promoCode).toBeNull();
+  });
+
   it('shows server totals, VAT and the terms gate', async () => {
     mockParams.eventId = TULUA_ID;
     await signInAndComplete();
