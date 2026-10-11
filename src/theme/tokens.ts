@@ -48,6 +48,12 @@ export const colors = {
 
   borderDefault: '#D8D0BE',
   borderStrong: palette.black,
+  /*
+   * A field with a problem (owner's call 2026-10-10, as on the website): outlined in rose300,
+   * since rose700 reads as the black of every other field box. The message under it stays
+   * rose700, which is the readable one on creme.
+   */
+  borderInvalid: palette.rose300,
 
   /*
    * The dark entry pass (design screen 21 · Entry pass / QR) draws its rules and its secondary
