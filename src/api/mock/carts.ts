@@ -9,6 +9,9 @@ import type {
   CartPricingIssue,
   CartPricingLine,
   CartTicket,
+  GroupDiscountBreakdown,
+  GroupDiscountTier,
+  GroupQuote,
   ReplaceCartTicketsInput,
 } from '../types';
 import { addonForOption, findOption, snapshot } from './addons';
@@ -18,6 +21,7 @@ import {
   clampDiscount,
   includedVat,
   multiply,
+  percentOf,
   subtract,
   sum,
   toPiastres,
@@ -95,14 +99,29 @@ export function applyTickets(
     });
   }
 
+  const guestId = (index: number) => `cart-attendee-guest-${cart.id}-${index}`;
   for (const [index, guest] of input.guests.entries()) {
+    // A child has no number and comes with an adult: another guest here, a ticket the buyer
+    // holds, or else the buyer's own ticket in this cart.
+    const child = guest.child === true;
     attendees.push({
-      cartAttendeeId: `cart-attendee-guest-${cart.id}-${index}`,
+      cartAttendeeId: guestId(index),
       cartTicketItemId: `cart-item-${guest.tierId}`,
       attendeeType: 'guest',
       name: guest.name,
-      phoneNumber: guest.phoneNumber,
-      email: guest.email ?? null,
+      phoneNumber: child ? null : (guest.phoneNumber ?? null),
+      email: child ? null : (guest.email ?? null),
+      ...(child
+        ? {
+            isChild: true,
+            guardianCartAttendeeId: guest.guardianTicketId
+              ? null
+              : guest.guardianGuestIndex !== undefined
+                ? guestId(guest.guardianGuestIndex)
+                : `cart-attendee-buyer-${cart.id}`,
+            guardianTicketId: guest.guardianTicketId ?? null,
+          }
+        : {}),
     });
   }
 
@@ -319,6 +338,68 @@ export interface PricingContext {
   promo: {
     lookup: (code: string) => { discountEgp: string; tierIds?: string[] } | undefined;
   };
+  /** The event's group discount steps, if any. A step reached replaces any promo. */
+  groupDiscounts?: GroupDiscountTier[];
+}
+
+/* ----------------------------------------------------------- group discounts */
+
+function sortedSteps(steps: GroupDiscountTier[] | undefined): GroupDiscountTier[] {
+  return [...(steps ?? [])].sort((left, right) => left.minTickets - right.minTickets);
+}
+
+/** The step `ticketCount` tickets reach, or null. */
+export function groupStepReached(
+  steps: GroupDiscountTier[] | undefined,
+  ticketCount: number,
+): GroupDiscountTier | null {
+  const reached = sortedSteps(steps).filter((step) => step.minTickets <= ticketCount);
+  return reached[reached.length - 1] ?? null;
+}
+
+/**
+ * The group discount a number of tickets takes, as the server works it out: the highest step
+ * reached, as a share of the tickets' subtotal only (never the extras), rounded half up.
+ */
+export function groupDiscountFor(
+  steps: GroupDiscountTier[] | undefined,
+  ticketCount: number,
+  ticketsSubtotalEgp: string,
+): GroupDiscountBreakdown | null {
+  const step = groupStepReached(steps, ticketCount);
+  if (!step) return null;
+  return {
+    percent: step.percent,
+    minTickets: step.minTickets,
+    ticketCount,
+    eligibleSubtotalEgp: ticketsSubtotalEgp,
+    discountEgp: clampDiscount(percentOf(ticketsSubtotalEgp, step.percent), ticketsSubtotalEgp),
+    nextTier: sortedSteps(steps).find((next) => next.minTickets > ticketCount) ?? null,
+  };
+}
+
+/** A mix of passes priced as a group (`POST public/events/:id/group-quote`). */
+export function quoteGroup(
+  steps: GroupDiscountTier[] | undefined,
+  lines: { unitPriceEgp: string; quantity: number }[],
+  maxTickets: number,
+): GroupQuote {
+  const ticketCount = lines.reduce((total, line) => total + line.quantity, 0);
+  const subtotalEgp = sum(lines.map((line) => multiply(line.unitPriceEgp, line.quantity)));
+  const applied = groupDiscountFor(steps, ticketCount, subtotalEgp);
+  const discountEgp = applied?.discountEgp ?? '0.00';
+  return {
+    ticketCount,
+    subtotalEgp,
+    percent: applied?.percent ?? null,
+    minTickets: applied?.minTickets ?? null,
+    discountEgp,
+    ticketsTotalEgp: subtract(subtotalEgp, discountEgp),
+    nextTier:
+      sortedSteps(steps).find(
+        (step) => step.minTickets > ticketCount && step.minTickets <= maxTickets,
+      ) ?? null,
+  };
 }
 
 /**
@@ -374,13 +455,18 @@ export function priceCart(cart: MockCart, context: PricingContext): CartPricing 
   const addonsSubtotalEgp = sum(addonLines.map((line) => line.lineTotalEgp ?? '0.00'));
   const subtotalEgp = sum([ticketsSubtotalEgp, addonsSubtotalEgp]);
 
-  const promoBreakdown = resolveCartPromo(cart, {
-    context,
-    ticketsSubtotalEgp,
-    addonLines,
-    subtotalEgp,
-  });
-  const discountEgp = promoBreakdown?.discountEgp ?? '0.00';
+  const ticketCount = cart.items.reduce((total, item) => total + item.quantity, 0);
+  const groupDiscount = groupDiscountFor(context.groupDiscounts, ticketCount, ticketsSubtotalEgp);
+  // A group discount replaces the promo: the code is neither priced nor redeemed.
+  const promoBreakdown = groupDiscount
+    ? null
+    : resolveCartPromo(cart, {
+        context,
+        ticketsSubtotalEgp,
+        addonLines,
+        subtotalEgp,
+      });
+  const discountEgp = groupDiscount?.discountEgp ?? promoBreakdown?.discountEgp ?? '0.00';
   const netEgp = subtract(subtotalEgp, discountEgp);
   const vatRate = context.vatEnabled ? context.vatRate : '0.0000';
   const vatInclusive = context.vatEnabled && context.vatInclusive;
@@ -405,6 +491,7 @@ export function priceCart(cart: MockCart, context: PricingContext): CartPricing 
     vatInclusive,
     totalEgp: vatInclusive ? netEgp : sum([netEgp, vatEgp]),
     pricingConfirmationToken: null,
+    groupDiscount,
   };
 }
 

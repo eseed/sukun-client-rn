@@ -61,3 +61,8 @@ export function includedVat(gross: string, rate: string): string {
   const divisor = scale + scaledRate;
   return toEgp(Math.floor((2 * toPiastres(gross) * scaledRate + divisor) / (2 * divisor)));
 }
+
+/** `percent` (`"15.00"`) of an amount, rounded half up to the piastre, as the server rounds it. */
+export function percentOf(egp: string, percent: string): string {
+  return toEgp(Math.round((toPiastres(egp) * toPiastres(percent)) / 10_000));
+}
