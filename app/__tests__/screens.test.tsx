@@ -1,4 +1,3 @@
-import { AppState } from 'react-native';
 import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/api/mock';
 import {
   eventDetails,
@@ -64,15 +63,6 @@ function contactsPermission(response: {
 }) {
   mockContacts.requestPermissionsAsync.mockResolvedValue(response);
   mockContacts.getPermissionsAsync.mockResolvedValue(response);
-}
-
-/** Stands in for the app being brought back from Settings. */
-async function returnToForeground() {
-  const calls = (AppState.addEventListener as jest.Mock).mock.calls;
-  const listener = calls[calls.length - 1]?.[1] as ((state: string) => void) | undefined;
-  await act(async () => {
-    listener?.('active');
-  });
 }
 
 const mockParams: Record<string, string> = {};
