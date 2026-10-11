@@ -8,7 +8,8 @@ module.exports = [
     // `build/**` is the local release output: `scripts/xcodebuild-release.sh` leaves an
     // .xcarchive and an .ipa there, and the archive contains a JS bundle that eslint will
     // happily try to lint. It is generated, like ios/ and android/ above it. `.claude/**` holds
-    // other checkouts of this repo (Claude Code worktrees): git ignores it, eslint does not.
+    // other checkouts of this repo (Claude Code worktrees), and so does `.worktrees/`: git ignores
+    // them, eslint does not.
     ignores: [
       'node_modules/**',
       '.expo/**',
@@ -19,6 +20,7 @@ module.exports = [
       'build/**',
       '.apk-build-*/**',
       '.claude/**',
+      '.worktrees/**',
     ],
   },
   {

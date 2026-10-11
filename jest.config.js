@@ -9,10 +9,10 @@ module.exports = {
   },
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts'],
   testMatch: ['**/__tests__/**/*.test.{ts,tsx}'],
-  // `.claude/` holds other checkouts of this repo (Claude Code worktrees), whose tests and
+  // `.claude/` and `.worktrees/` hold other checkouts of this repo (worktrees), whose tests and
   // package.json would otherwise run and resolve alongside this one's.
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/'],
-  modulePathIgnorePatterns: ['<rootDir>/.claude/'],
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/.claude/', '<rootDir>/.worktrees/'],
+  modulePathIgnorePatterns: ['<rootDir>/.claude/', '<rootDir>/.worktrees/'],
   // Screen suites mount a QueryClient and resolve several mock-api queries per render, and
   // jest.setup.js gives `waitFor` a 10s ceiling for that. Jest's own 5s default would cut a
   // slow-but-healthy test off before that ceiling, so it has to sit above it.
