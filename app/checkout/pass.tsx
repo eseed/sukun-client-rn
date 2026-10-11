@@ -207,7 +207,7 @@ export default function ChoosePassScreen() {
   };
 
   return (
-    <Screen contentStyle={styles.content}>
+    <Screen scroll contentStyle={styles.content}>
       <FlowerCorner top={52} />
 
       <BackButton onPress={() => router.back()} style={styles.back} />
