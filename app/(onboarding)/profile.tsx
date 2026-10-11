@@ -3,13 +3,13 @@ import { useIsFocused, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
-import { z } from 'zod';
 import {
   BackButton,
   BulletHeading,
   Button,
   Checkbox,
   DateField,
+  FormProblems,
   PickerField,
   SelectField,
   ResourceState,
@@ -17,6 +17,7 @@ import {
   StepLabel,
   Text,
   TextField,
+  useFieldTargets,
 } from '../../src/components/ui';
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
@@ -24,7 +25,12 @@ import { setUserProperties, track } from '../../src/lib/analytics';
 import { trackMetaCompleteRegistration } from '../../src/lib/meta-events';
 import { messageForError } from '../../src/lib/errors';
 import { useAllowGuestBrowsing } from '../../src/stores/flags';
-import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
+import { formatDateOfBirth } from '../../src/lib/format';
+import {
+  buildProfileSchema,
+  type ProfileFormValues,
+  profileProblems,
+} from '../../src/lib/profile-form';
 import { designAsset } from '../../src/theme/assets';
 import { colors } from '../../src/theme/tokens';
 import {
@@ -56,31 +62,7 @@ const GENDERS: { value: 'male' | 'female'; label: string }[] = [
   { value: 'female', label: 'Female' },
 ];
 
-/**
- * The living area is an Egyptian governorate, so it is only asked of — and only required of —
- * a user whose number is Egyptian. Mirrors the backend's profile completeness rule.
- */
-function buildSchema(areaRequired: boolean) {
-  return z.object({
-    fullName: z.string().trim().min(2, 'Tell us your name'),
-    email: z.string().trim().email('Check that email address'),
-    dateOfBirth: z
-      .string()
-      .trim()
-      .min(1, 'Pick your date of birth')
-      .refine(
-        (value) => ageOn(value, new Date()) >= MINIMUM_AGE,
-        `You must be ${MINIMUM_AGE} or over`,
-      ),
-    gender: z.enum(['male', 'female']),
-    areaId: areaRequired ? z.string().min(1, 'Pick your area') : z.string().optional(),
-    // Consent, so it is never required and never pre-ticked — Meta only accepts marketing
-    // messages sent on an explicit opt-in, and a default-on box is not one.
-    marketingOptIn: z.boolean(),
-  });
-}
-
-type FormValues = z.infer<ReturnType<typeof buildSchema>>;
+type FormValues = ProfileFormValues;
 
 export default function ProfileFormScreen() {
   const allowGuestBrowsing = useAllowGuestBrowsing();
@@ -94,7 +76,9 @@ export default function ProfileFormScreen() {
   const areasQuery = useAreas();
   const areas = areasQuery.data ?? [];
   const updateProfile = useUpdateProfile();
-  const schema = useMemo(() => buildSchema(areaRequired), [areaRequired]);
+  // The living area is an Egyptian governorate, so it is only asked of an Egyptian number.
+  const schema = useMemo(() => buildProfileSchema(areaRequired), [areaRequired]);
+  const targets = useFieldTargets();
 
   // A claim that was waiting on this form. It cannot be skipped then: the claim needs it.
   const claiming = useAuthStore((state) => state.pendingClaimTicketId !== null);
@@ -118,7 +102,7 @@ export default function ProfileFormScreen() {
     }
   }, [isFocused, router, saved, user]);
 
-  const { control, handleSubmit, formState, reset } = useForm<FormValues>({
+  const { control, handleSubmit, formState, reset, setFocus } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       fullName: '',
@@ -129,7 +113,18 @@ export default function ProfileFormScreen() {
       marketingOptIn: false,
     },
     mode: 'onBlur',
+    // `goToField` instead, which scrolls a picker into view as well as focusing a text field.
+    shouldFocusError: false,
   });
+
+  // After a refused press, what is still missing, named beside the button.
+  const problems = formState.submitCount > 0 ? profileProblems(formState.errors) : [];
+
+  /** Brings a field into view and, where it takes typing, puts the cursor in it. */
+  function goToField(name: string) {
+    targets.show(name);
+    setFocus(name as keyof FormValues);
+  }
 
   useEffect(() => {
     reset({
@@ -144,41 +139,48 @@ export default function ProfileFormScreen() {
     });
   }, [reset, user]);
 
-  const onSubmit = handleSubmit(async (values) => {
-    setSubmitError(null);
-    setSaved(true);
-    try {
-      const updated = await updateProfile.mutateAsync({
-        fullName: values.fullName,
-        email: values.email,
-        dateOfBirth: values.dateOfBirth,
-        gender: values.gender,
-        areaId: areaRequired ? values.areaId : undefined,
-        marketingOptIn: values.marketingOptIn,
-      });
-      const area = areas.find((a) => a.id === values.areaId);
-      setUserProperties({
-        gender: values.gender,
-        marketing_opt_in: values.marketingOptIn,
-        ...(area ? { area_code: area.code } : {}),
-      });
-      track('profile_completed', {
-        gender: values.gender,
-        marketing_opt_in: values.marketingOptIn,
-        ...(area ? { area_code: area.code } : {}),
-      });
-      // This is the end of registration now, so the signup event belongs here.
-      if (useAuthStore.getState().isNewUser) {
-        track('signup_completed');
-        trackMetaCompleteRegistration();
-        useAuthStore.getState().setIsNewUser(false);
+  const onSubmit = handleSubmit(
+    async (values) => {
+      setSubmitError(null);
+      setSaved(true);
+      try {
+        const updated = await updateProfile.mutateAsync({
+          fullName: values.fullName,
+          email: values.email,
+          dateOfBirth: values.dateOfBirth,
+          gender: values.gender,
+          areaId: areaRequired ? values.areaId : undefined,
+          marketingOptIn: values.marketingOptIn,
+        });
+        const area = areas.find((a) => a.id === values.areaId);
+        setUserProperties({
+          gender: values.gender,
+          marketing_opt_in: values.marketingOptIn,
+          ...(area ? { area_code: area.code } : {}),
+        });
+        track('profile_completed', {
+          gender: values.gender,
+          marketing_opt_in: values.marketingOptIn,
+          ...(area ? { area_code: area.code } : {}),
+        });
+        // This is the end of registration now, so the signup event belongs here.
+        if (useAuthStore.getState().isNewUser) {
+          track('signup_completed');
+          trackMetaCompleteRegistration();
+          useAuthStore.getState().setIsNewUser(false);
+        }
+        continueAfterProfile(router, updated);
+      } catch (err) {
+        setSaved(false);
+        setSubmitError(messageForError(err));
       }
-      continueAfterProfile(router, updated);
-    } catch (err) {
-      setSaved(false);
-      setSubmitError(messageForError(err));
-    }
-  });
+    },
+    (errors) => {
+      // On a phone the button sits below the fields, so a refusal goes to the first problem.
+      const first = profileProblems(errors)[0];
+      if (first) goToField(first.name);
+    },
+  );
 
   /**
    * Out to the catalogue with the profile unfinished, keeping the verified session. Purchase
@@ -248,7 +250,7 @@ export default function ProfileFormScreen() {
   }
 
   return (
-    <Screen scroll contentStyle={styles.content}>
+    <Screen scroll contentStyle={styles.content} scrollRef={targets.scrollRef}>
       <View style={styles.flowerCrop} pointerEvents="none">
         <Image source={flower} style={styles.flower} />
       </View>
@@ -270,16 +272,19 @@ export default function ProfileFormScreen() {
           control={control}
           name="fullName"
           render={({ field, fieldState }) => (
-            <TextField
-              label="Full name"
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              placeholder="Your name"
-              autoCapitalize="words"
-              textContentType="name"
-              error={fieldState.error?.message ?? null}
-            />
+            <View ref={targets.fieldRef('fullName')} collapsable={false}>
+              <TextField
+                ref={field.ref}
+                label="Full name"
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="Your name"
+                autoCapitalize="words"
+                textContentType="name"
+                error={fieldState.error?.message ?? null}
+              />
+            </View>
           )}
         />
 
@@ -287,18 +292,21 @@ export default function ProfileFormScreen() {
           control={control}
           name="email"
           render={({ field, fieldState }) => (
-            <TextField
-              label="Email"
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              placeholder="you@email.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              textContentType="emailAddress"
-              error={fieldState.error?.message ?? null}
-            />
+            <View ref={targets.fieldRef('email')} collapsable={false}>
+              <TextField
+                ref={field.ref}
+                label="Email"
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="you@email.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                error={fieldState.error?.message ?? null}
+              />
+            </View>
           )}
         />
 
@@ -307,15 +315,20 @@ export default function ProfileFormScreen() {
             control={control}
             name="dateOfBirth"
             render={({ field, fieldState }) => (
-              <DateField
-                containerStyle={styles.rowItem}
-                label="Date of birth"
-                value={field.value}
-                onChange={field.onChange}
-                placeholder="Select"
-                format={formatDateOfBirth}
-                error={fieldState.error?.message ?? null}
-              />
+              <View
+                ref={targets.fieldRef('dateOfBirth')}
+                collapsable={false}
+                style={styles.rowItem}
+              >
+                <DateField
+                  label="Date of birth"
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Select"
+                  format={formatDateOfBirth}
+                  error={fieldState.error?.message ?? null}
+                />
+              </View>
             )}
           />
 
@@ -323,15 +336,16 @@ export default function ProfileFormScreen() {
             control={control}
             name="gender"
             render={({ field, fieldState }) => (
-              <SelectField
-                containerStyle={styles.rowItem}
-                label="Gender"
-                placeholder="Select"
-                value={field.value ?? null}
-                options={GENDERS}
-                onChange={field.onChange}
-                error={fieldState.error?.message ?? null}
-              />
+              <View ref={targets.fieldRef('gender')} collapsable={false} style={styles.rowItem}>
+                <SelectField
+                  label="Gender"
+                  placeholder="Select"
+                  value={field.value ?? null}
+                  options={GENDERS}
+                  onChange={field.onChange}
+                  error={fieldState.error?.message ?? null}
+                />
+              </View>
             )}
           />
         </View>
@@ -341,7 +355,7 @@ export default function ProfileFormScreen() {
             control={control}
             name="areaId"
             render={({ field, fieldState }) => (
-              <>
+              <View ref={targets.fieldRef('areaId')} collapsable={false}>
                 <PickerField
                   label="Living area"
                   placeholder="Select"
@@ -357,7 +371,7 @@ export default function ProfileFormScreen() {
                   onSelect={field.onChange}
                   onClose={() => setSheet(null)}
                 />
-              </>
+              </View>
             )}
           />
         ) : null}
@@ -384,6 +398,8 @@ export default function ProfileFormScreen() {
       ) : null}
 
       <View style={styles.spacer} />
+
+      <FormProblems problems={problems} onSelect={goToField} style={styles.problems} />
 
       <Button
         label="Continue"
@@ -457,6 +473,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   error: {
+    marginBottom: 12,
+  },
+  problems: {
     marginBottom: 12,
   },
   spacer: {

@@ -1,7 +1,20 @@
 export { Avatar, avatarColor } from './Avatar';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { Badge, type BadgeTone, OverlayPill, Tag } from './Chips';
-export { FieldBox, FieldLabel, PickerField, TextField, type TextFieldProps } from './Field';
+export {
+  FieldBox,
+  FieldError,
+  FieldLabel,
+  PickerField,
+  TextField,
+  type TextFieldProps,
+} from './Field';
+export {
+  type FormProblem,
+  FormProblems,
+  type FormProblemsProps,
+  useFieldTargets,
+} from './FormProblems';
 export { BackButton, BulletHeading, StepLabel } from './Heading';
 export { OtpInput } from './OtpInput';
 export { OptionSheet, type SheetOption } from './OptionSheet';

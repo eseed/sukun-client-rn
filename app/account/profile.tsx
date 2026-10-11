@@ -3,7 +3,6 @@ import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
-import { z } from 'zod';
 import {
   BackButton,
   BulletHeading,
@@ -11,16 +10,23 @@ import {
   Checkbox,
   InlineError,
   DateField,
+  FormProblems,
   PickerField,
   SelectField,
   ResourceState,
   Screen,
   TextField,
+  useFieldTargets,
 } from '../../src/components/ui';
 import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
-import { ageOn, formatDateOfBirth, MINIMUM_AGE } from '../../src/lib/format';
+import { formatDateOfBirth } from '../../src/lib/format';
+import {
+  buildProfileSchema,
+  type ProfileFormValues,
+  profileProblems,
+} from '../../src/lib/profile-form';
 import { useAuthStore } from '../../src/stores/auth';
 import { space } from '../../src/theme/tokens';
 
@@ -33,23 +39,10 @@ const GENDERS: { value: 'male' | 'female'; label: string }[] = [
   { value: 'female', label: 'Female' },
 ];
 
-const schema = z.object({
-  fullName: z.string().trim().min(2, 'Tell us your name'),
-  email: z.string().trim().email('Check that email address'),
-  dateOfBirth: z
-    .string()
-    .trim()
-    .min(1, 'Pick your date of birth')
-    .refine(
-      (value) => ageOn(value, new Date()) >= MINIMUM_AGE,
-      `You must be ${MINIMUM_AGE} or over`,
-    ),
-  gender: z.enum(['male', 'female']),
-  areaId: z.string().min(1, 'Pick your area'),
-  marketingOptIn: z.boolean(),
-});
+/** Registration's schema; this screen asks every number for a living area, as it always has. */
+const schema = buildProfileSchema(true);
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = ProfileFormValues;
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -60,8 +53,9 @@ export default function EditProfileScreen() {
   const updateProfile = useUpdateProfile();
   const [sheet, setSheet] = useState<'gender' | 'area' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const targets = useFieldTargets();
 
-  const { control, handleSubmit, formState } = useForm<FormValues>({
+  const { control, handleSubmit, formState, setFocus } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       fullName: user?.fullName ?? '',
@@ -74,7 +68,18 @@ export default function EditProfileScreen() {
       marketingOptIn: user?.marketingOptIn ?? false,
     },
     mode: 'onBlur',
+    // `goToField` instead, which scrolls a picker into view as well as focusing a text field.
+    shouldFocusError: false,
   });
+
+  // After a refused press, what is still missing, named beside the button.
+  const problems = formState.submitCount > 0 ? profileProblems(formState.errors) : [];
+
+  /** Brings a field into view and, where it takes typing, puts the cursor in it. */
+  function goToField(name: string) {
+    targets.show(name);
+    setFocus(name as keyof FormValues);
+  }
 
   useEffect(() => {
     if (!user) router.replace('/(onboarding)/welcome');
@@ -85,25 +90,32 @@ export default function EditProfileScreen() {
   }
   if (!user) return <Redirect href="/(onboarding)/welcome" />;
 
-  const onSubmit = handleSubmit(async (values) => {
-    setSubmitError(null);
-    try {
-      await updateProfile.mutateAsync({
-        fullName: values.fullName,
-        email: values.email,
-        dateOfBirth: values.dateOfBirth,
-        gender: values.gender,
-        areaId: values.areaId,
-        marketingOptIn: values.marketingOptIn,
-      });
-      router.back();
-    } catch (err) {
-      setSubmitError(messageForError(err));
-    }
-  });
+  const onSubmit = handleSubmit(
+    async (values) => {
+      setSubmitError(null);
+      try {
+        await updateProfile.mutateAsync({
+          fullName: values.fullName,
+          email: values.email,
+          dateOfBirth: values.dateOfBirth,
+          gender: values.gender,
+          areaId: values.areaId,
+          marketingOptIn: values.marketingOptIn,
+        });
+        router.back();
+      } catch (err) {
+        setSubmitError(messageForError(err));
+      }
+    },
+    (errors) => {
+      // The first field with a problem, brought into view (a saved `prefer_not_to_say` gender, say).
+      const first = profileProblems(errors)[0];
+      if (first) goToField(first.name);
+    },
+  );
 
   return (
-    <Screen scroll contentStyle={styles.content}>
+    <Screen scroll contentStyle={styles.content} scrollRef={targets.scrollRef}>
       <BackButton onPress={() => router.back()} style={styles.back} />
       <View style={styles.heading}>
         <BulletHeading title="Edit your profile" size="lg" />
@@ -114,31 +126,37 @@ export default function EditProfileScreen() {
           control={control}
           name="fullName"
           render={({ field, fieldState }) => (
-            <TextField
-              label="Full name"
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              autoCapitalize="words"
-              textContentType="name"
-              error={fieldState.error?.message ?? null}
-            />
+            <View ref={targets.fieldRef('fullName')} collapsable={false}>
+              <TextField
+                ref={field.ref}
+                label="Full name"
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                autoCapitalize="words"
+                textContentType="name"
+                error={fieldState.error?.message ?? null}
+              />
+            </View>
           )}
         />
         <Controller
           control={control}
           name="email"
           render={({ field, fieldState }) => (
-            <TextField
-              label="Email"
-              value={field.value}
-              onChangeText={field.onChange}
-              onBlur={field.onBlur}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              textContentType="emailAddress"
-              error={fieldState.error?.message ?? null}
-            />
+            <View ref={targets.fieldRef('email')} collapsable={false}>
+              <TextField
+                ref={field.ref}
+                label="Email"
+                value={field.value}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                textContentType="emailAddress"
+                error={fieldState.error?.message ?? null}
+              />
+            </View>
           )}
         />
         <View style={styles.row}>
@@ -146,30 +164,36 @@ export default function EditProfileScreen() {
             control={control}
             name="dateOfBirth"
             render={({ field, fieldState }) => (
-              <DateField
-                containerStyle={styles.rowItem}
-                label="Date of birth"
-                value={field.value}
-                onChange={field.onChange}
-                placeholder="Select"
-                format={formatDateOfBirth}
-                error={fieldState.error?.message ?? null}
-              />
+              <View
+                ref={targets.fieldRef('dateOfBirth')}
+                collapsable={false}
+                style={styles.rowItem}
+              >
+                <DateField
+                  label="Date of birth"
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Select"
+                  format={formatDateOfBirth}
+                  error={fieldState.error?.message ?? null}
+                />
+              </View>
             )}
           />
           <Controller
             control={control}
             name="gender"
             render={({ field, fieldState }) => (
-              <SelectField
-                containerStyle={styles.rowItem}
-                label="Gender"
-                placeholder="Select"
-                value={field.value ?? null}
-                options={GENDERS}
-                onChange={field.onChange}
-                error={fieldState.error?.message ?? null}
-              />
+              <View ref={targets.fieldRef('gender')} collapsable={false} style={styles.rowItem}>
+                <SelectField
+                  label="Gender"
+                  placeholder="Select"
+                  value={field.value ?? null}
+                  options={GENDERS}
+                  onChange={field.onChange}
+                  error={fieldState.error?.message ?? null}
+                />
+              </View>
             )}
           />
         </View>
@@ -177,7 +201,7 @@ export default function EditProfileScreen() {
           control={control}
           name="areaId"
           render={({ field, fieldState }) => (
-            <>
+            <View ref={targets.fieldRef('areaId')} collapsable={false}>
               <PickerField
                 label="Living area"
                 placeholder="Select"
@@ -193,7 +217,7 @@ export default function EditProfileScreen() {
                 onSelect={field.onChange}
                 onClose={() => setSheet(null)}
               />
-            </>
+            </View>
           )}
         />
         <Controller
@@ -218,6 +242,7 @@ export default function EditProfileScreen() {
         />
       ) : null}
       {submitError ? <InlineError message={submitError} style={styles.error} /> : null}
+      <FormProblems problems={problems} onSelect={goToField} style={styles.error} />
       <Button
         label="Save changes"
         onPress={onSubmit}

@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, type Ref } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -26,6 +26,8 @@ export interface ScreenProps {
   /** Called once the scroll position reaches the bottom threshold. */
   onEndReached?: () => void;
   onEndReachedThreshold?: number;
+  /** The scroll view of a `scroll` screen, so a form can bring a field into view. */
+  scrollRef?: Ref<ScrollView>;
 }
 
 /** Only numeric padding participates in the inset maths; percentages fall back to the default. */
@@ -61,6 +63,7 @@ export function Screen({
   contentStyle,
   onEndReached,
   onEndReachedThreshold = 160,
+  scrollRef,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const top = edges?.top === false ? 0 : insets.top;
@@ -90,6 +93,7 @@ export function Screen({
 
   const body = scroll ? (
     <ScrollView
+      ref={scrollRef}
       style={styles.flex}
       // `flexGrow` rather than a plain height, so a screen whose spacer pins a CTA to the
       // bottom still fills a tall screen, and still scrolls once the keyboard shrinks it.

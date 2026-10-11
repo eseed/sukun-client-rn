@@ -16,6 +16,7 @@ import WelcomeScreen from '../(onboarding)/welcome';
 import OtpScreen from '../(onboarding)/otp';
 import ProfileFormScreen from '../(onboarding)/profile';
 import SelfieScreen from '../account/selfie';
+import EditProfileScreen from '../account/profile';
 import DiscoverScreen from '../(tabs)/discover';
 import TicketsScreen from '../(tabs)/tickets';
 import ProfileTabScreen from '../(tabs)/profile';
@@ -305,6 +306,56 @@ describe('04 About you', () => {
   });
 
   /**
+   * A refused Continue says what each field needs under it, and names them all in one sentence
+   * beside the button, where the person is looking (owner's call 2026-10-10, as on the website).
+   */
+  it('names what is missing beside the button, and says what each field needs', async () => {
+    useAuthStore.setState({
+      status: 'signed-in',
+      user: { ...emptyForeignUser(), phoneNumber: '+201012345678' },
+    });
+    renderWithProviders(<ProfileFormScreen />);
+
+    await waitFor(() => expect(screen.getByText('Step 2 of 2')).toBeTruthy());
+    expect(screen.queryByText(/missing or incomplete/)).toBeNull();
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() => expect(screen.getByText('Enter your full name')).toBeTruthy());
+    expect(screen.getByText('Enter your email')).toBeTruthy();
+    expect(screen.getByText('Pick your date of birth')).toBeTruthy();
+    expect(screen.getByText('Pick your gender')).toBeTruthy();
+    expect(screen.getByText('Pick your living area')).toBeTruthy();
+    expect(screen.getByText(/missing or incomplete/)).toHaveTextContent(
+      'Your full name, email, date of birth, gender and living area are missing or incomplete.',
+    );
+
+    // Each field it names is a tap away, and a fixed one drops out of the sentence.
+    fireEvent.press(screen.getByText('gender'));
+    fireEvent.changeText(screen.getByPlaceholderText('Your name'), 'Yasmin El Sayed');
+    await waitFor(() =>
+      expect(screen.getByText(/missing or incomplete/)).toHaveTextContent(
+        'Your email, date of birth, gender and living area are missing or incomplete.',
+      ),
+    );
+    expect(screen.queryByText('Enter your full name')).toBeNull();
+  });
+
+  it('says an email that is not one should be checked', async () => {
+    useAuthStore.setState({ status: 'signed-in', user: emptyForeignUser() });
+    renderWithProviders(<ProfileFormScreen />);
+
+    await waitFor(() => expect(screen.getByText('Step 2 of 2')).toBeTruthy());
+    fireEvent.changeText(screen.getByPlaceholderText('you@email.com'), 'yasmin@');
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Check your email, it should look like name@example.com'),
+      ).toBeTruthy(),
+    );
+  });
+
+  /**
    * The number is verified by the time this form renders, so without an exit the only way
    * back to the catalogue is the "wrong number" alert, which drops the account and lands on
    * the phone field. That leaves a registered user four steps and a destructive confirmation
@@ -321,6 +372,30 @@ describe('04 About you', () => {
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/(tabs)/discover'));
     expect(useAuthStore.getState().status).toBe('signed-in');
     expect(useAuthStore.getState().setupDeferred).toBe(true);
+  });
+});
+
+describe('Edit profile', () => {
+  /**
+   * `prefer_not_to_say` is still stored for some accounts and no longer offered, so their gender
+   * starts empty, and saving says that is the one thing left.
+   */
+  it('names a gender the form no longer offers as the one thing missing', async () => {
+    const { profiled } = await signInWithoutSelfie();
+    useAuthStore.setState({ user: { ...profiled, gender: 'prefer_not_to_say' } });
+    const update = jest.spyOn(mockApi.profile, 'update');
+    renderWithProviders(<EditProfileScreen />);
+
+    fireEvent.press(screen.getByText('Save changes'));
+
+    await waitFor(() =>
+      expect(screen.getByText(/missing or incomplete/)).toHaveTextContent(
+        'Your gender is missing or incomplete.',
+      ),
+    );
+    expect(screen.getByText('Pick your gender')).toBeTruthy();
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
   });
 });
 
