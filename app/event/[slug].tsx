@@ -41,6 +41,8 @@ import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useLiveEventContext } from '../../src/hooks/useLiveEventContext';
+import { GroupDiscountTeaser } from '../../src/components/checkout/GroupDiscount';
+import { groupDiscountTeaser } from '../../src/lib/groupDiscount';
 
 const HERO_HEIGHT = 280;
 
@@ -123,6 +125,12 @@ export default function EventDetailScreen() {
 
   const firstPurchasableTier = event.tiers.find((tier) => tier.isPurchasable);
   const invitation = waitingInvitations.find((ticket) => ticket.event.id === event.id) ?? null;
+  // Only to someone who can buy: an invitee is never shown a price, or an offer on one.
+  const showTeaser = Boolean(
+    !invitation &&
+    firstPurchasableTier &&
+    groupDiscountTeaser(event.groupDiscounts, event.maxTicketsPerOrder),
+  );
   const availability = eventAvailabilityMessage(event);
   const eventId = event.id;
 
@@ -206,7 +214,7 @@ export default function EventDetailScreen() {
 
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: (showTeaser ? 168 : 120) + insets.bottom }}
         onScroll={onScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
@@ -305,9 +313,7 @@ export default function EventDetailScreen() {
               <Button
                 label={`Open LIVE ${event.title}`}
                 size="inline"
-                onPress={() =>
-                  router.push(`/live-event/${event.id}`)
-                }
+                onPress={() => router.push(`/live-event/${event.id}`)}
               />
             </View>
           ) : null}
@@ -414,26 +420,36 @@ export default function EventDetailScreen() {
       )}
 
       <View style={[styles.bar, { paddingBottom: insets.bottom + 16 }]}>
-        {/* A holder with an invitation waiting is not buying, so no price is shown to them. */}
-        {invitation ? null : (
-          <View style={styles.barPriceBlock}>
-            <Text style={styles.barLabel}>From</Text>
-            <Text style={styles.barPrice}>
-              {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
-            </Text>
-            {event.priceFromEgp ? <PricesIncludeVat event={event} /> : null}
-          </View>
-        )}
-        <Button
-          label={
-            invitation ? 'Claim ticket' : firstPurchasableTier ? 'Get tickets' : 'Not available'
-          }
-          variant="accent"
-          size="inline"
-          style={invitation ? styles.flex : undefined}
-          onPress={onGetTickets}
-          disabled={!invitation && !firstPurchasableTier}
-        />
+        {/* The event's group discount, over the price: "For a limited time, bring a friend". */}
+        {showTeaser ? (
+          <GroupDiscountTeaser
+            tiers={event.groupDiscounts}
+            maxTickets={event.maxTicketsPerOrder}
+            compact
+          />
+        ) : null}
+        <View style={styles.barRow}>
+          {/* A holder with an invitation waiting is not buying, so no price is shown to them. */}
+          {invitation ? null : (
+            <View style={styles.barPriceBlock}>
+              <Text style={styles.barLabel}>From</Text>
+              <Text style={styles.barPrice}>
+                {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
+              </Text>
+              {event.priceFromEgp ? <PricesIncludeVat event={event} /> : null}
+            </View>
+          )}
+          <Button
+            label={
+              invitation ? 'Claim ticket' : firstPurchasableTier ? 'Get tickets' : 'Not available'
+            }
+            variant="accent"
+            size="inline"
+            style={invitation ? styles.flex : undefined}
+            onPress={onGetTickets}
+            disabled={!invitation && !firstPurchasableTier}
+          />
+        </View>
       </View>
 
       <Modal
@@ -680,14 +696,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     backgroundColor: colors.bgSurface,
     borderTopWidth: 1,
     borderTopColor: colors.borderDefault,
     paddingTop: 16,
     paddingHorizontal: 24,
+    gap: 12,
+  },
+  barRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: 16,
   },
   barPriceBlock: {

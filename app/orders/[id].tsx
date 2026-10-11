@@ -19,6 +19,7 @@ import { describeOrderAddonRecipients, ticketAddonStatusLabel } from '../../src/
 import { messageForError } from '../../src/lib/errors';
 import { formatDate, formatDateRange, formatEgp } from '../../src/lib/format';
 import { colors, space } from '../../src/theme/tokens';
+import { groupDiscountLabel } from '../../src/lib/groupDiscount';
 
 /**
  * Design screen 19 · Order receipt.
@@ -184,6 +185,20 @@ export default function OrderDetailScreen() {
                 </>
               ) : null}
 
+              {data.children?.length ? (
+                <>
+                  <Text variant="eyebrow">Children</Text>
+                  <Card style={styles.itemsCard}>
+                    {data.children.map((child, index) => (
+                      <View key={`${child.name}-${index}`} style={styles.guest}>
+                        <Text variant="bodyValue">{child.name}</Text>
+                        <Text variant="meta">Comes in with their adult&apos;s QR code</Text>
+                      </View>
+                    ))}
+                  </Card>
+                </>
+              ) : null}
+
               <Card style={styles.summary}>
                 <SummaryRow label="Subtotal" value={formatEgp(data.subtotalEgp)} />
                 {/* PENDING BACKEND — the design labels this "Promo · SUKUN10, tickets only", but
@@ -192,7 +207,9 @@ export default function OrderDetailScreen() {
                     the DTO carries the promo the way the cart's pricing does. */}
                 {data.discountEgp !== '0.00' ? (
                   <SummaryRow
-                    label="Promo"
+                    label={
+                      data.groupDiscount ? groupDiscountLabel(data.groupDiscount.percent) : 'Promo'
+                    }
                     value={`−${formatEgp(data.discountEgp)}`}
                     tone="positive"
                   />
