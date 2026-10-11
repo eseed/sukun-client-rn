@@ -54,3 +54,6 @@ coverage/
 # documentation: they go stale the moment the work lands, and they are not the repo's to carry.
 *_HANDOFF.md
 *_REVIEW.md
+
+# Local git worktrees
+.worktrees/
