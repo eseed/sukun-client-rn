@@ -38,6 +38,8 @@ import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRe
 import { usePaymobSheet } from '../../src/hooks/usePaymobSheet';
 import { colors, fontFamily, space } from '../../src/theme/tokens';
 import type { CartPricingLine, OrderDetail } from '../../src/api/types';
+import { GroupDiscountApplied } from '../../src/components/checkout/GroupDiscount';
+import { groupDiscountLabel } from '../../src/lib/groupDiscount';
 
 /**
  * Design screen 16 · Checkout, review & pay.
@@ -181,10 +183,18 @@ export default function ReviewScreen() {
   // The server detached a promo that stopped applying to this basket. Saying so is the whole
   // point: a code silently vanishing from the total is worse than one that never worked.
   const droppedPromo = cart?.promoAdjustment?.previousPromoCode;
+  // Dropped because the tickets reached a group discount step, which a code never goes on top of.
+  const droppedForGroup = cart?.promoAdjustment?.reason === 'PROMO_REPLACED_BY_GROUP_DISCOUNT';
+  const groupDiscount = pricing?.groupDiscount ?? null;
 
   useEffect(() => {
     if (droppedPromo) setPromoCode(null);
   }, [droppedPromo, setPromoCode]);
+
+  // A group discount stands in for any code the draft still remembers.
+  useEffect(() => {
+    if (groupDiscount && promoCode) setPromoCode(null);
+  }, [groupDiscount, promoCode, setPromoCode]);
 
   /**
    * The cart is gone: the draft expired, or the buyer reached this screen without one.
@@ -200,11 +210,7 @@ export default function ReviewScreen() {
         errorTitle="This checkout has expired"
         errorMessage="Start again from the event to pick your tickets."
         retryLabel={validEventId ? 'Back to the event' : 'Find an event'}
-        onRetry={() =>
-          router.replace(
-            validEventId ? `/event/${validEventId}` : '/(tabs)/discover',
-          )
-        }
+        onRetry={() => router.replace(validEventId ? `/event/${validEventId}` : '/(tabs)/discover')}
       />
     </Screen>
   );
@@ -463,6 +469,14 @@ export default function ReviewScreen() {
           <SummaryRow label="Subtotal" value={formatEgp(pricing.subtotalEgp)} />
         ) : null}
 
+        {groupDiscount ? (
+          <SummaryRow
+            label={groupDiscountLabel(groupDiscount.percent)}
+            value={`−${formatEgp(groupDiscount.discountEgp)}`}
+            tone="positive"
+          />
+        ) : null}
+
         {pricing?.promo ? (
           <SummaryRow
             label={`Promo · ${pricing.promo.code}${
@@ -494,7 +508,9 @@ export default function ReviewScreen() {
 
       {droppedPromo ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.notice}>
-          {droppedPromo} no longer applies to this order, so it was removed.
+          {droppedForGroup
+            ? `Your group discount applies instead of ${droppedPromo}.`
+            : `${droppedPromo} no longer applies to this order, so it was removed.`}
         </Text>
       ) : null}
 
@@ -502,37 +518,39 @@ export default function ReviewScreen() {
         <InlineError message="The price changed while you were here. Check the new total, then tap again." />
       ) : null}
 
-      {!placed ? (
-        promoCode ? (
-          <View style={styles.promoApplied}>
-            <Text variant="metaSm">Promo {promoCode} applied</Text>
-            <Pressable accessibilityRole="button" onPress={onRemovePromo}>
-              <Text variant="metaSm" color={colors.sky500}>
-                Remove
-              </Text>
-            </Pressable>
-          </View>
-        ) : (
-          <View style={styles.promoRow}>
-            <TextInput
-              accessibilityLabel="Promo code"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              onChangeText={setPromoDraft}
-              placeholder="Promo code"
-              placeholderTextColor={colors.textMuted}
-              style={styles.promoInput}
-              value={promoDraft}
-            />
-            <Button
-              label="Apply"
-              variant="secondary"
-              loading={applyPromo.isPending}
-              onPress={onApplyPromo}
-            />
-          </View>
-        )
-      ) : null}
+      {/* The group discount takes the promo field's place: a code never goes on top of it. Nothing
+          while the order is first being priced, before anyone knows which it will be. */}
+      {placed || (!pricing && preview.isPending) ? null : groupDiscount ? (
+        <GroupDiscountApplied groupDiscount={groupDiscount} style={styles.groupApplied} />
+      ) : promoCode ? (
+        <View style={styles.promoApplied}>
+          <Text variant="metaSm">Promo {promoCode} applied</Text>
+          <Pressable accessibilityRole="button" onPress={onRemovePromo}>
+            <Text variant="metaSm" color={colors.sky500}>
+              Remove
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.promoRow}>
+          <TextInput
+            accessibilityLabel="Promo code"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            onChangeText={setPromoDraft}
+            placeholder="Promo code"
+            placeholderTextColor={colors.textMuted}
+            style={styles.promoInput}
+            value={promoDraft}
+          />
+          <Button
+            label="Apply"
+            variant="secondary"
+            loading={applyPromo.isPending}
+            onPress={onApplyPromo}
+          />
+        </View>
+      )}
 
       <Checkbox
         checked={termsAccepted}
@@ -547,8 +565,8 @@ export default function ReviewScreen() {
         the buyer is told the one exit there is before they need it.
       */}
       <Text variant="metaSm" color={colors.textMuted} style={styles.notice}>
-        If your bank&apos;s verification page doesn&apos;t load, close the sheet with X.
-        We&apos;ll check with your bank and update your order.
+        If your bank&apos;s verification page doesn&apos;t load, close the sheet with X. We&apos;ll
+        check with your bank and update your order.
       </Text>
 
       <View style={styles.spacer} />
@@ -571,7 +589,9 @@ export default function ReviewScreen() {
                 : 'This order cannot be paid yet'
         }
         disabled={placed ? false : !canPlace || !termsAccepted}
-        loading={!placed && (placeOrder.isPending || initiatePayment.isPending || preview.isPending)}
+        loading={
+          !placed && (placeOrder.isPending || initiatePayment.isPending || preview.isPending)
+        }
         onPress={onContinue}
       />
     </Screen>
@@ -587,6 +607,7 @@ const styles = StyleSheet.create({
   addonLine: { marginBottom: space.s2 },
   notice: { marginBottom: space.s3 },
   promoRow: { flexDirection: 'row', gap: space.s2, marginVertical: space.s3 },
+  groupApplied: { marginVertical: space.s3 },
   promoInput: {
     backgroundColor: colors.bgSurface,
     borderColor: colors.borderDefault,
