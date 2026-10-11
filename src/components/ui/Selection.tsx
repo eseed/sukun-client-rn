@@ -182,17 +182,22 @@ export function QuantityStepper({
   min = 1,
   max = 10,
   onChange,
+  decrementLabel = 'Remove one ticket',
+  incrementLabel = 'Add one ticket',
 }: {
   value: number;
   min?: number;
   max?: number;
   onChange: (next: number) => void;
+  /** Screen-reader names, when several steppers share a screen ("One more Kids Weekend Pass"). */
+  decrementLabel?: string;
+  incrementLabel?: string;
 }) {
   return (
     <View style={styles.stepper}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Remove one ticket"
+        accessibilityLabel={decrementLabel}
         disabled={value <= min}
         onPress={() => onChange(value - 1)}
         style={({ pressed }) => [styles.stepperButton, pressed && styles.pressed]}
@@ -202,7 +207,7 @@ export function QuantityStepper({
       <Text style={styles.stepperValue}>{value}</Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Add one ticket"
+        accessibilityLabel={incrementLabel}
         disabled={value >= max}
         onPress={() => onChange(value + 1)}
         style={({ pressed }) => [styles.stepperButton, pressed && styles.pressed]}

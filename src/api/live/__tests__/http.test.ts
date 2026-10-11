@@ -119,8 +119,9 @@ describe('live HTTP auth resilience', () => {
 
     // Revision 2 claims granted tickets itself; without it the backend claims them for the app.
     // Revision 3 shows VAT-inclusive prices; without it the backend sends inclusive orders no VAT.
-    expect(http.MOBILE_CLIENT_REVISION).toBe(3);
-    expect(seen.map((headers) => headers['X-Sukun-Client-Revision'])).toEqual(['3', '3']);
+    // Revision 4 shows group discounts; only its carts are offered them.
+    expect(http.MOBILE_CLIENT_REVISION).toBe(4);
+    expect(seen.map((headers) => headers['X-Sukun-Client-Revision'])).toEqual(['4', '4']);
   });
 
   it('does not set JSON content type for multipart uploads', async () => {

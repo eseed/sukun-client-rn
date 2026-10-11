@@ -179,6 +179,8 @@ const MESSAGES: Record<string, string> = {
   // Disabled codes read exactly like unknown ones.
   PROMO_CODE_DISABLED: 'That promo code is not valid.',
   PROMO_NOT_APPLICABLE_TO_CART: 'That promo code does not apply to this order.',
+  PROMO_GROUP_DISCOUNT_APPLIES:
+    "Your group discount is already applied, so a promo code can't be added on top.",
   // Order placement's spelling of the tier refusal.
   PROMO_CODE_NOT_ELIGIBLE_FOR_TIER: 'That promo code does not apply to this pass.',
 

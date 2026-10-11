@@ -14,17 +14,19 @@ import {
   Text,
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
+import { GroupDiscountOfferCard } from '../../src/components/checkout/GroupDiscount';
 import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { track } from '../../src/lib/analytics';
 import { trackMetaAddTickets } from '../../src/lib/meta-events';
 import { messageForError } from '../../src/lib/errors';
-import { useEvent } from '../../src/hooks/queries';
+import { useEvent, useGroupQuote } from '../../src/hooks/queries';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
 import { formatEgp } from '../../src/lib/format';
 import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useCheckoutAccess } from '../../src/hooks/useCheckoutAccess';
+import { useHoldsTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
 
 /**
  * Design screen 08 · Checkout, choose your pass.
@@ -53,6 +55,28 @@ export default function ChoosePassScreen() {
   const quantity = useCheckoutStore((s) => s.quantity);
   const setTier = useCheckoutStore((s) => s.setTier);
   const setQuantity = useCheckoutStore((s) => s.setQuantity);
+  const buyerTakesTicket = useCheckoutStore((s) => s.buyerTakesTicket);
+  const setBuyerTakesTicket = useCheckoutStore((s) => s.setBuyerTakesTicket);
+  // Someone who already holds a ticket buys only for friends, which the offer's wording and the
+  // children's-pass rule depend on. Nobody signed out can hold one.
+  const holds = useHoldsTicketForEvent(validEventId ?? null);
+  useEffect(() => {
+    if (!holds.isPending) setBuyerTakesTicket(!holds.holdsTicket);
+  }, [holds.holdsTicket, holds.isPending, setBuyerTakesTicket]);
+  const otherTiers = useCheckoutStore((s) => s.otherTiers);
+  const setOtherTierCount = useCheckoutStore((s) => s.setOtherTierCount);
+  const promoteTier = useCheckoutStore((s) => s.promoteTier);
+
+  // A group mixing passes is priced by the server as a whole, for the offer card's saving.
+  const othersCount = Object.values(otherTiers).reduce((sum, count) => sum + count, 0);
+  const mixedItems =
+    tierId && othersCount > 0
+      ? [
+          ...(quantity - othersCount > 0 ? [{ tierId, quantity: quantity - othersCount }] : []),
+          ...Object.entries(otherTiers).map(([id, count]) => ({ tierId: id, quantity: count })),
+        ]
+      : null;
+  const mixedQuote = useGroupQuote(validEventId, mixedItems);
 
   const eventQuery = useEvent(validEventId);
   const { data: event } = eventQuery;
@@ -118,9 +142,46 @@ export default function ChoosePassScreen() {
   const tierLimit = selectedTier?.quantityRemaining ?? maxPerOrder;
   const quantityLimit = Math.min(maxPerOrder, tierLimit);
   const eventUnavailable = event.state !== 'on_sale';
+  // More than one pass on sale: each gets its own count, so a group can mix passes (2 weekend
+  // passes and a day pass, or children's passes). The single-pass screen is unchanged.
+  const mixesPasses = event.tiers.filter((tier) => tier.isPurchasable).length > 1;
+  // A child's pass is never the buyer's own: someone buying their own ticket needs an adult one.
+  const needsAdult = Boolean(selectedTier?.isChildren) && buyerTakesTicket;
   const canContinue = Boolean(
-    selectedTier?.isPurchasable && quantity <= quantityLimit && !eventUnavailable,
+    selectedTier?.isPurchasable &&
+    (mixesPasses ? quantity <= maxPerOrder : quantity <= quantityLimit) &&
+    !eventUnavailable &&
+    !needsAdult,
   );
+
+  /** One pass's count: the main pass has what the others leave. */
+  const countOf = (id: string) => (id === tierId ? quantity - othersCount : (otherTiers[id] ?? 0));
+
+  /** A pass's stepper moved. The buyer's own ticket stays on an adult pass while there is one. */
+  const changeCount = (id: string, next: number) => {
+    if (id === tierId) {
+      if (next > 0) {
+        setQuantity(othersCount + next);
+        return;
+      }
+      // The main pass emptied: another chosen pass (an adult one first) becomes the main one.
+      const chosen = event.tiers.filter((tier) => tier.id !== id && (otherTiers[tier.id] ?? 0) > 0);
+      const heir = chosen.find((tier) => !tier.isChildren) ?? chosen[0];
+      if (!heir) return;
+      promoteTier(heir.id);
+      setOtherTierCount(id, 0);
+      return;
+    }
+    if (!tierId) {
+      // Nothing chosen yet: the first pass counted is the main one.
+      setTier(id);
+      setQuantity(Math.max(1, next));
+      return;
+    }
+    setOtherTierCount(id, next);
+    const target = event.tiers.find((tier) => tier.id === id);
+    if (next > 0 && selectedTier?.isChildren && target && !target.isChildren) promoteTier(id);
+  };
 
   const onContinue = () => {
     if (!canContinue) return;
@@ -146,7 +207,7 @@ export default function ChoosePassScreen() {
   };
 
   return (
-    <Screen contentStyle={styles.content}>
+    <Screen scroll contentStyle={styles.content}>
       <FlowerCorner top={52} />
 
       <BackButton onPress={() => router.back()} style={styles.back} />
@@ -162,52 +223,130 @@ export default function ChoosePassScreen() {
         </View>
       ) : null}
 
-      <View style={styles.tiers}>
-        {event.tiers.map((tier) => (
-          <SelectableCard
-            key={tier.id}
-            selected={tier.id === tierId}
-            disabled={
+      {mixesPasses ? (
+        <View style={styles.tiers}>
+          {event.tiers.map((tier) => {
+            const count = countOf(tier.id);
+            const shut =
               !tier.isPurchasable ||
               eventUnavailable ||
-              (tier.quantityRemaining !== null && tier.quantityRemaining < 1)
-            }
-            onPress={() => setTier(tier.id)}
-          >
-            <RadioDot selected={tier.id === tierId} />
-            <View style={styles.tierBody}>
-              <View style={styles.tierTop}>
-                <Text style={styles.tierName}>{tier.name}</Text>
-                <Text style={styles.tierPrice}>{formatEgp(tier.priceEgp)}</Text>
+              (tier.quantityRemaining !== null && tier.quantityRemaining < 1 && count === 0);
+            const max = Math.min(
+              tier.quantityRemaining ?? maxPerOrder,
+              maxPerOrder - (quantity - count),
+            );
+            return (
+              <View
+                key={tier.id}
+                style={[
+                  styles.countCard,
+                  count > 0 ? styles.countCardOn : null,
+                  shut ? styles.countCardShut : null,
+                ]}
+              >
+                <View style={styles.tierTop}>
+                  <Text style={styles.tierName}>{tier.name}</Text>
+                  <Text style={styles.tierPrice}>{formatEgp(tier.priceEgp)}</Text>
+                </View>
+                {tier.description ? (
+                  <Text style={styles.tierDescription}>{tier.description}</Text>
+                ) : null}
+                {!tier.isPurchasable ? (
+                  <Text style={styles.unavailable}>
+                    {tier.availabilityStatus.replaceAll('_', ' ')}
+                  </Text>
+                ) : null}
+                {shut ? null : (
+                  <View style={styles.countStepper}>
+                    <QuantityStepper
+                      value={count}
+                      min={tier.id === tierId && othersCount === 0 ? 1 : 0}
+                      max={Math.max(max, count)}
+                      onChange={(next) => changeCount(tier.id, next)}
+                      decrementLabel={`One fewer ${tier.name}`}
+                      incrementLabel={`One more ${tier.name}`}
+                    />
+                  </View>
+                )}
               </View>
-              {tier.description ? (
-                <Text style={styles.tierDescription}>{tier.description}</Text>
-              ) : null}
-              {!tier.isPurchasable ? (
-                <Text style={styles.unavailable}>
-                  {tier.availabilityStatus.replaceAll('_', ' ')}
-                </Text>
-              ) : null}
-            </View>
-          </SelectableCard>
-        ))}
-        {/* Inclusive prices are the whole price, so the buyer is told nothing is added later. */}
-        <PricesIncludeVat event={event} />
-      </View>
-
-      <Text variant="eyebrow" style={styles.quantityLabel}>
-        Quantity
-      </Text>
-
-      <View style={styles.quantityRow}>
-        <QuantityStepper value={quantity} min={1} max={quantityLimit} onChange={setQuantity} />
-        {selectedTier ? (
-          <View style={styles.subtotal}>
-            <Text style={styles.subtotalLabel}>Each</Text>
-            <Text style={styles.subtotalValue}>{formatEgp(selectedTier.priceEgp)}</Text>
+            );
+          })}
+          <PricesIncludeVat event={event} />
+        </View>
+      ) : (
+        <>
+          <View style={styles.tiers}>
+            {event.tiers.map((tier) => (
+              <SelectableCard
+                key={tier.id}
+                selected={tier.id === tierId}
+                disabled={
+                  !tier.isPurchasable ||
+                  eventUnavailable ||
+                  (tier.quantityRemaining !== null && tier.quantityRemaining < 1)
+                }
+                onPress={() => setTier(tier.id)}
+              >
+                <RadioDot selected={tier.id === tierId} />
+                <View style={styles.tierBody}>
+                  <View style={styles.tierTop}>
+                    <Text style={styles.tierName}>{tier.name}</Text>
+                    <Text style={styles.tierPrice}>{formatEgp(tier.priceEgp)}</Text>
+                  </View>
+                  {tier.description ? (
+                    <Text style={styles.tierDescription}>{tier.description}</Text>
+                  ) : null}
+                  {!tier.isPurchasable ? (
+                    <Text style={styles.unavailable}>
+                      {tier.availabilityStatus.replaceAll('_', ' ')}
+                    </Text>
+                  ) : null}
+                </View>
+              </SelectableCard>
+            ))}
+            {/* Inclusive prices are the whole price, so the buyer is told nothing is added later. */}
+            <PricesIncludeVat event={event} />
           </View>
-        ) : null}
-      </View>
+
+          <Text variant="eyebrow" style={styles.quantityLabel}>
+            Quantity
+          </Text>
+
+          <View style={styles.quantityRow}>
+            <QuantityStepper value={quantity} min={1} max={quantityLimit} onChange={setQuantity} />
+            {selectedTier ? (
+              <View style={styles.subtotal}>
+                <Text style={styles.subtotalLabel}>Each</Text>
+                <Text style={styles.subtotalValue}>{formatEgp(selectedTier.priceEgp)}</Text>
+              </View>
+            ) : null}
+          </View>
+        </>
+      )}
+
+      {needsAdult ? (
+        <Text variant="metaSm" color={colors.rose700} style={styles.notice}>
+          Children&apos;s passes come with an adult. Add a pass for yourself too.
+        </Text>
+      ) : null}
+
+      {/* The event's group discount steps, as an invitation to bring friends along. Not while
+          only children's passes are chosen: "Add a friend" would add another child. */}
+      {selectedTier && !eventUnavailable && !needsAdult ? (
+        <GroupDiscountOfferCard
+          tiers={event.groupDiscounts}
+          quantity={quantity}
+          buyerTakesTicket={buyerTakesTicket}
+          maxTickets={mixesPasses ? maxPerOrder : quantityLimit}
+          groupPrices={mixedItems ? undefined : selectedTier.groupPrices}
+          quote={mixedItems ? (mixedQuote.data ?? null) : undefined}
+          onReachNext={(next) => {
+            track('group_discount_add_friend', { event_id: event.id, quantity: next });
+            setQuantity(Math.min(next, mixesPasses ? maxPerOrder : quantityLimit));
+          }}
+          style={styles.groupOffer}
+        />
+      ) : null}
 
       {eventUnavailable ? (
         <Text variant="metaSm" color={colors.rose700} style={styles.notice}>
@@ -333,5 +472,30 @@ const styles = StyleSheet.create({
   },
   notice: {
     marginBottom: 12,
+  },
+  // As `SelectableCard`: white and border-default until chosen, then creme and black.
+  countCard: {
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: 16,
+    gap: 4,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface,
+  },
+  countCardOn: {
+    borderColor: colors.black,
+    backgroundColor: colors.creme,
+  },
+  countCardShut: {
+    opacity: 0.5,
+  },
+  countStepper: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+  },
+  /* Space between the offer and Continue (owner's call, 2026-10-11). */
+  groupOffer: {
+    marginTop: 8,
+    marginBottom: 24,
   },
 });

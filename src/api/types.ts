@@ -255,6 +255,57 @@ export interface EventTier {
   available: number;
   quantityRemaining: number | null;
   days: EventTierDay[];
+  /** A children's pass (told by its name): a child holds it, with a name only. Missing: false. */
+  isChildren?: boolean;
+  /**
+   * The pass at every group size that reaches a group discount step, priced by the server: the
+   * tickets subtotal, the discount and the tickets total after it (before any VAT added on top).
+   * Missing or empty: no group discount. Display only; the cart preview is what an order costs.
+   */
+  groupPrices?: EventTierGroupPrice[];
+}
+
+/** `PublicGroupQuoteResponseDto`: a mix of passes priced as a group, before VAT. Display only. */
+export interface GroupQuote {
+  ticketCount: number;
+  subtotalEgp: string;
+  percent: string | null;
+  minTickets: number | null;
+  discountEgp: string;
+  ticketsTotalEgp: string;
+  nextTier: GroupDiscountTier | null;
+}
+
+/** `PublicEventTierGroupPriceResponseDto` */
+export interface EventTierGroupPrice {
+  quantity: number;
+  percent: string;
+  subtotalEgp: string;
+  discountEgp: string;
+  ticketsTotalEgp: string;
+}
+
+/**
+ * `GroupDiscountTierResponseDto`: an order with at least `minTickets` tickets takes `percent`
+ * (`"15.00"`) off its tickets.
+ */
+export interface GroupDiscountTier {
+  minTickets: number;
+  percent: string;
+}
+
+/**
+ * `GroupDiscountBreakdownResponseDto`: the group discount a cart or an order took for its number of
+ * tickets, in place of a promo. Its amount is the pricing's `discountEgp`, repeated here.
+ */
+export interface GroupDiscountBreakdown {
+  percent: string;
+  minTickets: number;
+  ticketCount: number;
+  eligibleSubtotalEgp: string;
+  discountEgp: string;
+  /** The next step up, null at the top (and always on an order). */
+  nextTier: GroupDiscountTier | null;
 }
 
 /** `PublicEventDetailVenueDto` */
@@ -297,6 +348,12 @@ export interface EventDetail {
   vatInclusive: boolean;
   /** The event's VAT rate as a PERCENT string, e.g. `"14.00"`. Not the cart's `"0.1400"`. */
   vatRate: string;
+  /**
+   * Group discount steps, ascending by `minTickets`. Empty or missing: none. Display only: the
+   * cart preview prices them, never together with a promo code. The backend offers them to app
+   * carts from client revision 4 (`MOBILE_CLIENT_REVISION`).
+   */
+  groupDiscounts?: GroupDiscountTier[];
   maxTicketsPerOrder: number;
   salesOpenAt: string | null;
   salesCloseAt: string | null;
@@ -487,6 +544,10 @@ export interface OrderDetail {
   items: OrderItem[];
   guests: OrderGuest[];
   addons: OrderAddon[];
+  /** The group discount the order took, snapshotted (its amount is `discountEgp`), or null. */
+  groupDiscount?: GroupDiscountBreakdown | null;
+  /** Children in the order: no number, each admitted with their guardian. */
+  children?: { name: string; tierId: string }[];
   /**
    * Present only on the create response. Creating an order already opens a Paymob intention, so
    * the sheet can be presented straight from here; calling `payments.initiate` for the same order
@@ -843,8 +904,13 @@ export interface CartAttendee {
   cartTicketItemId: string;
   attendeeType: 'buyer' | 'guest';
   name: string;
-  phoneNumber: string;
+  /** Null only for a child, who has no number. */
+  phoneNumber: string | null;
   email: string | null;
+  /** A child: no number, admitted with their guardian (owner's call, 2026-10-11). */
+  isChild?: boolean;
+  guardianCartAttendeeId?: string | null;
+  guardianTicketId?: string | null;
 }
 
 /**
@@ -943,6 +1009,11 @@ export interface CartPricing {
   totalEgp?: string;
   /** Short-lived, roughly five minutes. Place Order needs the one from the preview shown. */
   pricingConfirmationToken: string | null;
+  /**
+   * Set when the cart's tickets reach a group discount step. It replaces the promo (`promo` is
+   * null, a code cannot be applied) and `discountEgp` is its amount.
+   */
+  groupDiscount?: GroupDiscountBreakdown | null;
 }
 
 /** `CheckoutCartPricingIssueResponseDto` — advisory, arrives inside a 200. */
@@ -994,7 +1065,19 @@ export interface CartPreview {
 export interface ReplaceCartTicketsInput {
   buyerTierId?: string | null;
   items: { tierId: string; quantity: number }[];
-  guests: { phoneNumber: string; name: string; tierId: string; email?: string }[];
+  guests: {
+    /** Required for an adult; a child has none. */
+    phoneNumber?: string;
+    name: string;
+    tierId: string;
+    email?: string;
+    /** A child on a children's pass, admitted with their guardian. */
+    child?: boolean;
+    /** A child's guardian: an adult guest of this request, by index (else the buyer's ticket). */
+    guardianGuestIndex?: number;
+    /** A child's guardian: a ticket the buyer already holds. */
+    guardianTicketId?: string;
+  }[];
 }
 
 /**

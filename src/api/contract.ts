@@ -1,4 +1,5 @@
 import type {
+  GroupQuote,
   AccountDeletionPreview,
   BuyerRoom,
   AddonDetail,
@@ -96,6 +97,8 @@ export interface SukunApi {
     list(query?: ListEventsQuery, signal?: AbortSignal): Promise<CursorPage<EventListItem>>;
     detail(identifier: string, signal?: AbortSignal): Promise<EventDetail>;
     meta(identifier: string): Promise<EventMeta>;
+    /** A mix of passes priced as a group (`POST public/events/:id/group-quote`). Public. */
+    groupQuote(identifier: string, items: { tierId: string; quantity: number }[]): Promise<GroupQuote>;
   };
 
   schedule: {

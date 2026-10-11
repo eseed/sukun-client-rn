@@ -2,6 +2,7 @@ import type { SukunApi } from '../contract';
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import type {
+  GroupQuote,
   AccountDeletionPreview,
   BuyerRoom,
   AddonDetail,
@@ -237,6 +238,14 @@ export const liveApi: SukunApi = {
 
     meta: (identifier) =>
       request<EventMeta>(`public/events/${encodeURIComponent(identifier)}/meta`, { auth: false }),
+
+    // POST public/events/:identifier/group-quote — a mix of passes priced as a group.
+    groupQuote: (identifier, items) =>
+      request<GroupQuote>(`public/events/${encodeURIComponent(identifier)}/group-quote`, {
+        method: 'POST',
+        auth: false,
+        body: { items },
+      }),
   },
 
   schedule: {
@@ -302,10 +311,12 @@ export const liveApi: SukunApi = {
         method: 'PUT',
         body: {
           ...input,
-          guests: input.guests.map((guest) => ({
-            ...guest,
-            phoneNumber: normalizePhoneForRequest(guest.phoneNumber),
-          })),
+          // A child has no number to send.
+          guests: input.guests.map((guest) =>
+            guest.phoneNumber === undefined
+              ? guest
+              : { ...guest, phoneNumber: normalizePhoneForRequest(guest.phoneNumber) },
+          ),
         },
       }),
 
