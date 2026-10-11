@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sukun",
     "slug": "sukun-client-rn",
-    "version": "2.2.1",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "sukun",
@@ -61,7 +61,7 @@
       "blockedPermissions": [
         "android.permission.WRITE_CONTACTS"
       ],
-      "versionCode": 12
+      "versionCode": 13
     },
     "web": {
       "favicon": "./assets/favicon.png",
