@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, type Ref } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -21,6 +21,30 @@ export function FieldLabel({ children }: { children: string }) {
   return <Text variant="fieldLabel">{children}</Text>;
 }
 
+/**
+ * The line under a field with a problem: a small rose300 disc with "!" ahead of the rose700
+ * sentence, so it reads as an error at a glance (owner's call 2026-10-10, as on the website).
+ * The disc is hidden from screen readers, so the field is described by the sentence alone.
+ */
+export function FieldError({ message }: { message: string }) {
+  return (
+    <View style={styles.error}>
+      <View
+        style={styles.errorMark}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Text variant="metaSm" color={colors.white} style={styles.errorMarkText}>
+          !
+        </Text>
+      </View>
+      <Text variant="metaSm" color={colors.rose700} style={styles.errorText}>
+        {message}
+      </Text>
+    </View>
+  );
+}
+
 export function FieldBox({
   children,
   invalid = false,
@@ -39,6 +63,8 @@ export interface TextFieldProps extends TextInputProps {
   /** Rendered inside the box, before the input — the `🇪🇬 +20` prefix on the phone screen. */
   prefix?: ReactNode;
   containerStyle?: ViewStyle;
+  /** The input itself, so a form can focus the field that needs fixing. */
+  ref?: Ref<TextInput>;
 }
 
 export function TextField({
@@ -47,6 +73,7 @@ export function TextField({
   prefix,
   containerStyle,
   style,
+  ref,
   ...rest
 }: TextFieldProps) {
   // A numeric keyboard has no return key to dismiss it with, so those fields get a Done bar.
@@ -58,6 +85,7 @@ export function TextField({
       <FieldBox invalid={Boolean(error)}>
         {prefix}
         <TextInput
+          ref={ref}
           placeholderTextColor={colors.textMuted}
           style={[styles.input, style]}
           {...rest}
@@ -65,11 +93,7 @@ export function TextField({
         />
         {done ? <KeyboardDoneAccessory /> : null}
       </FieldBox>
-      {error ? (
-        <Text variant="metaSm" color={colors.rose700}>
-          {error}
-        </Text>
-      ) : null}
+      {error ? <FieldError message={error} /> : null}
     </View>
   );
 }
@@ -108,11 +132,7 @@ export function PickerField({
           </Text>
         </FieldBox>
       </Pressable>
-      {error ? (
-        <Text variant="metaSm" color={colors.rose700}>
-          {error}
-        </Text>
-      ) : null}
+      {error ? <FieldError message={error} /> : null}
     </View>
   );
 }
@@ -133,8 +153,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: colors.bgSurface,
   },
+  // Thickened to 2.5px so it stands out, with 1px less padding so the box keeps its size.
   boxInvalid: {
-    borderColor: colors.rose700,
+    borderColor: colors.borderInvalid,
+    borderWidth: 2.5,
+    paddingVertical: 13,
+    paddingHorizontal: 15,
+  },
+  error: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  // 14px, centred on the 12px message's first line.
+  errorMark: {
+    width: 14,
+    height: 14,
+    marginTop: 1,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.borderInvalid,
+  },
+  errorMarkText: {
+    fontFamily: fontFamily.bodyMedium,
+    fontSize: 10,
+    lineHeight: 12,
+  },
+  errorText: {
+    flex: 1,
   },
   input: {
     flex: 1,
