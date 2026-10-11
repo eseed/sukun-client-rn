@@ -1,4 +1,5 @@
 import {
+  keepPreviousData,
   useMutation,
   useInfiniteQuery,
   useQuery,
@@ -290,6 +291,23 @@ export function useEvent(identifier: string | undefined) {
     queryKey: queryKeys.event(identifier ?? ''),
     queryFn: () => api.events.detail(identifier as string),
     enabled: Boolean(identifier),
+  });
+}
+
+/**
+ * A mix of passes priced as a group, by the server, for the pass step's saving. Keeps showing the
+ * last answer while a new mix is priced, so the figures do not flicker as the steppers move.
+ */
+export function useGroupQuote(
+  identifier: string | undefined,
+  items: { tierId: string; quantity: number }[] | null,
+) {
+  return useQuery({
+    queryKey: ['group-quote', identifier ?? '', items],
+    queryFn: () => api.events.groupQuote(identifier as string, items ?? []),
+    enabled: Boolean(identifier && items && items.length > 0),
+    placeholderData: keepPreviousData,
+    retry: false,
   });
 }
 
