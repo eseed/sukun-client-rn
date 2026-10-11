@@ -3,14 +3,17 @@ import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../src/ap
 import {
   eventDetails,
   SOUND_BATH_ID,
+  TIER_DAY1,
+  TIER_KIDS,
   TIER_SOUND_GA,
   TIER_WEEKEND,
   TULUA_ID,
 } from '../../src/api/mock/fixtures';
+import { messageForCode } from '../../src/lib/errors';
 import { missingProfileFields, resumeAfterOnboarding, useAuthStore } from '../../src/stores/auth';
 import { useFlagsStore } from '../../src/stores/flags';
 import { useCheckoutStore } from '../../src/stores/checkout';
-import { act, fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
+import { act, fireEvent, renderWithProviders, screen, waitFor, within } from '../../src/test-utils';
 
 import WelcomeScreen from '../(onboarding)/welcome';
 import OtpScreen from '../(onboarding)/otp';
@@ -501,28 +504,108 @@ describe('08 Choose your pass', () => {
    * so this test asserts the per-ticket price is there and the invented total is not.
    */
   it('lists tiers with their per-ticket price, and no locally multiplied subtotal', async () => {
-    mockParams.eventId = TULUA_ID;
+    mockParams.eventId = SOUND_BATH_ID;
     await signInAndComplete();
-    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
     useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<ChoosePassScreen />);
 
     await waitFor(() => expect(screen.getByText('Choose your pass')).toBeTruthy());
-    // Tulua sells extras, so its checkout is four steps (P0.1 decision #10). The label starts at
-    // the shorter flow and grows once the catalogue lands, so it is waited for.
-    await waitFor(() => expect(screen.getByText('Checkout · step 1 of 4')).toBeTruthy());
-    expect(screen.getByText('Full Weekend Pass')).toBeTruthy();
-    expect(screen.getByText('Day 1 Pass')).toBeTruthy();
-    expect(screen.getByText('Day 1 & 2')).toBeTruthy();
+    // One pass on sale: the original screen, a pass and a quantity.
+    expect(screen.getByText('General Admission')).toBeTruthy();
     expect(screen.getByText('Quantity')).toBeTruthy();
     // Once on the tier row, once against the stepper as what each ticket costs.
-    expect(screen.getAllByText('1,600.00 EGP').length).toBe(2);
+    expect(screen.getAllByText('450.00 EGP').length).toBe(2);
     expect(screen.getByText('Each')).toBeTruthy();
-    // 1,600 × 2 is the server's sum to make, and it has nothing to price yet.
-    expect(screen.queryByText('3,200.00 EGP')).toBeNull();
+    // 450 × 2 is the server's sum to make, and it has nothing to price yet.
+    expect(screen.queryByText('900.00 EGP')).toBeNull();
     expect(screen.queryByText('Subtotal')).toBeNull();
     expect(screen.queryByText('Prices include VAT')).toBeNull();
+  });
+
+  it('gives each pass its own count when several are on sale, for a group mixing passes', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+
+    // Tulua sells extras, so its checkout is four steps (P0.1 decision #10).
+    await waitFor(() => expect(screen.getByText('Checkout · step 1 of 4')).toBeTruthy());
+    expect(screen.getByText('Day 1 & 2')).toBeTruthy();
+    expect(screen.queryByText('Quantity')).toBeNull();
+
+    fireEvent.press(screen.getByLabelText('One more Full Weekend Pass'));
+    fireEvent.press(screen.getByLabelText('One more Day 1 Pass'));
+    expect(useCheckoutStore.getState()).toMatchObject({
+      tierId: TIER_WEEKEND,
+      quantity: 3,
+      otherTiers: { [TIER_DAY1]: 1 },
+    });
+    // The group is priced by the server as a whole: 3,200 + 950 at 15%.
+    await waitFor(() => expect(screen.getByText('You save 622.50 EGP')).toBeTruthy());
+  });
+
+  /** A buyer with no Tulua ticket of their own (the seeded one holds one). */
+  function holdsNoTickets() {
+    return jest.spyOn(mockApi.tickets, 'list').mockResolvedValue({
+      data: [],
+      meta: { limit: 50, hasNextPage: false, nextCursor: null },
+    });
+  }
+
+  it("asks for an adult's pass beside children's passes, and offers no friend to add", async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    // Buying their own ticket, so a child's pass alone cannot go on.
+    const tickets = holdsNoTickets();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+    await waitFor(() => expect(screen.getByLabelText('One more Kids Weekend Pass')).toBeTruthy());
+    fireEvent.press(screen.getByLabelText('One more Kids Weekend Pass'));
+    fireEvent.press(screen.getByLabelText('One fewer Full Weekend Pass'));
+
+    expect(
+      screen.getByText("Children's passes come with an adult. Add a pass for yourself too."),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+    expect(screen.queryByTestId('group-offer')).toBeNull();
+    tickets.mockRestore();
+  });
+
+  it('lets someone who already holds a ticket buy a child pass alone, for their child', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+    await waitFor(() => expect(screen.getByLabelText('One more Kids Weekend Pass')).toBeTruthy());
+    fireEvent.press(screen.getByLabelText('One more Kids Weekend Pass'));
+    fireEvent.press(screen.getByLabelText('One fewer Full Weekend Pass'));
+
+    // Their own ticket is the adult the child comes with.
+    expect(screen.queryByText(/Children's passes come with an adult/)).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled(),
+    );
+  });
+
+  it('invites a bigger group with the next discount step, and adds the friends it needs', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    const tickets = holdsNoTickets();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+
+    renderWithProviders(<ChoosePassScreen />);
+
+    await waitFor(() => expect(screen.getByTestId('group-offer')).toBeTruthy());
+    expect(screen.getByText('For a limited time, bring 2 friends and get 15% off')).toBeTruthy();
+    fireEvent.press(screen.getByText('Add 2 friends'));
+    expect(useCheckoutStore.getState().quantity).toBe(3);
+    expect(screen.getByText('15% off unlocked')).toBeTruthy();
+    tickets.mockRestore();
   });
 
   it('captions the tiers once when the event prices include VAT', async () => {
@@ -556,85 +639,154 @@ describe('08 Choose your pass', () => {
 });
 
 describe('09 Guests', () => {
-  it('offers contacts and a manual number, sized to the guest slots', async () => {
-    mockParams.eventId = TULUA_ID;
+  /** A row on "Who's coming?", by its label ("Friend 1", "Child 1"). */
+  const person = (label: string) => screen.getByTestId(`person-${label}`);
+  /** Types a friend's full name and national number into their row. */
+  function fillFriend(label: string, name: string, digits: string) {
+    fireEvent.changeText(within(person(label)).getByLabelText(`${label} full name`), name);
+    fireEvent.changeText(within(person(label)).getByPlaceholderText(/\d/), digits);
+  }
+
+  it('lists you first, read only, then a name and number for each friend', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
     await signInAndComplete();
-    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
     useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<GuestsScreen />);
 
-    expect(screen.getByText('Bringing anyone?')).toBeTruthy();
-    expect(screen.getByText('1 of your 2 tickets is for a guest.')).toBeTruthy();
-    expect(screen.getByText('0 of 1 picked')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Add by phone number')).toBeTruthy();
+    expect(await screen.findByText("Who's coming?")).toBeTruthy();
+    expect(screen.getByText('You')).toBeTruthy();
+    expect(screen.getByText('Yasmin El Sayed')).toBeTruthy();
+    expect(screen.getByTestId('person-Friend 1')).toBeTruthy();
+    expect(screen.queryByTestId('person-Friend 2')).toBeNull();
+    expect(
+      screen.getByText('A full name and WhatsApp number for each of the 2 tickets. Tickets arrive on WhatsApp.'),
+    ).toBeTruthy();
+  });
 
-    // Opening checkout must not touch the address book; the button is the only way in.
-    expect(screen.queryByText('Nour Hassan')).toBeNull();
+  it('asks for every name and number, and refuses your own number or a repeat', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+    useCheckoutStore.getState().setQuantity(3);
 
-    fireEvent.press(screen.getByText('Add from Contacts'));
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled());
+    fireEvent.press(screen.getByText('Continue'));
 
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    expect(screen.getByText('010 22334455')).toBeTruthy();
+    expect(screen.getByText('Fill in a full name and WhatsApp number for everyone.')).toBeTruthy();
+    expect(screen.getAllByText('Enter their full name')).toHaveLength(2);
+    expect(mockRouter.push).not.toHaveBeenCalled();
+
+    const own = useAuthStore.getState().user!.phoneNumber.replace('+20', '');
+    fillFriend('Friend 1', 'Ali Hassan', own);
+    fillFriend('Friend 2', 'Mona Adel', '1022334455');
+    fireEvent.press(screen.getByText('Continue'));
+    expect(screen.getByText(messageForCode('GUEST_IS_BUYER'))).toBeTruthy();
+
+    fillFriend('Friend 1', 'Ali Hassan', '1022334455');
+    fireEvent.press(screen.getByText('Continue'));
+    expect(screen.getByText(messageForCode('GUEST_DUPLICATE'))).toBeTruthy();
   });
 
   /**
-   * A search that finds nobody and a list with nobody left in it are different situations,
-   * and only one of them is the buyer's fault. Saying the wrong one reads as a broken screen.
+   * An event with nothing to sell alongside a ticket has no extras step, so guests lead
+   * straight to review (P0.1 decision #10, collapse to 3 steps).
    */
-  it('says the search found nobody, not that everyone is already attached', async () => {
+  it('builds the cart with every friend by name and skips extras for an event that sells none', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    expect(await mockApi.addons.list(SOUND_BATH_ID)).toEqual([]);
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+    useCheckoutStore.getState().setQuantity(2);
+    const replace = jest.spyOn(mockApi.carts, 'replaceTickets');
+
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByText('Checkout · step 2 of 3')).toBeTruthy());
+    fillFriend('Friend 1', 'Nour Hassan', '1022334455');
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() =>
+      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${SOUND_BATH_ID}`),
+    );
+    expect(replace).toHaveBeenCalledWith(expect.any(String), {
+      buyerTierId: TIER_SOUND_GA,
+      items: [{ tierId: TIER_SOUND_GA, quantity: 2 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_SOUND_GA }],
+    });
+    replace.mockRestore();
+  });
+
+  it('lets a single-ticket buyer bring friends, a ticket each, or continue alone', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
+
+    renderWithProviders(<GuestsScreen />);
+    expect(
+      await screen.findByText('This ticket is yours. Add friends if they are coming.'),
+    ).toBeTruthy();
+    expect(screen.queryByTestId('person-Friend 1')).toBeNull();
+
+    // The ceiling comes from the event, so the button waits for it.
+    await waitFor(() => expect(screen.getByText('Bring a friend')).toBeTruthy());
+    fireEvent.press(screen.getByText('Bring a friend'));
+    expect(useCheckoutStore.getState().quantity).toBe(2);
+    expect(screen.getByTestId('person-Friend 1')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Remove Friend 1'));
+    expect(useCheckoutStore.getState().quantity).toBe(1);
+    expect(screen.queryByTestId('person-Friend 1')).toBeNull();
+  });
+
+  /** One usable ticket per phone per event: a holder's tickets are all friends'. */
+  it('gives every ticket to a friend when the buyer already holds one', async () => {
     mockParams.eventId = TULUA_ID;
     await signInAndComplete();
     useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
-    useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
 
-    fireEvent.changeText(screen.getByLabelText('Search contacts'), 'nobody by that name');
+    // The seeded user already holds a Tulua ticket, so their single ticket is a friend's.
+    await waitFor(() => expect(screen.getByTestId('person-Friend 1')).toBeTruthy());
+    expect(screen.queryByText('You')).toBeNull();
+    expect(
+      screen.getByText('You already have a ticket, so these are all for friends. Tickets arrive on WhatsApp.'),
+    ).toBeTruthy();
 
-    await waitFor(() => expect(screen.getByText('No match.')).toBeTruthy());
-    expect(screen.queryByText('Nour Hassan')).toBeNull();
-    expect(screen.queryByText('Everyone here is already attached.')).toBeNull();
+    fillFriend('Friend 1', 'Nour Hassan', '1022334455');
+    fireEvent.press(screen.getByText('Continue'));
+    await waitFor(() =>
+      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/addons?eventId=${TULUA_ID}`),
+    );
   });
 
-  /**
-   * Limited access is the one state the in-app list cannot mend from inside itself: it holds
-   * only the handful of people already shared. The OS picker is the way to everybody else,
-   * and whoever it hands back has to land in the draft, because they never join that list.
-   */
-  it('attaches whoever the OS picker hands over, under limited access', async () => {
-    mockParams.eventId = TULUA_ID;
-    contactsPermission({ status: 'granted', accessPrivileges: 'limited' });
-    // The OS picker hands back the name in parts and never formats it, so the screen has to
-    // put it together itself. Passing a ready-made `name` here would test nothing.
-    mockPicker.mockResolvedValue({
-      firstName: 'Omar',
-      lastName: 'Fathy',
-      phoneNumbers: [{ number: '01555000111' }],
-    });
+  it('names the friend the server refuses, next to them', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
     await signInAndComplete();
-    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
     useCheckoutStore.getState().setQuantity(2);
-
-    renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Choose from all contacts')).toBeTruthy());
-
-    await act(async () => {
-      fireEvent.press(screen.getByText('Choose from all contacts'));
+    const validate = jest.spyOn(mockApi.orders, 'validateGuests').mockResolvedValue({
+      valid: false,
+      issues: [{ guestIndex: 0, error: 'GUEST_ALREADY_HAS_TICKET' }],
     });
 
-    expect(screen.getByText('Omar Fathy')).toBeTruthy();
-    expect(useCheckoutStore.getState().guests).toEqual([
-      expect.objectContaining({ phoneNumber: '+201555000111', name: 'Omar Fathy' }),
-    ]);
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled());
+    fillFriend('Friend 1', 'Nour Hassan', '1022334455');
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() =>
+      expect(within(person('Friend 1')).getByText(messageForCode('GUEST_ALREADY_HAS_TICKET'))).toBeTruthy(),
+    );
+    expect(mockRouter.push).not.toHaveBeenCalled();
+    validate.mockRestore();
   });
 
-  /** A ticket binds to one number, so a contact saved with several is asked about, not guessed. */
-  it('asks which number when the picked contact has more than one', async () => {
-    mockParams.eventId = TULUA_ID;
+  /** A contact picked from the phone fills the row; it is never required (rule: manual entry). */
+  it('fills a friend from the phone contacts, asking which number when there are several', async () => {
+    mockParams.eventId = SOUND_BATH_ID;
     contactsPermission({ status: 'granted', accessPrivileges: 'limited' });
     mockPicker.mockResolvedValue({
       firstName: 'Omar',
@@ -642,152 +794,42 @@ describe('09 Guests', () => {
       phoneNumbers: [{ number: '01555000111' }, { number: '01555000222' }],
     });
     await signInAndComplete();
-    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
     useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Choose from all contacts')).toBeTruthy());
-
+    await screen.findByLabelText('Choose Friend 1 from contacts');
     await act(async () => {
-      fireEvent.press(screen.getByText('Choose from all contacts'));
+      fireEvent.press(screen.getByLabelText('Choose Friend 1 from contacts'));
     });
-
-    // Nobody is attached on the strength of a guess.
-    expect(useCheckoutStore.getState().guests).toEqual([]);
+    // Nobody is filled in on the strength of a guess.
+    expect(within(person('Friend 1')).getByLabelText('Friend 1 full name').props.value).toBe('');
 
     fireEvent.press(screen.getByText('015 55000222'));
-
-    expect(useCheckoutStore.getState().guests).toEqual([
-      expect.objectContaining({ phoneNumber: '+201555000222', name: 'Omar Fathy' }),
-    ]);
-  });
-
-  /**
-   * Guests come from anywhere. A number entered under its own country is accepted, and the
-   * row keeps its calling code so a foreign number cannot read as a local one.
-   */
-  it('takes a guest number from another country', async () => {
-    mockParams.eventId = TULUA_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
-
-    renderWithProviders(<GuestsScreen />);
-    await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
-
-    fireEvent.press(screen.getByLabelText('Country: +20. Change'));
-    fireEvent.changeText(screen.getByLabelText('Search country'), 'united states');
-    fireEvent.press(screen.getByLabelText('United States +1'));
-
-    fireEvent.changeText(screen.getByLabelText('Guest phone number'), '2133734253');
-    fireEvent.press(screen.getByText('Add'));
-
-    expect(screen.getAllByText('+1 213 373 4253').length).toBeGreaterThan(0);
-    expect(screen.getByText('1 of 1 picked')).toBeTruthy();
-    expect(screen.queryByText('That does not look like a mobile number.')).toBeNull();
-  });
-
-  /**
-   * The buyer holds no ticket for this event, so their single ticket is their own and there
-   * is no guest slot: the screen offers tickets for friends rather than a dead end.
-   */
-  it('lets a single-ticket buyer bring friends, or continue alone', async () => {
-    mockParams.eventId = SOUND_BATH_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
-
-    renderWithProviders(<GuestsScreen />);
-
-    expect(screen.getByText('Go with friends')).toBeTruthy();
-    expect(screen.getByText('1 ticket')).toBeTruthy();
-    expect(screen.queryByPlaceholderText('Add by phone number')).toBeNull();
-    expect(screen.getByText('Continue')).toBeTruthy();
-
-    // The ceiling comes from the event, so the stepper stays put until that lands.
-    const plus = () => screen.getByLabelText('Add one ticket');
-    await waitFor(() => expect(plus().props.accessibilityState?.disabled).toBe(false));
-    fireEvent.press(plus());
-
-    expect(screen.getByText('2 tickets')).toBeTruthy();
-    expect(screen.getByText('0 of 1 picked')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Add by phone number')).toBeTruthy();
-
-    // And back down: taking the ticket off returns the screen to the single-ticket state.
-    fireEvent.press(screen.getByLabelText('Remove one ticket'));
-
-    expect(screen.getByText('1 ticket')).toBeTruthy();
-    expect(screen.queryByText('0 of 1 picked')).toBeNull();
-  });
-
-  /**
-   * One usable ticket per phone per event, so a buyer who already holds one cannot buy a
-   * second for themselves. Every ticket in the order is a guest's, including a lone one, and
-   * the order api refuses an allocation that does not add up. The screen has to say so here,
-   * while there is still somebody to pick.
-   */
-  it('makes a buyer who already holds a ticket name the guest, even for one ticket', async () => {
-    mockParams.eventId = TULUA_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
-
-    renderWithProviders(<GuestsScreen />);
-
-    // The seeded user already holds a Tulua ticket, so their single ticket is a guest slot.
-    await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
-    // Tulua sells extras, so this is step 2 of 4 and the extras step comes next.
-    await waitFor(() => expect(screen.getByText('Checkout · step 2 of 4')).toBeTruthy());
-    expect(screen.getByText('You already have a ticket, so this one is for a guest.')).toBeTruthy();
-    // Nothing here is theirs to keep, so there are no tickets to add for friends either.
-    expect(screen.queryByText('Go with friends')).toBeNull();
-
-    fireEvent.press(screen.getByText('Continue'));
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          'You already have a ticket for this event, so this one is for a guest. Pick who it is for.',
-        ),
-      ).toBeTruthy(),
-    );
-    expect(mockRouter.push).not.toHaveBeenCalled();
-
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    fireEvent.press(screen.getByText('Nour Hassan'));
-
-    await waitFor(() => expect(screen.getByText('1 of 1 picked')).toBeTruthy());
-    fireEvent.press(screen.getByText('Continue'));
-
-    await waitFor(() =>
-      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/addons?eventId=${TULUA_ID}`),
+    expect(within(person('Friend 1')).getByLabelText('Friend 1 full name').props.value).toBe(
+      'Omar Fathy',
     );
   });
 
-  /**
-   * An event with nothing to sell alongside a ticket has no extras step, so guests lead
-   * straight to review rather than to an empty screen the buyer has to click past
-   * (P0.1 decision #10, collapse to 3 steps).
-   */
-  it('skips the extras step for an event that sells none', async () => {
+  /** Friends come from anywhere: a number under its own country is accepted as that country's. */
+  it('takes a friend number from another country', async () => {
     mockParams.eventId = SOUND_BATH_ID;
     await signInAndComplete();
-    // The premise, stated rather than assumed: this event's catalogue is empty.
-    expect(await mockApi.addons.list(SOUND_BATH_ID)).toEqual([]);
     useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
     useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<GuestsScreen />);
-
-    await waitFor(() => expect(screen.getByText('Checkout · step 2 of 3')).toBeTruthy());
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
-
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled());
+    fireEvent.press(within(person('Friend 1')).getByLabelText('Country: +20. Change'));
+    fireEvent.changeText(screen.getByLabelText('Search country'), 'germany');
+    fireEvent.press(screen.getByLabelText('Germany +49'));
+    fillFriend('Friend 1', 'Lena Weber', '15112345678');
     fireEvent.press(screen.getByText('Continue'));
 
-    await waitFor(() =>
-      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/review?eventId=${SOUND_BATH_ID}`),
-    );
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+    expect(useCheckoutStore.getState().guests).toEqual([
+      expect.objectContaining({ phoneNumber: '+4915112345678', name: 'Lena Weber' }),
+    ]);
   });
 
   /** A converted cart's ticket save routes to payment through the stored order id. */
@@ -820,154 +862,9 @@ describe('09 Guests', () => {
   });
 
   /**
-   * The address book is a convenience, never the thing holding the order together. A number
-   * typed by hand has to be attachable, visible and removable with contacts switched off.
-   */
-  it('attaches and removes a guest with contacts refused outright', async () => {
-    contactsPermission({ status: 'denied', canAskAgain: false });
-    mockParams.eventId = SOUND_BATH_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
-    useCheckoutStore.getState().setQuantity(2);
-
-    renderWithProviders(<GuestsScreen />);
-    await waitFor(() => expect(screen.getByText('0 of 1 picked')).toBeTruthy());
-
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Open Settings')).toBeTruthy());
-    // Asking again is pointless once the OS has stopped offering, so it is not offered.
-    expect(screen.queryByText('Add from Contacts')).toBeNull();
-
-    fireEvent.changeText(screen.getByLabelText('Guest phone number'), '1022334455');
-    fireEvent.press(screen.getByText('Add'));
-
-    expect(screen.getByText('1 of 1 picked')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Remove 010 22334455'));
-    expect(screen.getByText('0 of 1 picked')).toBeTruthy();
-  });
-
-  /**
-   * Nothing tells the app that the switch was flipped in Settings, so coming back to the
-   * foreground is what has to notice. Without this the Settings button is a dead end.
-   */
-  it('recovers the contact list after access is granted in Settings', async () => {
-    contactsPermission({ status: 'denied', canAskAgain: false });
-    mockParams.eventId = SOUND_BATH_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
-    useCheckoutStore.getState().setQuantity(2);
-
-    renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Open Settings')).toBeTruthy());
-
-    contactsPermission({ status: 'granted' });
-    await returnToForeground();
-
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    expect(screen.queryByText('Open Settings')).toBeNull();
-  });
-
-  /**
-   * "One of these guests already has a ticket" is useless if it does not say which. The
-   * refusal is pinned to that guest's row so they can be taken off and replaced.
-   */
-  it('names the guest the server refuses, and lets them be swapped out', async () => {
-    mockParams.eventId = TULUA_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
-    // The seeded buyer already holds a Tulua ticket, so their one ticket is a guest's. This
-    // draft carries a number the server will refuse: the buyer's own.
-    useCheckoutStore.getState().setBuyerTakesTicket(false);
-    useCheckoutStore.getState().addGuest({
-      phoneNumber: '+201012345678',
-      name: 'My Other Line',
-      fromContacts: false,
-    });
-
-    renderWithProviders(<GuestsScreen />);
-    await waitFor(() => expect(screen.getByText('1 of 1 picked')).toBeTruthy());
-
-    fireEvent.press(screen.getByText('Continue'));
-    await waitFor(() =>
-      expect(
-        screen.getAllByText("That's your own number. Your ticket is already included.").length,
-      ).toBeGreaterThan(1),
-    );
-    expect(mockRouter.push).not.toHaveBeenCalled();
-
-    fireEvent.press(screen.getByLabelText('Remove My Other Line'));
-    expect(screen.getByText('0 of 1 picked')).toBeTruthy();
-    expect(
-      screen.queryByText("That's your own number. Your ticket is already included."),
-    ).toBeNull();
-
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
-    // Tulua sells extras, so the swapped-in guest leads on to the extras step, not to review.
-    await waitFor(() => expect(screen.getByText('Checkout · step 2 of 4')).toBeTruthy());
-    fireEvent.press(screen.getByText('Continue'));
-
-    await waitFor(() =>
-      expect(mockRouter.push).toHaveBeenCalledWith(`/checkout/addons?eventId=${TULUA_ID}`),
-    );
-  });
-
-  /** Filling the last slot must not trap the order: swapping someone out has to work. */
-  it('explains a full order instead of going quiet, and swaps a guest out', async () => {
-    mockParams.eventId = SOUND_BATH_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
-    useCheckoutStore.getState().setQuantity(2);
-
-    renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-
-    fireEvent.press(screen.getByLabelText('Add Nour Hassan as a guest'));
-    expect(screen.getByText('1 of 1 picked')).toBeTruthy();
-
-    fireEvent.press(screen.getByLabelText('Add Dana Ward as a guest'));
-    expect(
-      screen.getByText(
-        'You have 1 guest slot on this order. Remove someone first, or add a ticket.',
-      ),
-    ).toBeTruthy();
-
-    fireEvent.press(screen.getByLabelText('Remove Nour Hassan'));
-    fireEvent.press(screen.getByLabelText('Add Dana Ward as a guest'));
-    expect(screen.getByText('1 of 1 picked')).toBeTruthy();
-  });
-
-  /** An address book of any real size is only usable through search. */
-  it('narrows a long contact list by name', async () => {
-    mockParams.eventId = SOUND_BATH_ID;
-    await signInAndComplete();
-    useCheckoutStore.getState().start(SOUND_BATH_ID, TIER_SOUND_GA);
-    useCheckoutStore.getState().setQuantity(2);
-
-    renderWithProviders(<GuestsScreen />);
-    fireEvent.press(screen.getByText('Add from Contacts'));
-    await waitFor(() => expect(screen.getByText('Nour Hassan')).toBeTruthy());
-
-    fireEvent.changeText(screen.getByLabelText('Search contacts'), 'dana');
-
-    expect(screen.getByText('Dana Ward')).toBeTruthy();
-    expect(screen.queryByText('Nour Hassan')).toBeNull();
-
-    fireEvent.press(screen.getByLabelText('Clear contact search'));
-    expect(screen.getByText('Nour Hassan')).toBeTruthy();
-  });
-
-  /**
-   * Extras live in the app until the assignment steps finish them, and stepping back through
-   * here used to throw them away outright: `PUT /carts/:id/tickets` wipes the cart's extras, so
-   * the draft was cleared to match. Coming back to swap one guest is not a decision to abandon
-   * a room and three dinners, and nothing said it had happened.
-   *
-   * The draft is re-pointed at the rebuilt cart instead, matching people by phone number, since
-   * that call makes no promise a person keeps the same `cartAttendeeId`.
+   * Coming back through this step to fix one thing must not throw away the extras. They are
+   * re-pointed at the rebuilt cart, since `PUT /tickets` makes no promise a person keeps the
+   * same `cartAttendeeId`.
    */
   it('keeps the extras when the buyer steps back through this screen', async () => {
     mockParams.eventId = TULUA_ID;
@@ -1001,35 +898,26 @@ describe('09 Guests', () => {
     });
 
     renderWithProviders(<GuestsScreen />);
-    await waitFor(() => expect(screen.getByText('1 of 1 picked')).toBeTruthy());
+    await waitFor(() =>
+      expect(within(person('Friend 1')).getByLabelText('Friend 1 full name').props.value).toBe(
+        'Nour Hassan',
+      ),
+    );
 
     fireEvent.press(screen.getByText('Continue'));
     await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
 
     const kept = useCheckoutStore.getState().addons;
     expect(kept).toHaveLength(1);
-    expect(kept[0]!.assignments).toHaveLength(1);
-
-    // Re-pointed at whatever id the rebuilt cart gave that person, not the one it was holding.
     const after = (await mockApi.carts.get(cart.id)).attendees;
     const sameGuest = after.find((attendee) => attendee.phoneNumber === '+201022334455')!;
     expect(kept[0]!.assignments![0]!.cartAttendeeId).toBe(sameGuest.cartAttendeeId);
-
-    // Whole, so it went back to the cart in the same breath rather than waiting for a later step.
     const saved = await mockApi.carts.get(cart.id);
     expect(saved.addons.map((line) => line.optionId)).toEqual(['opt-dinner']);
   });
 
-  /**
-   * The one case where an extra really does have to go: the person holding it is no longer in
-   * the order. Swapping one guest for another is the way that happens on this screen, since a
-   * ticket left with nobody on it blocks Continue outright.
-   *
-   * The departing guest's units are dropped rather than sent with an id the server has
-   * discarded, which leaves that line short and sends the buyer back to the assignment step to
-   * give it to the new person. Everything belonging to somebody who stayed is untouched.
-   */
-  it('drops only the units belonging to a guest who was swapped out', async () => {
+  /** Someone replaced by somebody else loses their units; everyone who stayed keeps theirs. */
+  it('drops only the units belonging to a friend who was swapped out', async () => {
     mockParams.eventId = TULUA_ID;
     await signInAndComplete();
 
@@ -1068,35 +956,106 @@ describe('09 Guests', () => {
     });
 
     renderWithProviders(<GuestsScreen />);
-    await waitFor(() => expect(screen.getByText('2 of 2 picked')).toBeTruthy());
-
-    // Omar comes off the order and somebody else takes his ticket. The quantity is untouched:
-    // reducing it belongs to the pass screen, and `setQuantity` drops the draft by design.
-    fireEvent.press(screen.getByLabelText('Remove Omar Farouk'));
-    await waitFor(() => expect(screen.getByText('1 of 2 picked')).toBeTruthy());
-    fireEvent.changeText(screen.getByLabelText('Guest phone number'), '1155667788');
-    fireEvent.press(screen.getByText('Add'));
-    await waitFor(() => expect(screen.getByText('2 of 2 picked')).toBeTruthy());
-
+    await waitFor(() => expect(screen.getByTestId('person-Friend 2')).toBeTruthy());
+    // Omar's ticket goes to somebody else.
+    fillFriend('Friend 2', 'Hana Said', '1155667788');
     fireEvent.press(screen.getByText('Continue'));
     await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
 
     const kept = useCheckoutStore.getState().addons;
     expect(kept).toHaveLength(1);
-    // Nour's unit survived; Omar's did not, so the line is now short of its own quantity and the
-    // assignment step will say so rather than the server refusing it at the till.
-    expect(kept[0]!.quantity).toBe(2);
-    expect(kept[0]!.assignments).toHaveLength(1);
-
     const after = (await mockApi.carts.get(cart.id)).attendees;
-    const stillNour = after.find((a) => a.phoneNumber === '+201022334455')!;
-    expect(kept[0]!.assignments![0]!.cartAttendeeId).toBe(stillNour.cartAttendeeId);
-    // Nobody is carrying an id the cart no longer knows.
-    const liveIds = new Set(after.map((a) => a.cartAttendeeId));
-    expect(liveIds.has(kept[0]!.assignments![0]!.cartAttendeeId!)).toBe(true);
+    const sameNour = after.find((a) => a.phoneNumber === '+201022334455')!;
+    expect(kept[0]!.assignments).toEqual([{ cartAttendeeId: sameNour.cartAttendeeId, quantity: 1 }]);
+  });
 
-    // Short, so it is not something the server will take yet, and it was not sent.
-    expect((await mockApi.carts.get(cart.id)).addons).toHaveLength(0);
+  it('puts each friend on their own pass, and adds a friend at the bottom', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    const store = useCheckoutStore.getState();
+    store.start(TULUA_ID, TIER_WEEKEND);
+    store.setQuantity(1);
+    store.setOtherTierCount(TIER_DAY1, 1);
+    const replace = jest.spyOn(mockApi.carts, 'replaceTickets');
+
+    renderWithProviders(<GuestsScreen />);
+    // The holder's two tickets are both friends': Friend 1 on the weekend pass, Friend 2 a day.
+    await waitFor(() => expect(screen.getByText(/Day 1 Pass/)).toBeTruthy());
+    fireEvent.press(screen.getByText('Add another friend'));
+    expect(within(person('Friend 2')).getByText(/Day 1 Pass/)).toBeTruthy();
+    expect(within(person('Friend 3')).getByText(/Full Weekend Pass/)).toBeTruthy();
+
+    fillFriend('Friend 1', 'Ali Hassan', '1011111111');
+    fillFriend('Friend 2', 'Mona Adel', '1022222222');
+    fillFriend('Friend 3', 'Omar Said', '1033333333');
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+    expect(replace).toHaveBeenCalledWith(expect.any(String), {
+      buyerTierId: null,
+      items: [
+        { tierId: TIER_WEEKEND, quantity: 2 },
+        { tierId: TIER_DAY1, quantity: 1 },
+      ],
+      guests: [
+        { phoneNumber: '+201011111111', name: 'Ali Hassan', tierId: TIER_WEEKEND },
+        { phoneNumber: '+201022222222', name: 'Mona Adel', tierId: TIER_DAY1 },
+        { phoneNumber: '+201033333333', name: 'Omar Said', tierId: TIER_WEEKEND },
+      ],
+    });
+    replace.mockRestore();
+  });
+
+  /** Children (owner's call, 2026-10-11): a name and an adult to come with, no number. */
+  it('asks a child only for a name and who they come with, and sends them with no number', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    const store = useCheckoutStore.getState();
+    store.start(TULUA_ID, TIER_WEEKEND);
+    store.setQuantity(1);
+    store.setOtherTierCount(TIER_KIDS, 1);
+    const replace = jest.spyOn(mockApi.carts, 'replaceTickets');
+
+    renderWithProviders(<GuestsScreen />);
+    await waitFor(() => expect(screen.getByTestId('person-Child 1')).toBeTruthy());
+    expect(within(person('Child 1')).queryByPlaceholderText(/\d/)).toBeNull();
+    expect(within(person('Child 1')).getByText('Comes with')).toBeTruthy();
+    expect(screen.getByText("They come in with this adult's QR code.")).toBeTruthy();
+
+    fillFriend('Friend 1', 'Ali Hassan', '1011111111');
+    fireEvent.changeText(within(person('Child 1')).getByLabelText('Child 1 full name'), 'Lina');
+    fireEvent.press(screen.getByText('Continue'));
+
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalled());
+    // The holder's own ticket is the first adult offered.
+    const ownTicket = (await mockApi.tickets.list()).data.find(
+      (ticket) => ticket.event.id === TULUA_ID && ticket.status === 'active',
+    )!;
+    expect(replace).toHaveBeenCalledWith(expect.any(String), {
+      buyerTierId: null,
+      items: [
+        { tierId: TIER_WEEKEND, quantity: 1 },
+        { tierId: TIER_KIDS, quantity: 1 },
+      ],
+      guests: [
+        { phoneNumber: '+201011111111', name: 'Ali Hassan', tierId: TIER_WEEKEND },
+        { name: 'Lina', tierId: TIER_KIDS, child: true, guardianTicketId: ownTicket.id },
+      ],
+    });
+    replace.mockRestore();
+  });
+
+  it('shows the group saving as friends are added, in the server figures', async () => {
+    mockParams.eventId = TULUA_ID;
+    await signInAndComplete();
+    useCheckoutStore.getState().start(TULUA_ID, TIER_WEEKEND);
+    useCheckoutStore.getState().setQuantity(3);
+
+    renderWithProviders(<GuestsScreen />);
+    // Three weekend passes: 15% of 4,800.
+    await waitFor(() =>
+      expect(screen.getByText('15% group discount: you save 720.00 EGP')).toBeTruthy(),
+    );
   });
 });
 
