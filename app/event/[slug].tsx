@@ -24,7 +24,7 @@ import {
   Text,
   YoutubeEmbed,
 } from '../../src/components/ui';
-import { useAddons, useEvent, usePublicEventSchedule } from '../../src/hooks/queries';
+import { useAddons, useEvent, useMySchedule, usePublicEventSchedule } from '../../src/hooks/queries';
 import { AccommodationBox } from '../../src/components/events/AccommodationBox';
 import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
@@ -71,6 +71,9 @@ export default function EventDetailScreen() {
   // backend without schedules answers 404) and empty all leave it out, never a dead end.
   const scheduleQuery = usePublicEventSchedule(eventSlug);
   const hasSchedule = (scheduleQuery.data?.blocks.length ?? 0) > 0;
+  // My Schedule belongs to ticket holders (the backend answers anyone else's with an error), so
+  // its link sits beside the schedule's for them, from the day the schedule is published.
+  const mySchedule = useMySchedule(event?.id);
 
   // Meta's ViewContent, once per event shown, however often the event is refetched.
   const viewedEventId = useRef<string | null>(null);
@@ -254,6 +257,15 @@ export default function EventDetailScreen() {
                 accessibilityLabel={`View the full schedule for ${event.title}`}
                 onPress={() => router.push(`/event/${event.slug}/schedule`)}
               />
+              {mySchedule.isSuccess ? (
+                <Button
+                  label="My Schedule"
+                  variant="secondary"
+                  size="inline"
+                  accessibilityLabel={`Open My Schedule for ${event.title}`}
+                  onPress={() => router.push(`/event/${event.slug}/my-schedule`)}
+                />
+              ) : null}
             </View>
           ) : null}
 
@@ -629,6 +641,9 @@ const styles = StyleSheet.create({
   },
   scheduleLink: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 20,
   },
   sectionLabel: {

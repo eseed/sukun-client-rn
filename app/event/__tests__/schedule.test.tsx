@@ -4,6 +4,7 @@ import { mockApi, mockConfig, MOCK_OTP_CODE, resetMockState } from '../../../src
 import { useAuthStore } from '../../../src/stores/auth';
 
 import EventDetailScreen from '../[slug]';
+import EventMyScheduleScreen from '../[slug]/my-schedule';
 import PublicEventScheduleScreen from '../[slug]/schedule';
 import PublicScheduleSessionScreen from '../[slug]/schedule/[blockId]';
 
@@ -111,11 +112,22 @@ describe('Full schedule', () => {
     renderWithProviders(<PublicEventScheduleScreen />);
     await waitFor(() => expect(screen.getByText(DAY_1)).toBeTruthy());
     fireEvent.press(screen.getByRole('tab', { name: 'List view' }));
+    expect(screen.queryByText('My Schedule →')).toBeNull();
 
     fireEvent.press(screen.getByRole('button', { name: 'Add Morning Movement to My Schedule' }));
 
     expect(alert).toHaveBeenCalledWith('My Schedule', 'An active ticket for this Event is required to use My Schedule.');
     alert.mockRestore();
+  });
+
+  it('opens My Schedule from the full schedule for a ticket holder', async () => {
+    await signInAndComplete();
+    mockParams.slug = 'tulua';
+    renderWithProviders(<PublicEventScheduleScreen />);
+    await waitFor(() => expect(screen.getByText(DAY_1)).toBeTruthy());
+
+    fireEvent.press(screen.getByText('My Schedule →'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/event/tulua/my-schedule');
   });
 
   it('filters by stage and by search, counts what is left, and clears', async () => {
@@ -177,6 +189,38 @@ describe('Full schedule', () => {
   });
 });
 
+describe('My Schedule before the event is live', () => {
+  it('lists the saved sessions by day and opens one', async () => {
+    await signInAndComplete();
+    mockParams.slug = 'tulua';
+    renderWithProviders(<EventMyScheduleScreen />);
+
+    // The mock holder already saved the breathwork session.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove Breathwork Journey from My Schedule' })).toBeTruthy(),
+    );
+    expect(screen.getByRole('header', { name: 'My Schedule' })).toBeTruthy();
+
+    fireEvent.press(screen.getByRole('button', { name: 'View details: Breathwork Journey' }));
+    expect(mockRouter.push).toHaveBeenCalledWith(expect.stringMatching(/^\/event\/tulua\/schedule\/.+\?view=list$/));
+
+    fireEvent.press(screen.getByRole('button', { name: 'Browse Full Schedule' }));
+    expect(mockRouter.push).toHaveBeenCalledWith('/event/tulua/schedule');
+  });
+
+  it('removes a saved session and shows the empty state', async () => {
+    await signInAndComplete();
+    mockParams.slug = 'tulua';
+    renderWithProviders(<EventMyScheduleScreen />);
+    const remove = await waitFor(() => screen.getByRole('button', { name: 'Remove Breathwork Journey from My Schedule' }));
+
+    fireEvent.press(remove);
+
+    await waitFor(() => expect(screen.getByText('Breathwork Journey removed from My Schedule.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Build your day')).toBeTruthy());
+  });
+});
+
 describe('Session page', () => {
   it('shows the stage tag, the time and length, and the day with its doors-open time', async () => {
     mockParams.slug = 'tulua';
@@ -205,6 +249,24 @@ describe('Session page', () => {
 });
 
 describe('Event page schedule link', () => {
+  it('offers My Schedule beside the schedule to a ticket holder', async () => {
+    await signInAndComplete();
+    mockParams.slug = 'tulua';
+    renderWithProviders(<EventDetailScreen />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open My Schedule for Tulua' })).toBeTruthy());
+    fireEvent.press(screen.getByRole('button', { name: 'Open My Schedule for Tulua' }));
+    expect(mockRouter.push).toHaveBeenCalledWith('/event/tulua/my-schedule');
+  });
+
+  it('leaves My Schedule out for a guest', async () => {
+    mockParams.slug = 'tulua';
+    renderWithProviders(<EventDetailScreen />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'View the full schedule for Tulua' })).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Open My Schedule for Tulua' })).toBeNull();
+  });
+
   it('links to the schedule once the event has published sessions', async () => {
     mockParams.slug = 'tulua';
     renderWithProviders(<EventDetailScreen />);
