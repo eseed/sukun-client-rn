@@ -8,12 +8,12 @@ import { scheduleScreenContent } from '../../../src/components/live-event/schedu
 import { useEvent, usePublicEventSchedule } from '../../../src/hooks/queries';
 import { useScheduleSaving } from '../../../src/hooks/useScheduleSaving';
 import { track } from '../../../src/lib/analytics';
-import { colors, space } from '../../../src/theme/tokens';
+import { colors, fontFamily, space } from '../../../src/theme/tokens';
 
 /**
  * An event's published schedule, built as the website's (sukun-client-web EventSchedulePage):
  * it opens on the calendar, the list is one tap away. A ticket holder saves sessions to My
- * Schedule from the cards.
+ * Schedule from the cards and opens My Schedule from the heading.
  */
 export default function PublicEventScheduleScreen() {
   const params = useLocalSearchParams<{ slug: string; view?: string }>();
@@ -50,6 +50,11 @@ export default function PublicEventScheduleScreen() {
         {event.data?.title ? <Text variant="eyebrow" style={styles.eyebrow}>{event.data.title}</Text> : null}
         <Text variant="titleLg" accessibilityRole="header">Full Schedule</Text>
         <Text variant="bodyMuted">Explore all sessions, workshops, and experiences by day, stage, or practice type.</Text>
+        {saving.canSave && eventSlug ? (
+          <Pressable accessibilityRole="button" onPress={() => router.push(`/event/${eventSlug}/my-schedule`)} style={({ pressed }) => [styles.myScheduleLink, pressed && styles.backPressed]}>
+            <Text style={styles.myScheduleText}>My Schedule →</Text>
+          </Pressable>
+        ) : null}
       </View>
       {saving.notice ? <ScheduleNotice message={saving.notice.message} onDismiss={saving.dismissNotice} /> : null}
       {saving.saveSheet ? <ScheduleSaveSheet
@@ -89,4 +94,6 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.gold700 },
   backLink: { minHeight: 40, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: space.s2, paddingRight: space.s3, marginTop: -space.s3, marginBottom: -space.s2 },
   backPressed: { opacity: 0.65 },
+  myScheduleLink: { minHeight: 40, alignSelf: 'flex-start', justifyContent: 'center' },
+  myScheduleText: { fontFamily: fontFamily.bodyMedium, color: colors.gold700 },
 });
