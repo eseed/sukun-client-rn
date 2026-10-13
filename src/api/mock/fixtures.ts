@@ -419,6 +419,7 @@ export function seedTickets(holderName: string): Ticket[] {
         coverImageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1200',
         venueName: 'El Gouna, Egypt',
         venueMapUrl: 'https://www.google.com/maps/search/?api=1&query=27.3859%2C33.6794',
+        entryQrOpenEarly: false,
       },
       tier: { id: TIER_WEEKEND, name: 'Full Weekend Pass' },
       days: [

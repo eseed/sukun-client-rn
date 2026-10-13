@@ -38,7 +38,7 @@ export function EntryPassSheet({ ticketId, event, onClose }: {
 
   const ticketQuery = useTicket(ticketId);
   const ticket = ticketQuery.data;
-  const opensAt = ticket ? getEntryPassOpensAt(ticket.days) : null;
+  const opensAt = ticket ? getEntryPassOpensAt(ticket) : null;
   const windowOpen = opensAt !== null && now >= opensAt;
   const passQuery = useEntryPass(ticketId, {
     enabled: ticket?.usageStatus === 'usable' && windowOpen,

@@ -1,4 +1,4 @@
-import type { EntryPass, TicketDay } from '../api/types';
+import type { EntryPass, Ticket } from '../api/types';
 
 const DEFAULT_ENTRY_QR_REFRESH_SECONDS = 30;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -35,9 +35,14 @@ export function getEntryPassRefreshAt(pass: EntryPass, dataUpdatedAt: number): n
     : refreshAt;
 }
 
-/** The app opens the entry-pass request window 12 hours before the earliest ticketed day. */
-export function getEntryPassOpensAt(days: TicketDay[]): number | null {
-  const startsAt = days
+/**
+ * The app opens the entry-pass request window 12 hours before the earliest ticketed day, or at
+ * once when an admin opened the event's QR codes early. Nothing here ever closes it again.
+ */
+export function getEntryPassOpensAt(ticket: Pick<Ticket, 'days' | 'event'>): number | null {
+  if (ticket.event.entryQrOpenEarly) return 0;
+
+  const startsAt = ticket.days
     .map((day) => Date.parse(day.startsAt))
     .filter((time) => Number.isFinite(time));
 

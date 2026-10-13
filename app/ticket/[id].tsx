@@ -61,7 +61,7 @@ export default function EntryPassScreen() {
   const ticketQuery = useTicket(ticketId);
   const addonsQuery = useTicketAddons(ticketId);
   const queryClient = useQueryClient();
-  const entryPassOpensAt = ticketQuery.data ? getEntryPassOpensAt(ticketQuery.data.days) : null;
+  const entryPassOpensAt = ticketQuery.data ? getEntryPassOpensAt(ticketQuery.data) : null;
   const entryPassWindowOpen =
     isScreenClockCurrent && entryPassOpensAt !== null && currentTime >= entryPassOpensAt;
   const passQuery = useEntryPass(ticketId, {
