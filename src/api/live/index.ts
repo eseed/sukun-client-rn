@@ -87,6 +87,8 @@ function normalizeTicket(ticket: LiveTicket): Ticket {
       coverImageUrl: ticket.event.coverImageUrl ?? null,
       venueName: ticket.event.venueName ?? null,
       venueMapUrl: ticket.event.venueMapUrl ?? null,
+      // Absent from a backend that predates opening QR codes early: the 12-hour rule applies.
+      entryQrOpenEarly: ticket.event.entryQrOpenEarly ?? false,
     },
     days: ticket.days.map((day) => ({ ...day, gatesOpenAt: day.gatesOpenAt ?? null })),
     orderNumber: ticket.orderNumber ?? null,

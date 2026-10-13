@@ -634,6 +634,8 @@ export interface TicketEvent {
   coverImageUrl: string | null;
   venueName: string | null;
   venueMapUrl: string | null;
+  /** An admin opened entry QR codes ahead of the usual 12 hours (to try the flow). */
+  entryQrOpenEarly: boolean;
 }
 
 export interface TicketDay {
@@ -768,6 +770,7 @@ export interface LiveTicket {
     coverImageUrl: string | null;
     venueName: string | null;
     venueMapUrl: string | null;
+    entryQrOpenEarly?: boolean;
   };
   tier: { id: string; name: string };
   days: { id: string; date: string; startsAt: string; gatesOpenAt: string | null }[];

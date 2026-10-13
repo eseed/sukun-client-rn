@@ -784,6 +784,7 @@ function issueTicketsFor(order: OrderDetail): void {
     coverImageUrl: event.coverImageUrl,
     venueName: event.venue?.name ?? null,
     venueMapUrl: event.venue?.mapUrl ?? null,
+    entryQrOpenEarly: false,
   };
 
   for (const item of order.items) {
@@ -889,6 +890,7 @@ export function grantMockTicket({
       coverImageUrl: event.coverImageUrl,
       venueName: event.venue?.name ?? null,
       venueMapUrl: event.venue?.mapUrl ?? null,
+      entryQrOpenEarly: false,
     },
     tier: { id: tier.id, name: tier.name },
     days: tier.days.map((d) => {
