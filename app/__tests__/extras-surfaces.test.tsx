@@ -139,17 +139,103 @@ async function buyTheDesignsExtras() {
 }
 
 describe('20 · My tickets, extras on the card', () => {
-  it('counts the attached extras and offers a way to add more', async () => {
+  it('names every attached extra, shows the room instead of offering one, and adds more', async () => {
     await signInAndComplete();
-    await buyTheDesignsExtras();
+    const { ticketId } = await buyTheDesignsExtras();
 
     renderWithProviders(<TicketsScreen />);
 
-    // Room, dinner voucher and shuttle all landed on the buyer's own ticket.
+    // Room, dinner voucher and shuttle all landed on the buyer's own ticket, each by name. The
+    // mock also lists the ticket she bought Nour, who shares the room and has a dinner of her
+    // own, so the shuttle, hers alone, is what tells her card apart.
+    await waitFor(() => expect(screen.getByText('Cairo shuttle')).toBeTruthy());
+    expect(screen.getByText('Round trip')).toBeTruthy();
+    expect(screen.getAllByText('Your stay').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Double · 2 nights').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Desert Lodge Room · 23–25 Oct').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Also on your ticket').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Dinner voucher · redeem at the event').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/add-ons? attached/)).toBeNull();
+
+    // She has her room, so the event's rooms are not offered to her again; more extras are.
+    await waitFor(() => expect(screen.getByText('Add more extras')).toBeTruthy());
+    expect(screen.queryByText('Book your stay')).toBeNull();
+    expect(screen.queryByText('Accommodation Available')).toBeNull();
+    fireEvent.press(screen.getByText('Add more extras'));
+    expect(mockRouter.push).toHaveBeenCalledWith(`/ticket/${ticketId}/extras`);
+  });
+
+  it('lists the children who come in on the ticket, each with their extras', async () => {
+    await signInAndComplete();
+    const { order, ticketId } = await buyTheDesignsExtras();
+    const shuttle = (await mockApi.tickets.addons(ticketId)).find(
+      (addon) => addon.type === 'transport',
+    )!;
+    const page = await mockApi.tickets.list();
+    const list = jest.spyOn(mockApi.tickets, 'list').mockResolvedValue({
+      ...page,
+      data: page.data.map((ticket) =>
+        ticket.id === ticketId
+          ? {
+              ...ticket,
+              children: [
+                {
+                  ticketId: 'tk-child-1',
+                  name: 'Laila Sabae',
+                  tier: { id: 'tier-kids', name: 'Kids Weekend Pass' },
+                  addons: [shuttle],
+                },
+                {
+                  ticketId: 'tk-child-2',
+                  name: 'Omar Sabae',
+                  tier: { id: 'tier-kids', name: 'Kids Weekend Pass' },
+                  addons: [],
+                },
+              ],
+            }
+          : ticket,
+      ),
+    });
+    void order;
+
+    renderWithProviders(<TicketsScreen />);
+
+    await waitFor(() => expect(screen.getByText('Children with you · 2')).toBeTruthy());
+    expect(screen.getByText(/1 ticket \+ 2 children/)).toBeTruthy();
+    expect(screen.getByText('Laila Sabae')).toBeTruthy();
+    expect(screen.getByText('Kids Weekend Pass')).toBeTruthy();
+    expect(screen.getByText('Omar Sabae')).toBeTruthy();
+    expect(screen.getByText('Kids Weekend Pass · no add-ons')).toBeTruthy();
+    // Laila's shuttle is hers, listed under her name.
+    expect(screen.getByText('Cairo shuttle · Round trip')).toBeTruthy();
+    expect(
+      screen.getByText('They come in with you: your QR code admits them all at the gate.'),
+    ).toBeTruthy();
+
+    list.mockRestore();
+  });
+
+  it('falls back to counting extras when the server does not list them', async () => {
+    await signInAndComplete();
+    const page = await mockApi.tickets.list();
+    const list = jest.spyOn(mockApi.tickets, 'list').mockResolvedValue({
+      ...page,
+      data: page.data.map((ticket) => ({
+        ...ticket,
+        addonCount: 3,
+        addons: null,
+        hasAccommodation: null,
+      })),
+    });
+
+    renderWithProviders(<TicketsScreen />);
+
     await waitFor(() => expect(screen.getByText('3 add-ons attached')).toBeTruthy());
-    // The event still sells rooms, so the stay section is the way in, not the extras row.
+    // Nothing says she has a room, so the stay is still offered, as before.
     await waitFor(() => expect(screen.getByText('Book your stay')).toBeTruthy());
-    expect(screen.queryByText('Add extras to this ticket')).toBeNull();
+    expect(screen.queryByText('Your stay')).toBeNull();
+
+    list.mockRestore();
   });
 
   it('says nothing about extras on a ticket that has none', async () => {
@@ -243,17 +329,71 @@ describe('21 · Entry pass, attached extras', () => {
 
     renderWithProviders(<EntryPassScreen />);
 
-    await waitFor(() => expect(screen.getByText('Attached add-ons')).toBeTruthy());
-    // Three extras, each labelled by the server rather than by the app.
+    await waitFor(() => expect(screen.getByText('Your add-ons')).toBeTruthy());
+    // Three extras, each named by the server rather than by the app: the room by its room, the
+    // rest by their addon, with the option underneath.
     expect(attached).toHaveLength(3);
+    expect(screen.getByText('Double · 2 nights')).toBeTruthy();
+    expect(screen.getByText('Desert Lodge Room · 23–25 Oct')).toBeTruthy();
+    expect(screen.getByText('Dinner voucher')).toBeTruthy();
+    expect(screen.getByText('Dinner voucher · redeem at the event')).toBeTruthy();
+    expect(screen.getByText('Cairo shuttle')).toBeTruthy();
+    expect(screen.getByText('Round trip')).toBeTruthy();
+  });
+
+  it('names the children one scan lets in, with their extras', async () => {
+    await signInAndComplete();
+    const ticketId = await seedTicketId();
+    const ticket = await mockApi.tickets.detail(ticketId);
+    const detail = jest.spyOn(mockApi.tickets, 'detail').mockResolvedValue({
+      ...ticket,
+      children: [
+        {
+          ticketId: 'tk-child-1',
+          name: 'Laila',
+          tier: { id: 'tier-kids', name: 'Kids Weekend Pass' },
+          addons: [],
+        },
+        {
+          ticketId: 'tk-child-2',
+          name: 'Omar',
+          tier: { id: 'tier-kids', name: 'Kids Weekend Pass' },
+          addons: [],
+        },
+      ],
+    });
+    mockParams.id = ticketId;
+
+    renderWithProviders(<EntryPassScreen />);
+
+    await waitFor(() => expect(screen.getByText('Children with you')).toBeTruthy());
+    expect(screen.getByText('Laila')).toBeTruthy();
+    expect(screen.getByText('Omar')).toBeTruthy();
+    expect(screen.getByText('Show this code once: it lets in you, Laila and Omar.')).toBeTruthy();
+
+    detail.mockRestore();
+  });
+
+  it('keeps the old wording for a backend that does not name the addon', async () => {
+    await signInAndComplete();
+    const { ticketId } = await buyTheDesignsExtras();
+    const attached = await mockApi.tickets.addons(ticketId);
+    const addons = jest
+      .spyOn(mockApi.tickets, 'addons')
+      .mockResolvedValue(attached.map(({ addonName: _name, ...addon }) => addon));
+    mockParams.id = ticketId;
+
+    renderWithProviders(<EntryPassScreen />);
+
+    await waitFor(() => expect(screen.getByText('Your add-ons')).toBeTruthy());
     for (const addon of attached) {
       expect(screen.getByText(addon.label)).toBeTruthy();
     }
-    // The design's supporting line under each one: dates for the room and the shuttle, the
-    // redemption note for the voucher.
     expect(screen.getByText('23 Oct 2026 → 25 Oct 2026 · redeem at the event')).toBeTruthy();
     expect(screen.getByText('Redeem at the event')).toBeTruthy();
     expect(screen.getByText('Out 23 Oct 2026 · back 25 Oct 2026')).toBeTruthy();
+
+    addons.mockRestore();
   });
 
   it('shows no extras section on a ticket with none', async () => {
@@ -263,7 +403,7 @@ describe('21 · Entry pass, attached extras', () => {
     renderWithProviders(<EntryPassScreen />);
 
     await waitFor(() => expect(screen.getByText('Tulua · live entry pass')).toBeTruthy());
-    expect(screen.queryByText('Attached add-ons')).toBeNull();
+    expect(screen.queryByText('Your add-ons')).toBeNull();
   });
 
   /*

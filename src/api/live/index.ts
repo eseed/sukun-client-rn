@@ -96,6 +96,10 @@ function normalizeTicket(ticket: LiveTicket): Ticket {
     // Absent on builds served by a backend that predates ticket addon counts, and on any build
     // running with addons switched off, where "no addons" is the honest answer.
     addonCount: ticket.addonCount ?? 0,
+    // Absent from a backend that predates tickets listing their addons and children.
+    addons: ticket.addons ?? null,
+    hasAccommodation: ticket.hasAccommodation ?? null,
+    children: ticket.children ?? [],
     // Absent from a backend that predates claims taking seats. Treated as claimable: that
     // backend lets every waiting grant be claimed.
     claimAvailability:

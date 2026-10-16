@@ -1,9 +1,11 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import type { Ticket } from '../../api/types';
+import type { Ticket, TicketAddon, TicketChild } from '../../api/types';
+import { ticketAddonDetail, ticketRoom } from '../../lib/addons';
 import { formatDateRangeShort } from '../../lib/format';
 import { designAsset } from '../../theme/assets';
 import { colors, fontFamily, shadow } from '../../theme/tokens';
 import { Badge, type BadgeTone, Button, ImageSlot, Text } from '../ui';
+import { AddonRow, ChildrenList } from './TicketExtras';
 
 const STAY_PHOTO_SIZE = 72;
 
@@ -76,14 +78,27 @@ export function TicketCard({
   ticket,
   ticketCount = 1,
   addonCount = 0,
+  addons = null,
+  childTickets = [],
+  hasAccommodation = null,
   onPress,
   onAddExtras,
   stay,
+  room,
 }: {
   ticket: Ticket;
   ticketCount?: number;
-  /** Live extras across the tickets this card stands for. Zero hides the line entirely. */
+  /**
+   * Live extras across the tickets this card stands for, for a backend that does not list them
+   * (`addons` null). Zero hides the line entirely.
+   */
   addonCount?: number;
+  /** The extras themselves, named on the card. `null` from a backend that predates the list. */
+  addons?: TicketAddon[] | null;
+  /** Children admitted on these tickets, each with their own extras. */
+  childTickets?: TicketChild[];
+  /** Whether the holder already has their room. Only an explicit true hides the stay offer. */
+  hasAccommodation?: boolean | null;
   onPress: () => void;
   /**
    * Omitted when this event sells no extras, which is how a flag-off or empty catalogue reaches
@@ -97,6 +112,11 @@ export function TicketCard({
    * `photoUrl` is one stay's photo, or `null` when none has one.
    */
   stay?: { photoUrl: string | null; onBook: () => void };
+  /**
+   * The room the holder already has: its stay's photo, and its free spots when this account paid
+   * for it (`GET mobile/rooms`), with the way to fill them. Zero spots hides the link.
+   */
+  room?: { photoUrl: string | null; freeSpots: number; onAddSomeone: () => void };
 }) {
   const badge = statusBadge(ticket);
   const first = ticket.days[0]?.date ?? '';
@@ -104,8 +124,19 @@ export function TicketCard({
   const usable = ticket.usageStatus === 'usable';
   // The holder's own ticket (`active`, selfie or not), as on the event page, whose "Book your
   // stay" leads a holder to this ticket's extras. One still waiting to be claimed is claimed first.
-  const offersStay = ticket.status === 'active' && stay !== undefined;
+  const roomAddon = ticketRoom(addons ?? []);
+  // A holder who already has their room is not offered one again: the room shows instead.
+  const offersStay =
+    ticket.status === 'active' &&
+    stay !== undefined &&
+    hasAccommodation !== true &&
+    roomAddon === null;
+  const otherAddons = (addons ?? []).filter((addon) => addon !== roomAddon);
+  const offersExtras = usable && onAddExtras !== undefined && !offersStay;
+  const hasActions = offersStay || offersExtras;
   const cta = callToAction(ticket);
+  const childCount = childTickets.length;
+  const hasLists = roomAddon !== null || otherAddons.length > 0 || childCount > 0;
 
   return (
     <View style={styles.card}>
@@ -125,7 +156,7 @@ export function TicketCard({
           <View style={[styles.notch, styles.notchRight]} />
         </View>
 
-        <View style={[styles.body, (offersStay || (usable && onAddExtras)) && styles.bodyWithActions]}>
+        <View style={[styles.body, (hasActions || hasLists) && styles.bodyWithActions]}>
           <Text style={styles.eyebrow}>
             {ticket.event.title} · {formatDateRangeShort(first, last)}
           </Text>
@@ -133,8 +164,10 @@ export function TicketCard({
           <Text variant="meta">
             {ticket.orderNumber ? `Order ${ticket.orderNumber} · ` : ''}
             {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}
+            {childCount > 0 ? ` + ${childCount} ${childCount === 1 ? 'child' : 'children'}` : ''}
           </Text>
-          {addonCount > 0 ? (
+          {/* A backend that does not list the extras still counts them. */}
+          {addons === null && addonCount > 0 ? (
             <Text variant="meta">
               {addonCount} {addonCount === 1 ? 'add-on' : 'add-ons'} attached
             </Text>
@@ -143,7 +176,66 @@ export function TicketCard({
         </View>
       </Pressable>
 
-      {offersStay || (usable && onAddExtras) ? (
+      {roomAddon?.room ? (
+        <View style={styles.section}>
+          <Text variant="eyebrow" style={styles.sectionLabel}>
+            Your stay
+          </Text>
+          <View style={styles.stayRow}>
+            <ImageSlot
+              source={room?.photoUrl ? { uri: room.photoUrl } : null}
+              height={STAY_PHOTO_SIZE}
+              style={styles.stayPhoto}
+            />
+            <View style={styles.roomBody}>
+              <Text style={styles.roomName}>{roomAddon.label}</Text>
+              <Text variant="meta">{ticketAddonDetail(roomAddon)}</Text>
+              <Text variant="meta">
+                {`Room for ${roomAddon.room.capacity}`}
+                {room && room.freeSpots > 0
+                  ? ` · ${room.freeSpots} ${room.freeSpots === 1 ? 'spot' : 'spots'} free`
+                  : ''}
+              </Text>
+              {room && room.freeSpots > 0 ? (
+                <Pressable accessibilityRole="button" onPress={room.onAddSomeone}>
+                  <Text style={styles.link}>Add someone to your room →</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {otherAddons.length > 0 ? (
+        <View style={styles.section}>
+          <Text variant="eyebrow" style={styles.sectionLabel}>
+            {roomAddon ? 'Also on your ticket' : 'On your ticket'}
+          </Text>
+          {otherAddons.map((addon, index) => (
+            <AddonRow key={`${addon.addonOptionId}-${index}`} addon={addon} />
+          ))}
+        </View>
+      ) : null}
+
+      {childCount > 0 ? (
+        <View style={styles.section}>
+          <Text variant="eyebrow" style={styles.sectionLabel}>
+            {`Children with you · ${childCount}`}
+          </Text>
+          <ChildrenList childTickets={childTickets} />
+          <Text variant="metaSm" style={styles.note}>
+            {childCount === 1
+              ? 'They come in with you: your QR code admits them at the gate.'
+              : 'They come in with you: your QR code admits them all at the gate.'}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* The body pads its own foot only when nothing follows it; a list that ends the card
+          needs the same. */}
+      {!hasActions && hasLists ? <View style={styles.foot} /> : null}
+
+      {hasActions ? (
         <View style={styles.actions}>
           {offersStay ? (
             <View style={styles.stay}>
@@ -167,9 +259,13 @@ export function TicketCard({
           {/* Only a usable ticket can take extras: they attach to a ticket, and one that has not
               bound to its holder yet has nothing to attach them to. The stay section's button leads
               to the same screen, so the row gives way to it rather than offering it twice. */}
-          {usable && onAddExtras && !offersStay ? (
+          {offersExtras ? (
             <Pressable accessibilityRole="button" onPress={onAddExtras} style={styles.extrasRow}>
-              <Text style={styles.extrasLabel}>Add extras to this ticket</Text>
+              <Text style={styles.extrasLabel}>
+                {(addons ?? []).length > 0 || addonCount > 0
+                  ? 'Add more extras'
+                  : 'Add extras to this ticket'}
+              </Text>
               <Text style={styles.extrasChevron}>›</Text>
             </Pressable>
           ) : null}
@@ -180,6 +276,43 @@ export function TicketCard({
 }
 
 const styles = StyleSheet.create({
+  /* Each of the card's lists, set off by the extras row's hairline at the body's inset. */
+  section: {
+    borderTopColor: colors.borderDefault,
+    borderTopWidth: 1,
+    marginHorizontal: 20,
+    marginTop: 14,
+    paddingTop: 14,
+  },
+  sectionLabel: {
+    marginBottom: 10,
+  },
+  stayRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 14,
+  },
+  foot: {
+    height: 18,
+  },
+  roomBody: {
+    flex: 1,
+    gap: 3,
+  },
+  roomName: {
+    fontSize: 15,
+    fontFamily: fontFamily.bodyMedium,
+    color: colors.textPrimary,
+  },
+  link: {
+    color: colors.accentSky,
+    fontFamily: fontFamily.bodyMedium,
+    fontSize: 13,
+    marginTop: 6,
+  },
+  note: {
+    marginTop: 6,
+  },
   /* Set off from the ticket above by the same hairline as the extras row. */
   stay: {
     alignItems: 'flex-start',

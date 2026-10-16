@@ -613,7 +613,11 @@ function assertChildren(cart: MockCart, input: ReplaceCartTicketsInput): void {
   for (const guest of input.guests) {
     if (guest.child !== true) {
       if (guest.guardianGuestIndex !== undefined || guest.guardianTicketId !== undefined) {
-        throw new MockApiError('CART_TICKET_ITEM_NOT_FOUND', 'Only a child comes with an adult.', 400);
+        throw new MockApiError(
+          'CART_TICKET_ITEM_NOT_FOUND',
+          'Only a child comes with an adult.',
+          400,
+        );
       }
       continue;
     }
@@ -827,6 +831,9 @@ function issueTicketsFor(order: OrderDetail): void {
         orderNumber: order.orderNumber,
         purchasedBy: { name: holder, isSelf: !guest },
         addonCount: 0,
+        addons: [],
+        hasAccommodation: false,
+        children: [],
         issuedAt: iso(),
         claimAvailability: null,
         invitedBy: null,
@@ -907,6 +914,9 @@ export function grantMockTicket({
     purchasedBy: null,
     // A plus one gets the tier, never the add-ons that came with the guest's invitation.
     addonCount: plusOneOfTicketId ? 0 : addonCount,
+    addons: [],
+    hasAccommodation: false,
+    children: [],
     issuedAt: iso(),
     claimAvailability: null,
     invitedBy: null,
@@ -1009,7 +1019,9 @@ function issueAddonsFor(order: OrderDetail): void {
       const issued: TicketAddon = {
         addonOptionId: line.addonOptionId,
         type: line.type,
-        label: line.label,
+        // As the backend issues it: the addon's name and the option's own label, apart.
+        addonName: addonForOption(line.addonOptionId)?.name ?? line.label,
+        label: option?.label ?? line.label,
         transportDirection: line.transportDirection,
         departureDate: line.departureDate,
         departureTime: line.departureTime,
@@ -1040,7 +1052,12 @@ function issueAddonsFor(order: OrderDetail): void {
       }
 
       const ticket = state.tickets.find((item) => item.id === ticketId);
-      if (ticket) ticket.addonCount = (state.ticketAddons.get(ticketId) ?? []).length;
+      if (ticket) {
+        const owned = state.ticketAddons.get(ticketId) ?? [];
+        ticket.addonCount = owned.length;
+        ticket.addons = owned;
+        ticket.hasAccommodation = owned.some((addon) => addon.room !== null);
+      }
     }
 
     void option;
@@ -1827,9 +1844,7 @@ export const mockApi: SukunApi = {
             name: attendee.name,
             tierId: tierOfAttendee(attendee.cartTicketItemId, cart),
           })),
-        groupDiscount: pricing.groupDiscount
-          ? { ...pricing.groupDiscount, nextTier: null }
-          : null,
+        groupDiscount: pricing.groupDiscount ? { ...pricing.groupDiscount, nextTier: null } : null,
         addons: cart.addons.map((line) => toOrderAddon(cart, line, pricing)),
       };
 
