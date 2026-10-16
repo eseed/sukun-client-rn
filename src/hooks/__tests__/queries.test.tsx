@@ -7,10 +7,12 @@ import {
   queryKeys,
   useApplyCartPromo,
   useCartPreview,
+  useMySchedule,
   usePaymentStatus,
   usePlaceCartOrder,
   useTickets,
 } from '../queries';
+import { ApiError } from '../../api/live/http';
 import { useAuthStore } from '../../stores/auth';
 import {
   deleteSecureItem,
@@ -24,6 +26,7 @@ jest.mock('../../api', () => ({
     payments: { status: jest.fn() },
     auth: { logout: jest.fn() },
     tickets: { list: jest.fn() },
+    schedule: { mine: jest.fn() },
     orders: {
       create: jest.fn(),
       list: jest.fn(),
@@ -46,6 +49,7 @@ jest.mock('../../api', () => ({
 
 const paymentStatusMock = api.payments.status as jest.MockedFunction<typeof api.payments.status>;
 const ticketsListMock = api.tickets.list as jest.MockedFunction<typeof api.tickets.list>;
+const scheduleMineMock = api.schedule.mine as jest.MockedFunction<typeof api.schedule.mine>;
 const cartsPreviewMock = api.carts.preview as jest.MockedFunction<typeof api.carts.preview>;
 const cartsPlaceOrderMock = api.carts.placeOrder as jest.MockedFunction<
   typeof api.carts.placeOrder
@@ -177,6 +181,72 @@ describe('tickets hook', () => {
     ]);
     rendered.unmount();
     client.clear();
+  });
+});
+
+describe('my schedule hook', () => {
+  const clients: QueryClient[] = [];
+
+  function render(eventId: string) {
+    // Reads retry once, as in the app, so the test sees whether a refusal is retried.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: 1 } } });
+    clients.push(client);
+    return renderHook(() => useMySchedule(eventId), { wrapper: wrapper(client) });
+  }
+
+  function activeTicketsFor(...eventIds: string[]) {
+    ticketsListMock.mockResolvedValue({
+      data: eventIds.map((id, index) => ({ id: `ticket-${index}`, event: { id } })),
+      meta: { limit: 100, hasNextPage: false, nextCursor: null },
+    } as unknown as CursorPage<Ticket>);
+  }
+
+  beforeEach(() => {
+    useAuthStore.setState({ status: 'signed-in', user: null, pendingPhone: null });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    clients.splice(0).forEach((client) => client.clear());
+  });
+
+  it('does not ask for My Schedule without an active ticket to the event', async () => {
+    activeTicketsFor('other-event');
+
+    const rendered = render('event-1');
+
+    await waitFor(() => expect(ticketsListMock).toHaveBeenCalledWith({ statuses: ['active'] }));
+    expect(scheduleMineMock).not.toHaveBeenCalled();
+    expect(rendered.result.current.isSuccess).toBe(false);
+    rendered.unmount();
+  });
+
+  it('loads My Schedule for a ticket holder', async () => {
+    activeTicketsFor('event-1');
+    scheduleMineMock.mockResolvedValue({
+      eventId: 'event-1',
+      blocks: [],
+      meta: { limit: 100, hasNextPage: false, nextCursor: null },
+    });
+
+    const rendered = render('event-1');
+
+    await waitFor(() => expect(rendered.result.current.isSuccess).toBe(true));
+    expect(scheduleMineMock).toHaveBeenCalledWith('event-1', { limit: 100 });
+    rendered.unmount();
+  });
+
+  it('does not retry a refusal', async () => {
+    activeTicketsFor('event-1');
+    scheduleMineMock.mockRejectedValue(
+      new ApiError('SCHEDULE_TICKET_REQUIRED', 'A ticket is required', 403),
+    );
+
+    const rendered = render('event-1');
+
+    await waitFor(() => expect(rendered.result.current.isError).toBe(true));
+    expect(scheduleMineMock).toHaveBeenCalledTimes(1);
+    rendered.unmount();
   });
 });
 

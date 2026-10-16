@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { api } from '../api';
+import { ApiError } from '../api/live/http';
 import { ENTRY_QR_REFRESH_INTERVAL_MS, isEntryPassResponseForTicket } from '../lib/entry-pass';
 import type {
   BuyerRoom,
@@ -330,9 +331,20 @@ export function usePublicEventSchedule(identifier: string | undefined) {
   });
 }
 
-/** Fetch all saved blocks; the service caps a page at 100 and cursors are opaque. */
+/**
+ * Fetch all saved blocks; the service caps a page at 100 and cursors are opaque.
+ *
+ * My Schedule belongs to the holder of an active ticket to the event, and the backend refuses
+ * anyone else with a 403 (`SCHEDULE_TICKET_REQUIRED`). So it is asked only once the tickets list
+ * shows that ticket, and a refusal is final rather than retried. Off or refused, `isSuccess`
+ * stays false, which is what screens read as "no saving here".
+ */
 export function useMySchedule(eventId: string | undefined) {
   const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  const activeTickets = useTickets(['active']);
+  const holdsTicket = Boolean(
+    eventId && (activeTickets.data?.data ?? []).some((ticket) => ticket.event.id === eventId),
+  );
   return useQuery<MyScheduleResponse>({
     queryKey: queryKeys.mySchedule(eventId ?? ''),
     queryFn: async () => {
@@ -355,7 +367,9 @@ export function useMySchedule(eventId: string | undefined) {
         meta: { limit: blocks.length, hasNextPage: false, nextCursor: null },
       };
     },
-    enabled: signedIn && Boolean(eventId),
+    enabled: signedIn && holdsTicket,
+    retry: (failureCount, error) =>
+      !(error instanceof ApiError && error.status === 403) && failureCount < 1,
     staleTime: 15_000,
   });
 }
