@@ -7,7 +7,7 @@ import type {
   TicketAddon,
   TransportAddonOption,
 } from '../api/types';
-import { formatDate, formatEgp } from './format';
+import { formatDate, formatDateRangeShort, formatEgp } from './format';
 
 /**
  * Turning the server's addon shapes into the sentences the design shows.
@@ -73,6 +73,38 @@ export function describeTicketAddon(addon: TicketAddon): string {
   }
 
   return 'Redeem at the event';
+}
+
+/**
+ * The name an issued extra goes by in a list: a room by its room ("Double Cabin: King Bed"),
+ * anything else by its addon ("Bus: Cairo → Sokhna"), with the units when there are several. A
+ * backend that predates `addonName` leaves the option's label to stand alone, as before.
+ */
+export function ticketAddonTitle(addon: TicketAddon): string {
+  const name = addon.room || !addon.addonName ? addon.label : addon.addonName;
+  return addon.quantity > 1 ? `${name} × ${addon.quantity}` : name;
+}
+
+/**
+ * The line under `ticketAddonTitle`: what the title leaves out. A room gives its stay's name and
+ * nights, transport its option (which carries the trip's day and pick-up), anything else its
+ * option and where it is used. A state other than active says so instead.
+ */
+export function ticketAddonDetail(addon: TicketAddon): string {
+  const status = ticketAddonStatusLabel(addon);
+  if (status) return status;
+  if (!addon.addonName) return describeTicketAddon(addon);
+  if (addon.room) {
+    const dates = formatDateRangeShort(addon.room.checkInDate, addon.room.checkOutDate);
+    return `${addon.addonName} · ${dates}`;
+  }
+  if (addon.type === 'transport') return addon.label;
+  return `${addon.label} · redeem at the event`;
+}
+
+/** The room among a ticket's extras, if it holds one: one room per person per event. */
+export function ticketRoom(addons: readonly TicketAddon[]): TicketAddon | null {
+  return addons.find((addon) => addon.room !== null) ?? null;
 }
 
 /**

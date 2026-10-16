@@ -349,3 +349,48 @@ export function ShirtIcon({ size = 30, color = colors.textPrimary }: IconProps) 
     </Svg>
   );
 }
+
+/*
+ * Add-on kinds, for the rows that list a ticket's extras. Not in the design file: drawn in its
+ * 1.6-stroke outline language, at the 24px grid the other icons use.
+ */
+
+export function BedIcon({ size = 18, color = colors.textPrimary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 18V7M3 14h18v4M21 14v-2a3 3 0 0 0-3-3h-7v5"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="7" cy="11.5" r="1.5" stroke={color} strokeWidth={1.6} />
+    </Svg>
+  );
+}
+
+export function BusIcon({ size = 18, color = colors.textPrimary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="4" y="3" width="16" height="15" rx="3" stroke={color} strokeWidth={1.6} />
+      <Path d="M4 11h16M8 18v2M16 18v2" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+      <Circle cx="8" cy="14.5" r="0.8" fill={color} />
+      <Circle cx="16" cy="14.5" r="0.8" fill={color} />
+    </Svg>
+  );
+}
+
+export function MealIcon({ size = 18, color = colors.textPrimary }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 1-3 4-3 7h3v11"
+        stroke={color}
+        strokeWidth={1.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

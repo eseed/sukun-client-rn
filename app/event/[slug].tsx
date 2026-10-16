@@ -24,12 +24,17 @@ import {
   Text,
   YoutubeEmbed,
 } from '../../src/components/ui';
-import { useAddons, useEvent, useMySchedule, usePublicEventSchedule } from '../../src/hooks/queries';
-import { AccommodationBox } from '../../src/components/events/AccommodationBox';
+import {
+  useAddons,
+  useEvent,
+  useMySchedule,
+  usePublicEventSchedule,
+} from '../../src/hooks/queries';
+import { AccommodationBox, BookedStayBox } from '../../src/components/events/AccommodationBox';
 import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
 import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
-import { availableStays, describeAddonKinds } from '../../src/lib/addons';
+import { availableStays, describeAddonKinds, ticketRoom } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { messageForError } from '../../src/lib/errors';
 import { eventAvailabilityMessage } from '../../src/lib/event-availability';
@@ -152,6 +157,16 @@ export default function EventDetailScreen() {
 
   const addonKinds = describeAddonKinds(addonsQuery.data ?? []);
   const stays = availableStays(addonsQuery.data ?? []);
+  // A holder who already has their room sees it, not an offer of another (one per person).
+  const ownRoom = ticketRoom(ownTicket?.addons ?? []);
+  const heldRoom = {
+    held: ownTicket !== null && (ownTicket.hasAccommodation === true || ownRoom !== null),
+    room: ownRoom,
+    photoUrl:
+      (addonsQuery.data ?? []).find(
+        (addon) => addon.type === 'accommodation' && addon.name === ownRoom?.addonName,
+      )?.featuredImageUrl ?? null,
+  };
 
   /**
    * Straight to the pass step, whoever is asking.
@@ -345,7 +360,13 @@ export default function EventDetailScreen() {
             repeated "Get tickets" would be a second CTA pretending to be a third thing.
           */}
           {/* Somewhere to stay is worth more than a line: it gets its own box, which books it. */}
-          {stays.length > 0 ? (
+          {heldRoom.held ? (
+            <BookedStayBox
+              room={heldRoom.room}
+              photoUrl={heldRoom.photoUrl}
+              onPress={() => ownTicket && router.push(`/ticket/${ownTicket.id}`)}
+            />
+          ) : stays.length > 0 ? (
             <AccommodationBox stays={stays} onPress={onBookStay} />
           ) : addonKinds ? (
             <View

@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import {
   Badge,
   BackButton,
@@ -20,18 +20,24 @@ import {
 import {
   useCartPreview,
   useEvent,
+  useEventRooms,
   useReplaceCartAddons,
   useTicket,
   useTicketAddonContext,
 } from '../../../src/hooks/queries';
 import { PricesIncludeVat } from '../../../src/components/checkout/VatNotes';
 import { useOpenExtrasCart } from '../../../src/hooks/useTicketExtrasCart';
-import { describeOption, describePriceWindow, isAccommodation } from '../../../src/lib/addons';
+import {
+  describeOption,
+  describePriceWindow,
+  isAccommodation,
+  ticketRoom,
+} from '../../../src/lib/addons';
 import { messageForError } from '../../../src/lib/errors';
-import { formatEgp } from '../../../src/lib/format';
+import { formatDateRangeShort, formatEgp } from '../../../src/lib/format';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import { designAsset } from '../../../src/theme/assets';
-import { colors, space } from '../../../src/theme/tokens';
+import { colors, fontFamily, space } from '../../../src/theme/tokens';
 import type { AddonDetail, AddonOption, CartPreview } from '../../../src/api/types';
 import { trackMetaAddExtrasToTicket } from '../../../src/lib/meta-events';
 
@@ -89,6 +95,14 @@ export default function TicketExtrasScreen() {
   const context = contextQuery.data;
   const ticket = ticketQuery.data;
   const hasAccommodation = context?.existing.hasAccommodation ?? false;
+  // A room already held takes the place of the event's rooms: one room per person, so there is
+  // nothing to choose there, only the room itself and, when this account paid for it, its free
+  // spots to fill.
+  const ownedRoom = ticketRoom(context?.existing.addons ?? []);
+  const roomsQuery = useEventRooms(hasAccommodation ? context?.eventId : undefined);
+  const myRoom = (roomsQuery.data ?? []).find(
+    (room) => room.canAddOccupants && room.occupants.some((occupant) => occupant.isYou),
+  );
   const picked = Object.entries(chosen).filter(([, quantity]) => quantity > 0);
 
   /** Re-prices whenever the selection changes, so the money on screen is always the server's. */
@@ -212,6 +226,27 @@ export default function TicketExtrasScreen() {
   // is no proof the server took this selection, and the review screen would price an empty cart.
   const canContinue = picked.length > 0 && priced != null && priced.canPlaceOrder;
 
+  const accommodation = context.catalog.filter((addon) => addon.type === 'accommodation');
+  // The room shows under its own stay when the catalogue still sells it, else the first stay.
+  const roomGroupId = hasAccommodation
+    ? (accommodation.find((addon) => addon.name === ownedRoom?.addonName) ?? accommodation[0])?.id
+    : undefined;
+  const ownedQuantity = new Map<string, number>();
+  for (const addon of context.existing.addons) {
+    ownedQuantity.set(
+      addon.addonOptionId,
+      (ownedQuantity.get(addon.addonOptionId) ?? 0) + addon.quantity,
+    );
+  }
+  const catalogOptionIds = new Set(
+    context.catalog.flatMap((addon) => addon.options.map((option) => option.id)),
+  );
+  // What the catalogue rows below already show as yours stays off the summary card.
+  const listedElsewhere = context.existing.addons.filter(
+    (addon) =>
+      !(addon.room ? roomGroupId !== undefined : catalogOptionIds.has(addon.addonOptionId)),
+  );
+
   return (
     <Screen scroll contentStyle={styles.content}>
       <BackButton onPress={() => router.back()} style={styles.back} />
@@ -248,12 +283,12 @@ export default function TicketExtrasScreen() {
         </Card>
       ) : null}
 
-      {context.existing.addons.length > 0 ? (
+      {listedElsewhere.length > 0 ? (
         <Card style={styles.existing}>
           <Text variant="eyebrow" style={styles.sectionLabel}>
             Already on this ticket
           </Text>
-          {context.existing.addons.map((addon, index) => (
+          {listedElsewhere.map((addon, index) => (
             <Text key={`${addon.addonOptionId}-${index}`} variant="metaSm" color={colors.textMuted}>
               {addon.label}
               {addon.quantity > 1 ? ` × ${addon.quantity}` : ''}
@@ -264,86 +299,119 @@ export default function TicketExtrasScreen() {
 
       <PricesIncludeVat event={eventQuery.data} style={styles.vatCaption} />
 
-      {context.catalog.map((addon) => (
-        <View key={addon.id} style={styles.group}>
-          <Text variant="eyebrow" style={styles.sectionLabel}>
-            {addon.name}
-          </Text>
+      {context.catalog.map((addon) =>
+        hasAccommodation && addon.type === 'accommodation' ? (
+          addon.id === roomGroupId ? (
+            <View key={addon.id} style={styles.group}>
+              <Text variant="eyebrow" style={styles.sectionLabel}>
+                {addon.name}
+              </Text>
+              <OwnedCard
+                title={ownedRoom?.label ?? 'Your room'}
+                detail={[
+                  ownedRoom?.room
+                    ? `${formatDateRangeShort(ownedRoom.room.checkInDate, ownedRoom.room.checkOutDate)} · Room for ${ownedRoom.room.capacity}`
+                    : null,
+                  myRoom && myRoom.openPlaces > 0
+                    ? `${myRoom.openPlaces} ${myRoom.openPlaces === 1 ? 'spot' : 'spots'} free`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                link={
+                  myRoom && myRoom.openPlaces > 0
+                    ? {
+                        label: 'Add someone to your room →',
+                        onPress: () => router.push(`/rooms?eventId=${context.eventId}`),
+                      }
+                    : undefined
+                }
+              />
+            </View>
+          ) : null
+        ) : (
+          <View key={addon.id} style={styles.group}>
+            <Text variant="eyebrow" style={styles.sectionLabel}>
+              {addon.name}
+            </Text>
 
-          {addon.options.map((option) => {
-            const room = isAccommodation(option);
-            // One room per person for the whole event, so a holder who already has one cannot
-            // buy a second here.
-            const blocked = room && hasAccommodation;
-            const unavailable =
-              option.availability === 'unavailable' || option.priceEgpNow === null;
-            const quantity = chosen[option.id] ?? 0;
+            {addon.options.map((option) => {
+              const room = isAccommodation(option);
+              const owned = ownedQuantity.get(option.id) ?? 0;
+              // A seat already held is not bought twice: the trip shows as yours instead.
+              if (owned > 0 && addon.type === 'transport') {
+                return <OwnedCard key={option.id} title={option.label} />;
+              }
+              const unavailable =
+                option.availability === 'unavailable' || option.priceEgpNow === null;
+              const quantity = chosen[option.id] ?? 0;
 
-            return (
-              <View key={option.id}>
-                <SelectableCard
-                  selected={quantity > 0}
-                  disabled={blocked || unavailable}
-                  onPress={() =>
-                    setChosen((current) => ({
-                      ...current,
-                      [option.id]: current[option.id] ? 0 : 1,
-                    }))
-                  }
-                >
-                  <RadioDot selected={quantity > 0} />
-                  <View style={styles.optionBody}>
-                    <View style={styles.optionTop}>
-                      <Text style={styles.optionName}>{option.label}</Text>
-                      <Text style={styles.optionPrice}>
-                        {option.priceEgpNow ? formatEgp(option.priceEgpNow) : 'Not priced yet'}
+              return (
+                <View key={option.id}>
+                  <SelectableCard
+                    selected={quantity > 0}
+                    disabled={unavailable}
+                    onPress={() =>
+                      setChosen((current) => ({
+                        ...current,
+                        [option.id]: current[option.id] ? 0 : 1,
+                      }))
+                    }
+                  >
+                    <RadioDot selected={quantity > 0} />
+                    <View style={styles.optionBody}>
+                      <View style={styles.optionTop}>
+                        <Text style={styles.optionName}>{option.label}</Text>
+                        <Text style={styles.optionPrice}>
+                          {option.priceEgpNow ? formatEgp(option.priceEgpNow) : 'Not priced yet'}
+                        </Text>
+                      </View>
+                      {describeOption(option) ? (
+                        <Text variant="metaSm" color={colors.textMuted}>
+                          {describeOption(option)}
+                        </Text>
+                      ) : null}
+                      {describePriceWindow(option) ? (
+                        <Text variant="metaSm" color={colors.textMuted}>
+                          {describePriceWindow(option)}
+                        </Text>
+                      ) : null}
+                      {owned > 0 ? <Badge label={`You have ${owned}`} tone="sage" /> : null}
+                      {option.availability === 'unavailable' ? (
+                        <Badge label="Sold out" tone="rose" />
+                      ) : null}
+                    </View>
+                  </SelectableCard>
+
+                  {quantity > 0 ? (
+                    <View style={styles.quantityRow}>
+                      <QuantityStepper
+                        value={quantity}
+                        min={1}
+                        // The server's published count is the only ceiling. A withheld count
+                        // (null) means it declined to say how many are left, not that the limit
+                        // is some number the app picked, so the stepper runs on and the server
+                        // refuses what it cannot sell. Sold out arrives as an explicit 0.
+                        max={
+                          option.availableQuantity === null
+                            ? Number.MAX_SAFE_INTEGER
+                            : Math.max(option.availableQuantity, 1)
+                        }
+                        onChange={(next) =>
+                          setChosen((current) => ({ ...current, [option.id]: next }))
+                        }
+                      />
+                      <Text variant="metaSm" color={colors.textMuted}>
+                        {room ? 'Rooms, not people.' : 'All assigned to you.'}
                       </Text>
                     </View>
-                    {describeOption(option) ? (
-                      <Text variant="metaSm" color={colors.textMuted}>
-                        {describeOption(option)}
-                      </Text>
-                    ) : null}
-                    {describePriceWindow(option) ? (
-                      <Text variant="metaSm" color={colors.textMuted}>
-                        {describePriceWindow(option)}
-                      </Text>
-                    ) : null}
-                    {blocked ? <Badge label="You already have a room" tone="rose" /> : null}
-                    {!blocked && option.availability === 'unavailable' ? (
-                      <Badge label="Sold out" tone="rose" />
-                    ) : null}
-                  </View>
-                </SelectableCard>
-
-                {quantity > 0 ? (
-                  <View style={styles.quantityRow}>
-                    <QuantityStepper
-                      value={quantity}
-                      min={1}
-                      // The server's published count is the only ceiling. A withheld count
-                      // (null) means it declined to say how many are left, not that the limit
-                      // is some number the app picked, so the stepper runs on and the server
-                      // refuses what it cannot sell. Sold out arrives as an explicit 0.
-                      max={
-                        option.availableQuantity === null
-                          ? Number.MAX_SAFE_INTEGER
-                          : Math.max(option.availableQuantity, 1)
-                      }
-                      onChange={(next) =>
-                        setChosen((current) => ({ ...current, [option.id]: next }))
-                      }
-                    />
-                    <Text variant="metaSm" color={colors.textMuted}>
-                      {room ? 'Rooms, not people.' : 'All assigned to you.'}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
-        </View>
-      ))}
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        ),
+      )}
 
       {blockedByServer ? (
         <InlineError message="Some of this can't be bought right now. Change your choices and try again." />
@@ -382,6 +450,39 @@ export default function TicketExtrasScreen() {
   );
 }
 
+/**
+ * Something this ticket already has, in place of the choice it would otherwise be: the room a
+ * holder holds (one per person), or a seat on a trip they are already booked on.
+ */
+function OwnedCard({
+  title,
+  detail,
+  link,
+}: {
+  title: string;
+  detail?: string;
+  link?: { label: string; onPress: () => void };
+}) {
+  return (
+    <Card style={styles.owned}>
+      <View style={styles.ownedTop}>
+        <Text style={styles.optionName}>{title}</Text>
+        <Badge label="Yours" tone="sage" />
+      </View>
+      {detail ? (
+        <Text variant="metaSm" color={colors.textMuted}>
+          {detail}
+        </Text>
+      ) : null}
+      {link ? (
+        <Pressable accessibilityRole="button" onPress={link.onPress}>
+          <Text style={styles.ownedLink}>{link.label}</Text>
+        </Pressable>
+      ) : null}
+    </Card>
+  );
+}
+
 /** The catalogue is the only thing that knows what an option id stands for. */
 function findOption(catalog: AddonDetail[], optionId: string): AddonOption | undefined {
   return catalog.flatMap((addon) => addon.options).find((item) => item.id === optionId);
@@ -412,6 +513,20 @@ const styles = StyleSheet.create({
   group: { marginBottom: space.s4 },
   sectionLabel: { marginBottom: space.s2 },
   optionBody: { flex: 1, gap: space.s1, marginLeft: space.s3 },
+  /* A held room or seat: the option card's frame, outlined in sage like its "Yours" badge. */
+  owned: { borderColor: colors.sage100, borderWidth: 1.5, gap: space.s1, marginBottom: space.s2 },
+  ownedTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.s2,
+  },
+  ownedLink: {
+    color: colors.accentSky,
+    fontFamily: fontFamily.bodyMedium,
+    fontSize: 13,
+    marginTop: space.s1,
+  },
   optionTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   optionName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
   optionPrice: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
