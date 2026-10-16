@@ -382,6 +382,89 @@ describe('22 Add extras to this ticket', () => {
   });
 });
 
+describe('22 Add extras, with extras already held', () => {
+  /** The seeded ticket's context, as if it already held the Desert Lodge double and a shuttle. */
+  async function holdingRoomAndShuttle() {
+    const context = await mockApi.tickets.addonContext(SEEDED_TICKET_ID);
+    const issued = (
+      optionId: string,
+      addonName: string,
+      label: string,
+      type: 'accommodation' | 'transport',
+    ) => ({
+      addonOptionId: optionId,
+      type,
+      addonName,
+      label,
+      transportDirection: type === 'transport' ? ('round_trip' as const) : null,
+      departureDate: null,
+      departureTime: null,
+      returnDate: null,
+      returnTime: null,
+      quantity: 1,
+      status: 'active' as const,
+      issuedAddonStatus: 'active' as const,
+      originalQuantity: 1,
+      activeQuantity: 1,
+      pendingTicketReplacementQuantity: 0,
+      refundedQuantity: 0,
+      cancelledQuantity: 0,
+      voidedQuantity: 0,
+      redemptionsAllowed: 1,
+      redemptionsUsed: 0,
+      room:
+        type === 'accommodation'
+          ? {
+              roomType: 'Double',
+              nights: 2,
+              checkInDate: '2026-10-23',
+              checkInTime: '14:00',
+              checkOutDate: '2026-10-25',
+              checkOutTime: '12:00',
+              status: 'active' as const,
+              capacity: 2,
+            }
+          : null,
+    });
+    return jest.spyOn(mockApi.tickets, 'addonContext').mockResolvedValue({
+      ...context,
+      existing: {
+        addons: [
+          issued('opt-lodge-double-2', 'Desert Lodge Room', 'Double · 2 nights', 'accommodation'),
+          issued('opt-shuttle-round-trip', 'Cairo shuttle', 'Round trip', 'transport'),
+        ],
+        hasAccommodation: true,
+      },
+    });
+  }
+
+  it('shows the room held in place of the rooms on sale, and the seat held as yours', async () => {
+    await signInAndComplete();
+    const context = await holdingRoomAndShuttle();
+
+    await renderBrowse();
+
+    // One room per person: the room she has stands where the choice of rooms would be.
+    expect(screen.getByText('Desert Lodge Room')).toBeTruthy();
+    expect(screen.getByText('Double · 2 nights')).toBeTruthy();
+    expect(screen.getByText('23–25 Oct · Room for 2')).toBeTruthy();
+    expect(screen.queryByText('Single · 1 night')).toBeNull();
+    expect(screen.queryByText('Triple · 2 nights')).toBeNull();
+    expect(screen.queryByText('Camp Tent, shared')).toBeNull();
+    expect(screen.queryByText('You already have a room')).toBeNull();
+
+    // The round trip she holds is hers; the one-way seat is still for sale, as is dinner.
+    expect(screen.getAllByText('Yours')).toHaveLength(2);
+    expect(screen.getByText('Round trip')).toBeTruthy();
+    expect(screen.getByText('One way')).toBeTruthy();
+    expect(screen.getAllByText('Dinner voucher').length).toBeGreaterThan(0);
+    // Everything held is shown in place, so there is no separate summary of it.
+    expect(screen.queryByText('Already on this ticket')).toBeNull();
+
+    context.mockRestore();
+  });
+});
+
 describe('VAT-inclusive extras', () => {
   afterEach(() => {
     eventDetails[TULUA_ID]!.vatInclusive = false;

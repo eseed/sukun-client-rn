@@ -1,12 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import type { Ticket, TicketStatus } from '../../src/api/types';
+import type { Ticket, TicketAddon, TicketChild, TicketStatus } from '../../src/api/types';
 import { StyleSheet, View } from 'react-native';
 import { BulletHeading, ResourceState, Screen } from '../../src/components/ui';
 import { SignInPrompt } from '../../src/components/SignInPrompt';
 import { TicketCard } from '../../src/components/tickets/TicketCard';
-import { useAddons, useTickets } from '../../src/hooks/queries';
-import { availableStays, stayPhotos } from '../../src/lib/addons';
+import { useAddons, useEventRooms, useTickets } from '../../src/hooks/queries';
+import { availableStays, stayPhotos, ticketRoom } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { useAuthStore } from '../../src/stores/auth';
 import { LiveEventReturnBanner } from '../../src/components/live-event/live-event-return-banner';
@@ -28,10 +28,7 @@ export default function TicketsScreen() {
 
   const groups = useMemo(() => {
     const tickets = data?.data ?? [];
-    const byKey = new Map<
-      string,
-      { lead: (typeof tickets)[number]; count: number; addonCount: number }
-    >();
+    const byKey = new Map<string, TicketGroup>();
     for (const ticket of tickets) {
       const key = `${ticket.orderNumber ?? ticket.id}:${ticket.tier.id}`;
       const existing = byKey.get(key);
@@ -39,12 +36,28 @@ export default function TicketsScreen() {
         existing.count += 1;
         // The card stands for several tickets, so it reports the extras across all of them.
         existing.addonCount += ticket.addonCount;
+        existing.addons =
+          existing.addons && ticket.addons ? [...existing.addons, ...ticket.addons] : null;
+        existing.childTickets.push(...ticket.children);
+        existing.hasAccommodation =
+          existing.hasAccommodation === true || ticket.hasAccommodation === true
+            ? true
+            : existing.hasAccommodation === false && ticket.hasAccommodation === false
+              ? false
+              : null;
         // Prefer a usable ticket as the card's lead, so tapping opens a real entry pass.
         if (existing.lead.usageStatus !== 'usable' && ticket.usageStatus === 'usable') {
           existing.lead = ticket;
         }
       } else {
-        byKey.set(key, { lead: ticket, count: 1, addonCount: ticket.addonCount });
+        byKey.set(key, {
+          lead: ticket,
+          count: 1,
+          addonCount: ticket.addonCount,
+          addons: ticket.addons ? [...ticket.addons] : null,
+          childTickets: [...ticket.children],
+          hasAccommodation: ticket.hasAccommodation,
+        });
       }
     }
     return [...byKey.values()];
@@ -83,16 +96,13 @@ export default function TicketsScreen() {
           onRetry={() => void refetch()}
         >
           <View style={styles.list}>
-            {groups.map(({ lead, count, addonCount }) => (
+            {groups.map((group) => (
               <TicketGroupCard
-                key={lead.id}
-                lead={lead}
-                ticketCount={count}
-                addonCount={addonCount}
-                onPress={() => router.push(`/ticket/${lead.id}`)}
-                onAddExtras={() =>
-                  router.push(`/ticket/${lead.id}/extras`)
-                }
+                key={group.lead.id}
+                group={group}
+                onPress={() => router.push(`/ticket/${group.lead.id}`)}
+                onAddExtras={() => router.push(`/ticket/${group.lead.id}/extras`)}
+                onAddRoommate={() => router.push(`/rooms?eventId=${group.lead.event.id}`)}
               />
             ))}
           </View>
@@ -100,6 +110,17 @@ export default function TicketsScreen() {
       )}
     </Screen>
   );
+}
+
+/** One card's worth of tickets: an order's tickets of one tier, with what hangs off them. */
+interface TicketGroup {
+  lead: Ticket;
+  count: number;
+  addonCount: number;
+  /** `null` while any ticket in the group comes from a backend that does not list them. */
+  addons: TicketAddon[] | null;
+  childTickets: TicketChild[];
+  hasAccommodation: boolean | null;
 }
 
 /**
@@ -116,22 +137,32 @@ export default function TicketsScreen() {
  * share one request.
  */
 function TicketGroupCard({
-  lead,
-  ticketCount,
-  addonCount,
+  group,
   onPress,
   onAddExtras,
+  onAddRoommate,
 }: {
-  lead: Ticket;
-  ticketCount: number;
-  addonCount: number;
+  group: TicketGroup;
   onPress: () => void;
   onAddExtras: () => void;
+  onAddRoommate: () => void;
 }) {
+  const { lead } = group;
   const catalogue = useAddons(lead.event.id);
   // Nothing yet, an empty catalogue and a flag-off 404 all read the same way: no entry point.
   const sellsExtras = (catalogue.data?.length ?? 0) > 0;
   const stays = availableStays(catalogue.data ?? []);
+  const roomAddon = ticketRoom(group.addons ?? []);
+  // Free spots are known only for a room this account paid for, the one it can fill. Asked only
+  // when the card shows a room.
+  const rooms = useEventRooms(roomAddon ? lead.event.id : undefined);
+  const myRoom = (rooms.data ?? []).find(
+    (room) => room.canAddOccupants && room.occupants.some((occupant) => occupant.isYou),
+  );
+  // The room's own stay when the catalogue still lists it, else any stay's photo.
+  const roomStay = (catalogue.data ?? []).find(
+    (addon) => addon.type === 'accommodation' && addon.name === roomAddon?.addonName,
+  );
 
   // A stay is an extra on this ticket, so booking one goes where the event page sends a holder.
   function onBookStay() {
@@ -147,13 +178,29 @@ function TicketGroupCard({
   return (
     <TicketCard
       ticket={lead}
-      ticketCount={ticketCount}
-      addonCount={addonCount}
+      ticketCount={group.count}
+      addonCount={group.addonCount}
+      addons={group.addons}
+      childTickets={group.childTickets}
+      hasAccommodation={group.hasAccommodation}
       onPress={onPress}
       onAddExtras={sellsExtras ? onAddExtras : undefined}
       stay={
         stays.length > 0
           ? { photoUrl: stayPhotos(stays, 1)[0]?.url ?? null, onBook: onBookStay }
+          : undefined
+      }
+      room={
+        roomAddon
+          ? {
+              photoUrl:
+                roomStay?.featuredImageUrl ??
+                stayPhotos(catalogue.data?.filter((a) => a.type === 'accommodation') ?? [], 1)[0]
+                  ?.url ??
+                null,
+              freeSpots: myRoom?.openPlaces ?? 0,
+              onAddSomeone: onAddRoommate,
+            }
           : undefined
       }
     />

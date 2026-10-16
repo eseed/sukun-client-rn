@@ -23,7 +23,7 @@ import {
   useTicket,
   useTicketAddons,
 } from '../../src/hooks/queries';
-import { describeTicketAddon, ticketAddonStatusLabel } from '../../src/lib/addons';
+import { AddonRow, admittedWithYou, ChildrenList } from '../../src/components/tickets/TicketExtras';
 import { track } from '../../src/lib/analytics';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
 import { getEntryPassOpensAt, getEntryPassRefreshAt } from '../../src/lib/entry-pass';
@@ -567,19 +567,23 @@ export default function EntryPassScreen() {
 
         {!needsClaim && !unusable ? <RoomSpotsPanel eventId={ticket.event.id} /> : null}
 
+        {ticket.children.length > 0 && !unusable ? (
+          <View style={styles.addons}>
+            <Text style={styles.sectionLabel}>Children with you</Text>
+            <ChildrenList childTickets={ticket.children} tone="inverse" />
+            <View style={styles.gateNote}>
+              <Text style={styles.gateNoteText}>
+                {`Show this code once: it lets in ${admittedWithYou(ticket.children)}.`}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         {addons.length > 0 ? (
           <View style={styles.addons}>
-            <Text style={styles.detailLabel}>Attached add-ons</Text>
+            <Text style={styles.sectionLabel}>Your add-ons</Text>
             {addons.map((addon, index) => (
-              <View key={`${addon.addonOptionId}-${index}`} style={styles.addonRow}>
-                <Text style={styles.detailValue}>
-                  {addon.label}
-                  {addon.quantity > 1 ? ` × ${addon.quantity}` : ''}
-                </Text>
-                <Text style={styles.addonMeta}>
-                  {ticketAddonStatusLabel(addon) ?? describeTicketAddon(addon)}
-                </Text>
-              </View>
+              <AddonRow key={`${addon.addonOptionId}-${index}`} addon={addon} tone="inverse" />
             ))}
           </View>
         ) : null}
@@ -651,9 +655,22 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingTop: 20,
   },
-  addonRow: { gap: 2 },
-  addonMeta: {
+  sectionLabel: {
     color: colors.textInverseMuted,
+    fontFamily: fontFamily.body,
+    fontSize: 11,
+    letterSpacing: 11 * 0.14,
+    textTransform: 'uppercase',
+  },
+  /* Who one scan lets in, on the inverse rule's tone. */
+  gateNote: {
+    backgroundColor: colors.borderInverse,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  gateNoteText: {
+    color: colors.creme,
     fontFamily: fontFamily.body,
     fontSize: 12,
   },

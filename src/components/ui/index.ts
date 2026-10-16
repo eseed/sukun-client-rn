@@ -34,7 +34,9 @@ export { InlineError, type InlineErrorProps } from './InlineError';
 export { PageHeader, type PageHeaderProps } from './PageHeader';
 export {
   BackIcon,
+  BedIcon,
   BellIcon,
+  BusIcon,
   CalendarIcon,
   CameraIcon,
   CheckIcon,
@@ -45,6 +47,7 @@ export {
   HomeIcon,
   type IconProps,
   InfoIcon,
+  MealIcon,
   PeopleIcon,
   PinIcon,
   PlusIcon,

@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import type { AddonSummary } from '../../api/types';
+import type { AddonSummary, TicketAddon } from '../../api/types';
 import { stayPhotos } from '../../lib/addons';
+import { formatDateRangeShort } from '../../lib/format';
 import { colors, fontFamily } from '../../theme/tokens';
 import { ImageSlot, Text } from '../ui';
 
@@ -56,6 +57,51 @@ export function AccommodationBox({
   );
 }
 
+/**
+ * The same box for a holder who already has their room: one room per person, so it shows the
+ * room they have rather than offering another, and leads to the ticket it is on.
+ */
+export function BookedStayBox({
+  room,
+  photoUrl,
+  onPress,
+}: {
+  /** The room on the holder's ticket, or `null` when the server says there is one but not which. */
+  room: TicketAddon | null;
+  photoUrl: string | null;
+  onPress: () => void;
+}) {
+  const detail = room?.room
+    ? `${room.label} · ${formatDateRangeShort(room.room.checkInDate, room.room.checkOutDate)}`
+    : null;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Your stay is booked${detail ? `: ${detail}` : ''}. See it on your ticket`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.box, pressed ? styles.pressed : null]}
+    >
+      <View style={styles.booked}>
+        {photoUrl ? (
+          <ImageSlot
+            source={{ uri: photoUrl }}
+            height={BOOKED_PHOTO_SIZE}
+            style={styles.bookedPhoto}
+          />
+        ) : null}
+        <View style={styles.bookedBody}>
+          <Text style={styles.title}>Your stay is booked</Text>
+          {detail ? <Text style={styles.names}>{detail}</Text> : null}
+          <Text style={styles.bookedLink}>See it on your ticket →</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+const BOOKED_PHOTO_SIZE = 56;
+
 const styles = StyleSheet.create({
   /* The add-ons box (`app/event/[slug].tsx` `addons`). */
   box: {
@@ -102,5 +148,25 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   actionLabel: { color: colors.textPrimary, fontFamily: fontFamily.body, fontSize: 14 },
+  booked: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  bookedPhoto: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    width: BOOKED_PHOTO_SIZE,
+  },
+  bookedBody: {
+    flex: 1,
+  },
+  /* The ticket card's call-to-action blue, for the one place this box leads. */
+  bookedLink: {
+    color: colors.accentSky,
+    fontFamily: fontFamily.bodyMedium,
+    fontSize: 13,
+    marginTop: 6,
+  },
   actionChevron: { color: colors.textMuted, fontSize: 20 },
 });

@@ -660,6 +660,21 @@ export interface Ticket {
   purchasedBy: { name: string; isSelf: boolean } | null;
   /** Live addons attached to this ticket, so a card can say "3 add-ons attached". */
   addonCount: number;
+  /**
+   * The live addons themselves, as `GET mobile/tickets/:id/addons` answers, so a card names them.
+   * `null` from a backend that predates the list: the card falls back to `addonCount`.
+   */
+  addons: TicketAddon[] | null;
+  /**
+   * Whether this ticket already has its room (one per person per event), so nothing offers it
+   * another. `null` from a backend that predates the field: nothing is known either way.
+   */
+  hasAccommodation: boolean | null;
+  /**
+   * Children admitted on this ticket. They have no number or account, so their tickets reach
+   * no list of their own: this is the only place they show. Empty when there are none.
+   */
+  children: TicketChild[];
   issuedAt: string;
   /** Set only on a granted ticket waiting to be claimed. */
   claimAvailability: ClaimAvailability | null;
@@ -670,6 +685,14 @@ export interface Ticket {
    * is claimed. `guest` is who they named, or null while nobody is.
    */
   plusOne: { guest: PlusOneGuest | null } | null;
+}
+
+/** `MobileTicketChildResponseDto`: a child admitted on the guardian's ticket, a name only. */
+export interface TicketChild {
+  ticketId: string;
+  name: string;
+  tier: { id: string; name: string };
+  addons: TicketAddon[];
 }
 
 /** The person a guest named as their plus one. */
@@ -779,6 +802,10 @@ export interface LiveTicket {
   purchasedBy: { name: string; isSelf: boolean } | null;
   /** Optional on the wire: a backend with addons switched off omits it entirely. */
   addonCount?: number;
+  /** Optional on the wire: a backend from before tickets listed their addons omits these. */
+  addons?: TicketAddon[];
+  hasAccommodation?: boolean;
+  children?: TicketChild[];
   issuedAt: string;
   /** Optional on the wire: a backend from before claims competed for seats omits these. */
   claimAvailability?: ClaimAvailability | null;
@@ -1115,6 +1142,11 @@ export interface TicketAddonRoom {
 export interface TicketAddon {
   addonOptionId: string;
   type: AddonType;
+  /**
+   * The addon's own name ("Bus: Cairo → Sokhna"); `label` is its option's. Absent from a backend
+   * that predates it, which leaves `label` to stand alone.
+   */
+  addonName?: string;
   label: string;
   transportDirection: AddonTransportDirection | null;
   departureDate: string | null;
