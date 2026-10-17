@@ -16,6 +16,7 @@ import {
   BackButton,
   Badge,
   Button,
+  CalendarIcon,
   ExternalLinkIcon,
   ImageSlot,
   MarkdownText,
@@ -29,8 +30,10 @@ import { AccommodationBox, BookedStayBox } from '../../src/components/events/Acc
 import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
 import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
+import { addToCalendar } from '../../src/lib/add-to-calendar';
 import { availableStays, describeAddonKinds, ticketRoom } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
+import { eventCalendarEntry } from '../../src/lib/calendar';
 import { messageForError } from '../../src/lib/errors';
 import { eventAvailabilityMessage } from '../../src/lib/event-availability';
 import { formatDateRange, formatEgp } from '../../src/lib/format';
@@ -58,6 +61,8 @@ export default function EventDetailScreen() {
   // away, where the two overlapped outright (build 22). Track whether the hero still covers the
   // status bar; the page puts a background-coloured band there once it does not.
   const [heroUnderStatusBar, setHeroUnderStatusBar] = useState(true);
+  // When the page opened: "Add to calendar" is offered while the event has not ended by then.
+  const [openedAt] = useState(() => Date.now());
   // Checkout is pushed on top of this page, which stays mounted under it, and the last mounted
   // StatusBar wins: left in place, its light clock carried on over checkout's cream screens,
   // where it could not be seen. It only speaks while this page is the one showing.
@@ -135,6 +140,9 @@ export default function EventDetailScreen() {
   const eventId = event.id;
 
   const mapUrl = venueMapUrl(event.venue);
+  // Offered until the event is over: a past event has nothing left to put in a calendar.
+  const calendarEntry = eventCalendarEntry(event);
+  const offerCalendar = calendarEntry !== null && calendarEntry.end.getTime() > openedAt;
 
   function onScroll(scrollEvent: NativeSyntheticEvent<NativeScrollEvent>) {
     const covered = scrollEvent.nativeEvent.contentOffset.y < HERO_HEIGHT - insets.top;
@@ -159,6 +167,14 @@ export default function EventDetailScreen() {
         (addon) => addon.type === 'accommodation' && addon.name === ownRoom?.addonName,
       )?.featuredImageUrl ?? null,
   };
+
+  /** The phone's own new-event screen, filled in; the visitor saves it (`addToCalendar`). */
+  function onAddToCalendar() {
+    if (!calendarEntry) return;
+    void addToCalendar(calendarEntry).then((outcome) =>
+      track('calendar_add_opened', { event_id: eventId, event_slug: eventSlug ?? '', outcome }),
+    );
+  }
 
   /**
    * Straight to the pass step, whoever is asking.
@@ -255,15 +271,27 @@ export default function EventDetailScreen() {
         <View style={styles.body}>
           <MarkdownText markdown={description} variant="bodyLead" style={styles.lead} />
 
-          {hasSchedule ? (
+          {hasSchedule || offerCalendar ? (
             <View style={styles.scheduleLink}>
-              <Button
-                label="View full schedule"
-                variant="secondary"
-                size="inline"
-                accessibilityLabel={`View the full schedule for ${event.title}`}
-                onPress={() => router.push(`/event/${event.slug}/schedule`)}
-              />
+              {hasSchedule ? (
+                <Button
+                  label="View full schedule"
+                  variant="secondary"
+                  size="inline"
+                  accessibilityLabel={`View the full schedule for ${event.title}`}
+                  onPress={() => router.push(`/event/${event.slug}/schedule`)}
+                />
+              ) : null}
+              {offerCalendar ? (
+                <Button
+                  label="Add to calendar"
+                  variant="secondary"
+                  size="inline"
+                  icon={<CalendarIcon size={16} />}
+                  accessibilityLabel={`Add ${event.title} to your calendar`}
+                  onPress={onAddToCalendar}
+                />
+              ) : null}
             </View>
           ) : null}
 
@@ -645,6 +673,9 @@ const styles = StyleSheet.create({
   },
   scheduleLink: {
     alignSelf: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 20,
   },
   sectionLabel: {
