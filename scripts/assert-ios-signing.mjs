@@ -109,6 +109,25 @@ if (!fs.existsSync(PROFILE)) {
     );
   }
 
+  // Apple Pay: every merchant ID app.json asks for must be in the profile, which happens only
+  // once the merchant ID exists and the App ID's Apple Pay capability lists it. Without it the
+  // archive fails to sign, naming com.apple.developer.in-app-payments.
+  const wantedMerchants =
+    appJson.expo?.ios?.entitlements?.['com.apple.developer.in-app-payments'] ?? [];
+  const merchantKey = 'Entitlements.com\\.apple\\.developer\\.in-app-payments';
+  const profileMerchants = Array.from({ length: count(merchantKey) }, (_, i) =>
+    extract(`${merchantKey}.${i}`),
+  );
+  const missingMerchants = wantedMerchants.filter((id) => !profileMerchants.includes(id));
+  if (missingMerchants.length > 0) {
+    note(
+      `Profile lacks the Apple Pay merchant ID ${missingMerchants.join(', ')} that app.json ` +
+        'asks for. Create the merchant ID, add it to the App ID under Apple Pay, and download ' +
+        'a new App Store profile (an EAS build does all three), then replace the one in ' +
+        '../secrets.',
+    );
+  }
+
   const teams = Array.from({ length: count('TeamIdentifier') }, (_, i) =>
     extract(`TeamIdentifier.${i}`),
   );

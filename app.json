@@ -15,6 +15,9 @@
         "applinks:book.sukunwellness.co",
         "applinks:clientstaging.sukunwellness.co"
       ],
+      "entitlements": {
+        "com.apple.developer.in-app-payments": ["merchant.co.sukunwellness"]
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry.",
