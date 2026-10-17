@@ -1,19 +1,24 @@
 import {
   keepPreviousData,
+  type InfiniteData,
+  type QueryClient,
   useMutation,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
   type UseQueryOptions,
 } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { api } from '../api';
 import { ApiError } from '../api/live/http';
 import { ENTRY_QR_REFRESH_INTERVAL_MS, isEntryPassResponseForTicket } from '../lib/entry-pass';
+import { codeForError } from '../lib/errors';
 import type {
+  AppNotification,
   BuyerRoom,
   CartAddonInput,
   CurrentUser,
+  CursorPage,
   EntryPass,
   EventListItem,
   GuestValidationInput,
@@ -21,6 +26,7 @@ import type {
   MyScheduleBlock,
   MyScheduleResponse,
   ListEventsQuery,
+  NotificationUnreadCount,
   PublicEventSchedule,
   PaymentStatus,
   ReplaceCartTicketsInput,
@@ -73,6 +79,9 @@ export const queryKeys = {
   deletionPreview: ['deletion-preview'] as const,
   roomsRoot: ['rooms'] as const,
   rooms: (eventId: string) => ['rooms', eventId] as const,
+  notificationsRoot: ['notifications'] as const,
+  notifications: ['notifications', 'list'] as const,
+  notificationsUnreadCount: ['notifications', 'unread-count'] as const,
 };
 
 /* -------------------------------------------------------------- reference */
@@ -875,5 +884,188 @@ export function useDeleteAccount() {
      * query cache anyway, and skips the logout round-trip for the same reason.
      */
     onSuccess: () => signOut({ remote: false }),
+  });
+}
+
+/* ---------------------------------------------------------- notifications */
+
+const NOTIFICATIONS_PAGE_LIMIT = 20;
+/** Short, because a push can add a row at any moment; foreground and push refetch it anyway. */
+const NOTIFICATIONS_STALE_MS = 30_000;
+
+type NotificationPages = InfiniteData<CursorPage<AppNotification>, string | null>;
+
+function isInvalidCursor(error: unknown): boolean {
+  return codeForError(error) === 'INVALID_CURSOR';
+}
+
+/**
+ * The bell's count. Refetched every time the app comes back to the foreground (the query
+ * provider wires `focusManager` to `AppState`), when a push lands while the app is open
+ * (`NotificationInboxSync`), and after the inbox marks anything read.
+ */
+export function useNotificationUnreadCount() {
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  return useQuery({
+    queryKey: queryKeys.notificationsUnreadCount,
+    queryFn: () => api.notifications.unreadCount(),
+    enabled: signedIn,
+    staleTime: NOTIFICATIONS_STALE_MS,
+    refetchOnWindowFocus: 'always',
+  });
+}
+
+/**
+ * The inbox, newest first, a page at a time.
+ *
+ * A cursor goes stale when the row it is anchored on is gone (history is kept for 12 months), and
+ * the backend refuses it with 400 `INVALID_CURSOR`. That is not retried: the list is reset and
+ * read again from the first page, as the contract asks.
+ */
+export function useNotifications() {
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  const client = useQueryClient();
+  const result = useInfiniteQuery({
+    queryKey: queryKeys.notifications,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      api.notifications.list({ cursor: pageParam, limit: NOTIFICATIONS_PAGE_LIMIT }),
+    getNextPageParam: (lastPage) =>
+      lastPage.meta.hasNextPage ? (lastPage.meta.nextCursor ?? undefined) : undefined,
+    enabled: signedIn,
+    staleTime: NOTIFICATIONS_STALE_MS,
+    retry: (failureCount, error) => !isInvalidCursor(error) && failureCount < 1,
+  });
+
+  // Only a list that has pages sent a cursor, and the reset empties it, so this cannot loop. The
+  // ref keeps one refusal from resetting twice.
+  const handledError = useRef<unknown>(null);
+  const hasPages = (result.data?.pages.length ?? 0) > 0;
+  useEffect(() => {
+    if (!isInvalidCursor(result.error) || !hasPages || handledError.current === result.error) {
+      return;
+    }
+    handledError.current = result.error;
+    void client.resetQueries({ queryKey: queryKeys.notifications, exact: true });
+  }, [client, hasPages, result.error]);
+
+  const pages = result.data?.pages;
+  const notifications = useMemo(() => {
+    // A row can shift onto the next page when a new push lands between two page reads.
+    const seen = new Set<string>();
+    const unique: AppNotification[] = [];
+    for (const page of pages ?? []) {
+      for (const item of page.data) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        unique.push(item);
+      }
+    }
+    return unique;
+  }, [pages]);
+
+  return { ...result, notifications };
+}
+
+interface NotificationSnapshot {
+  pages: NotificationPages | undefined;
+  count: NotificationUnreadCount | undefined;
+  /** A list read was in flight and got cancelled for the optimistic write, so it is redone. */
+  listWasFetching: boolean;
+}
+
+async function snapshotNotifications(client: QueryClient): Promise<NotificationSnapshot> {
+  const listWasFetching = client.isFetching({ queryKey: queryKeys.notifications }) > 0;
+  await Promise.all([
+    client.cancelQueries({ queryKey: queryKeys.notifications }),
+    client.cancelQueries({ queryKey: queryKeys.notificationsUnreadCount }),
+  ]);
+  return {
+    pages: client.getQueryData<NotificationPages>(queryKeys.notifications),
+    count: client.getQueryData<NotificationUnreadCount>(queryKeys.notificationsUnreadCount),
+    listWasFetching,
+  };
+}
+
+function restoreNotifications(client: QueryClient, snapshot: NotificationSnapshot | undefined) {
+  if (!snapshot) return;
+  client.setQueryData(queryKeys.notifications, snapshot.pages);
+  client.setQueryData(queryKeys.notificationsUnreadCount, snapshot.count);
+}
+
+function markLoaded(
+  pages: NotificationPages | undefined,
+  readAt: string,
+  shouldMark: (item: AppNotification) => boolean,
+): NotificationPages | undefined {
+  if (!pages) return pages;
+  return {
+    ...pages,
+    pages: pages.pages.map((page) => ({
+      ...page,
+      data: page.data.map((item) =>
+        item.readAt === null && shouldMark(item) ? { ...item, readAt } : item,
+      ),
+    })),
+  };
+}
+
+/**
+ * Marks one notification read the moment it is tapped: the row and the badge change at once,
+ * and the server is told behind them. A refusal is never shown, since the tap's real job (opening
+ * the link) has already happened; 429 `TOO_MANY_REQUESTS` in particular is just skipped. The row
+ * goes back to unread, which is what the server still says.
+ */
+export function useMarkNotificationRead() {
+  const client = useQueryClient();
+  return useMutation<void, Error, string, NotificationSnapshot>({
+    mutationFn: (notificationId) => api.notifications.markRead(notificationId),
+    onMutate: async (notificationId) => {
+      const snapshot = await snapshotNotifications(client);
+      const wasUnread = (snapshot.pages?.pages ?? []).some((page) =>
+        page.data.some((item) => item.id === notificationId && item.readAt === null),
+      );
+      client.setQueryData<NotificationPages>(queryKeys.notifications, (pages) =>
+        markLoaded(pages, new Date().toISOString(), (item) => item.id === notificationId),
+      );
+      if (wasUnread) {
+        client.setQueryData<NotificationUnreadCount>(queryKeys.notificationsUnreadCount, (count) =>
+          count ? { unreadCount: Math.max(0, count.unreadCount - 1) } : count,
+        );
+      }
+      return snapshot;
+    },
+    onError: (_error, _notificationId, snapshot) => restoreNotifications(client, snapshot),
+    onSettled: (_result, error, _notificationId, snapshot) => {
+      void client.invalidateQueries({ queryKey: queryKeys.notificationsUnreadCount });
+      if (error || snapshot?.listWasFetching) {
+        void client.invalidateQueries({ queryKey: queryKeys.notifications });
+      }
+    },
+  });
+}
+
+/** "Mark all as read": every loaded row and the badge clear at once; a refusal puts them back. */
+export function useMarkAllNotificationsRead() {
+  const client = useQueryClient();
+  return useMutation<void, Error, void, NotificationSnapshot>({
+    mutationFn: () => api.notifications.markAllRead(),
+    onMutate: async () => {
+      const snapshot = await snapshotNotifications(client);
+      client.setQueryData<NotificationPages>(queryKeys.notifications, (pages) =>
+        markLoaded(pages, new Date().toISOString(), () => true),
+      );
+      client.setQueryData<NotificationUnreadCount>(queryKeys.notificationsUnreadCount, (count) =>
+        count ? { unreadCount: 0 } : count,
+      );
+      return snapshot;
+    },
+    onError: (_error, _input, snapshot) => restoreNotifications(client, snapshot),
+    onSettled: (_result, error, _input, snapshot) => {
+      void client.invalidateQueries({ queryKey: queryKeys.notificationsUnreadCount });
+      if (error || snapshot?.listWasFetching) {
+        void client.invalidateQueries({ queryKey: queryKeys.notifications });
+      }
+    },
   });
 }

@@ -2,9 +2,9 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
+import { eventSlugFromDeepLink } from './deep-link';
 
 const MAX_SEEN_RESPONSES = 32;
-const EVENT_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/i;
 
 // Pushes arrive in the foreground without OS UI unless the app installs a handler.
 if (Platform.OS === 'ios' || Platform.OS === 'android') {
@@ -24,12 +24,7 @@ function eventSlugFromResponse(response: Notifications.NotificationResponse): st
   const data: unknown = response.notification.request.content.data;
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;
 
-  const deepLink = (data as Record<string, unknown>).deepLink;
-  if (typeof deepLink !== 'string' || deepLink.length > 256) return null;
-
-  const match = /^sukun:\/\/events\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:\/)?$/i.exec(deepLink);
-  const slug = match?.[1];
-  return slug && slug.length <= 160 && EVENT_SLUG.test(slug) ? slug : null;
+  return eventSlugFromDeepLink((data as Record<string, unknown>).deepLink);
 }
 
 function responseKey(response: Notifications.NotificationResponse): string {
