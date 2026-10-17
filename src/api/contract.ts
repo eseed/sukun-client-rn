@@ -5,6 +5,7 @@ import type {
   AddonDetail,
   AddonSummary,
   AppConfig,
+  AppNotification,
   Area,
   Authenticated,
   Cart,
@@ -22,6 +23,8 @@ import type {
   EventListItem,
   GuestValidationResult,
   ListEventsQuery,
+  ListNotificationsQuery,
+  NotificationUnreadCount,
   OrderDetail,
   OrderSummary,
   OtpRequested,
@@ -216,6 +219,22 @@ export interface SukunApi {
      * A number with no ticket to the event is refused the same whether or not it has an account.
      */
     addOccupant(roomId: string, phoneNumber: string): Promise<BuyerRoom>;
+  };
+
+  /**
+   * The in-app inbox: every push an admin sent this account. All four need a signed-in account and
+   * touch only its own rows.
+   */
+  notifications: {
+    /** Newest first. A stale or foreign cursor is refused with 400 `INVALID_CURSOR`. */
+    list(query?: ListNotificationsQuery): Promise<CursorPage<AppNotification>>;
+    unreadCount(): Promise<NotificationUnreadCount>;
+    /**
+     * Idempotent: an already read one answers the same. Shares a limit of 120 a minute with
+     * `markAllRead` (429 `TOO_MANY_REQUESTS`).
+     */
+    markRead(notificationId: string): Promise<void>;
+    markAllRead(): Promise<void>;
   };
 
   account: {
