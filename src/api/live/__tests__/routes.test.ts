@@ -159,3 +159,37 @@ describe('cart and addon routes', () => {
     await expect(liveApi.tickets.addons('tk-2')).resolves.toEqual([]);
   });
 });
+
+describe('notification inbox routes', () => {
+  it('uses the mobile notification routes with the cursor and limit as query params', async () => {
+    const page = { data: [], meta: { limit: 20, hasNextPage: false, nextCursor: null } };
+    requestMock
+      .mockResolvedValueOnce(page)
+      .mockResolvedValueOnce({ unreadCount: 3 })
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+
+    await expect(liveApi.notifications.list({ cursor: 'c-1', limit: 20 })).resolves.toBe(page);
+    await expect(liveApi.notifications.unreadCount()).resolves.toEqual({ unreadCount: 3 });
+    await expect(liveApi.notifications.markRead('n/1')).resolves.toBeUndefined();
+    await expect(liveApi.notifications.markAllRead()).resolves.toBeUndefined();
+
+    expect(requestMock.mock.calls.map(([path]) => path)).toEqual([
+      'mobile/notifications',
+      'mobile/notifications/unread-count',
+      'mobile/notifications/n%2F1/read',
+      'mobile/notifications/read-all',
+    ]);
+    expect(requestMock.mock.calls[0]?.[1]).toEqual({ query: { cursor: 'c-1', limit: 20 } });
+    expect(requestMock.mock.calls[2]?.[1]).toEqual({ method: 'POST' });
+    expect(requestMock.mock.calls[3]?.[1]).toEqual({ method: 'POST' });
+  });
+
+  it('asks for the first page without a cursor', async () => {
+    requestMock.mockResolvedValueOnce({ data: [], meta: {} });
+    await liveApi.notifications.list();
+    expect(requestMock).toHaveBeenCalledWith('mobile/notifications', {
+      query: { cursor: undefined, limit: undefined },
+    });
+  });
+});

@@ -10,6 +10,7 @@ import type {
   AddonDetail,
   AddonSummary,
   AppConfig,
+  AppNotification,
   Area,
   Authenticated,
   Cart,
@@ -28,6 +29,8 @@ import type {
   GuestValidationInput,
   GuestValidationResult,
   ListEventsQuery,
+  ListNotificationsQuery,
+  NotificationUnreadCount,
   MyScheduleBlock,
   MyScheduleQuery,
   MyScheduleResponse,
@@ -62,6 +65,7 @@ import {
 import { multiply, toEgp, toPiastres } from './money';
 import { mockConfig, resetMockPaymentConfig } from './config';
 import { tuluaSchedule } from './schedule-fixtures';
+import { seedNotifications } from './notification-fixtures';
 import {
   buildAddonDetail,
   findOption,
@@ -242,6 +246,28 @@ const state: MockState = {
 
 const savedScheduleBlocks = new Map<string, Set<string>>();
 
+/** Each account's inbox, keyed by phone, seeded the first time it is read. */
+const notificationInboxes = new Map<string, AppNotification[]>();
+const NOTIFICATION_CURSOR_PREFIX = 'mock-notifications:';
+
+function inboxFor(user: CurrentUser): AppNotification[] {
+  let inbox = notificationInboxes.get(user.phoneNumber);
+  if (!inbox) {
+    inbox = seedNotifications(mockConfig.now());
+    notificationInboxes.set(user.phoneNumber, inbox);
+  }
+  return inbox;
+}
+
+/** Test/dev seam: replace the signed-in account's inbox, newest first. */
+export function setMockNotifications(notifications: AppNotification[]): void {
+  const user = requireUser();
+  notificationInboxes.set(
+    user.phoneNumber,
+    notifications.map((item) => ({ ...item })),
+  );
+}
+
 /**
  * Local LIVE simulation. The mock ships every event in a non-live state, so the attendee
  * LIVE experience (resolver, launch redirect, return banner) is unreachable in mock mode
@@ -306,6 +332,7 @@ export function resetMockState(): void {
   state.invitations.clear();
   liveEventIds.clear();
   savedScheduleBlocks.clear();
+  notificationInboxes.clear();
   resetCartSequences();
   orderSeq = 482;
   ticketSeq = 4821;
@@ -2344,6 +2371,64 @@ export const mockApi: SukunApi = {
     },
   },
 
+  notifications: {
+    /**
+     * Newest first, as the backend pages it: the cursor names the last row handed out, and one
+     * whose row is gone (or that was never ours) is refused with INVALID_CURSOR.
+     */
+    async list(query?: ListNotificationsQuery): Promise<CursorPage<AppNotification>> {
+      const inbox = inboxFor(requireUser());
+      const limit = query?.limit ?? DEFAULT_PAGE_LIMIT;
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        throw new MockApiError('VALIDATION_ERROR', 'limit must be between 1 and 100', 400);
+      }
+      let start = 0;
+      if (query?.cursor) {
+        const anchorId = query.cursor.startsWith(NOTIFICATION_CURSOR_PREFIX)
+          ? query.cursor.slice(NOTIFICATION_CURSOR_PREFIX.length)
+          : null;
+        const anchor = anchorId ? inbox.findIndex((item) => item.id === anchorId) : -1;
+        if (anchor < 0) {
+          throw new MockApiError('INVALID_CURSOR', 'The pagination cursor is invalid', 400);
+        }
+        start = anchor + 1;
+      }
+      const data = inbox.slice(start, start + limit).map((item) => ({ ...item }));
+      const hasNextPage = start + limit < inbox.length;
+      const last = data[data.length - 1];
+      return delay({
+        data,
+        meta: {
+          limit,
+          hasNextPage,
+          nextCursor: hasNextPage && last ? `${NOTIFICATION_CURSOR_PREFIX}${last.id}` : null,
+        },
+      });
+    },
+
+    async unreadCount(): Promise<NotificationUnreadCount> {
+      const inbox = inboxFor(requireUser());
+      return delay({ unreadCount: inbox.filter((item) => item.readAt === null).length }, 0.4);
+    },
+
+    async markRead(notificationId: string): Promise<void> {
+      const inbox = inboxFor(requireUser());
+      const item = inbox.find((candidate) => candidate.id === notificationId);
+      if (!item) {
+        throw new MockApiError('NOTIFICATION_NOT_FOUND', 'Notification not found', 404);
+      }
+      item.readAt ??= iso();
+      return delay(undefined, 0.4);
+    },
+
+    async markAllRead(): Promise<void> {
+      const inbox = inboxFor(requireUser());
+      const readAt = iso();
+      for (const item of inbox) item.readAt ??= readAt;
+      return delay(undefined, 0.4);
+    },
+  },
+
   account: {
     async deletionPreview(): Promise<AccountDeletionPreview> {
       requireUser();
@@ -2398,6 +2483,7 @@ export const mockApi: SukunApi = {
       // The account itself stops existing under this number, which is what frees it for a
       // brand new signup.
       state.accounts.delete(user.phoneNumber);
+      notificationInboxes.delete(user.phoneNumber);
       state.user = null;
       state.pendingPhone = null;
       state.pendingEmailVerificationToken = null;

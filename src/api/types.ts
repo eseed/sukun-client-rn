@@ -1252,3 +1252,34 @@ export interface BuyerRoom {
   openPlaces: number;
   canAddOccupants: boolean;
 }
+
+/* ----------------------------------------------------------- notifications */
+
+/**
+ * `MobileNotificationItemDto`: one push an admin sent this account, as the in-app inbox keeps it
+ * (`GET mobile/notifications`, newest first, kept for 12 months).
+ *
+ * `deepLink` is the backend's own event link (`sukun://events/<slug>`) or null. It is validated
+ * before it is followed, exactly as a push tap's is, so a malformed one does nothing.
+ */
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  deepLink: string | null;
+  /** When it was read, or null while unread. */
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface ListNotificationsQuery {
+  /** Opaque, from the previous page's `meta.nextCursor`. A stale one is refused, INVALID_CURSOR. */
+  cursor?: string | null;
+  /** 1 to 100; the backend defaults to 20. */
+  limit?: number;
+}
+
+/** `MobileUnreadCountDto` */
+export interface NotificationUnreadCount {
+  unreadCount: number;
+}
