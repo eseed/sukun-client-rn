@@ -7,6 +7,7 @@ import {
   formatDateRangeShort,
   formatDuration,
   formatEgp,
+  formatRelativeTime,
   formatWeekdayDate,
   initials,
   parseDateOfBirth,
@@ -113,5 +114,31 @@ describe('misc', () => {
     expect(initials('Yasmin El Sayed')).toBe('YE');
     expect(initials('Nour')).toBe('NO');
     expect(initials('')).toBe('');
+  });
+});
+
+describe('formatRelativeTime', () => {
+  const now = Date.parse('2026-10-17T12:00:00.000Z');
+  const ago = (ms: number) => new Date(now - ms).toISOString();
+  const MINUTE = 60_000;
+  const HOUR = 60 * MINUTE;
+  const DAY = 24 * HOUR;
+
+  it('reads recent times as a span', () => {
+    expect(formatRelativeTime(ago(20_000), now)).toBe('Just now');
+    expect(formatRelativeTime(ago(5 * MINUTE), now)).toBe('5 min ago');
+    expect(formatRelativeTime(ago(3 * HOUR + 10 * MINUTE), now)).toBe('3 h ago');
+    expect(formatRelativeTime(ago(30 * HOUR), now)).toBe('Yesterday');
+    expect(formatRelativeTime(ago(4 * DAY), now)).toBe('4 days ago');
+  });
+
+  it('gives the Cairo date from a week on', () => {
+    // 22:30 UTC is already the next day in Cairo.
+    expect(formatRelativeTime('2026-10-02T22:30:00.000Z', now)).toBe('3 Oct 2026');
+  });
+
+  it('reads a slightly future time as just now and an unreadable one as nothing', () => {
+    expect(formatRelativeTime(new Date(now + 90_000).toISOString(), now)).toBe('Just now');
+    expect(formatRelativeTime('not a date', now)).toBe('');
   });
 });

@@ -1,6 +1,7 @@
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
+import { NotificationInboxSync } from '../services/notifications/NotificationInboxSync';
 import { NotificationResponseRouter } from '../services/notifications/NotificationResponseRouter';
 import { PushTokenRegistration } from '../services/notifications/PushTokenRegistration';
 import { setAuthQueryCacheClearHandler, useAuthStore } from '../stores/auth';
@@ -55,6 +56,7 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <NotificationResponseRouter />
+      <NotificationInboxSync />
       <PushTokenRegistration />
       {children}
     </QueryClientProvider>

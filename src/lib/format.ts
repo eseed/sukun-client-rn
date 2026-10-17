@@ -245,3 +245,34 @@ export function initials(name: string): string {
   if (words.length === 1) return (words[0] ?? '').slice(0, 2).toUpperCase();
   return `${(words[0] ?? '')[0] ?? ''}${(words[1] ?? '')[0] ?? ''}`.toUpperCase();
 }
+
+const CAIRO_CALENDAR_DAY = new Intl.DateTimeFormat('en-GB', {
+  timeZone: TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * How long ago something happened, for the notification inbox: `"Just now"`, `"5 min ago"`,
+ * `"3 h ago"`, `"Yesterday"`, `"4 days ago"`, then the Cairo date (`"12 Oct 2026"`) from a week
+ * on. A timestamp a little in the future (a device clock behind the server's) reads "Just now";
+ * an unreadable one gives an empty string.
+ */
+export function formatRelativeTime(isoInstant: string, now: number = Date.now()): string {
+  const instant = new Date(isoInstant);
+  if (Number.isNaN(instant.getTime())) return '';
+  const minutes = Math.floor((now - instant.getTime()) / 60_000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  // Parts rather than a formatted string, so no locale's own ordering can reach `formatDate`.
+  const day = CAIRO_CALENDAR_DAY.formatToParts(instant);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    day.find((item) => item.type === type)?.value ?? '';
+  return formatDate(`${part('year')}-${part('month')}-${part('day')}`);
+}
