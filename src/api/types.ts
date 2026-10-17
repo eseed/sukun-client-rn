@@ -1355,7 +1355,14 @@ export interface AppNotification {
   id: string;
   title: string;
   body: string;
+  /** The bare event link (`sukun://events/<slug>`), or null. */
   deepLink: string | null;
+  /**
+   * Where the admin chose a tap to land when it says more than the event page
+   * (`sukun://events/<slug>/schedule`, `/stay`, `/extras`, `/addons/<id>`, `sukun://tickets`).
+   * Absent from backends before landings; the app then follows `deepLink`.
+   */
+  landingLink?: string | null;
   /** When it was read, or null while unread. */
   readAt: string | null;
   createdAt: string;

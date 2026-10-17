@@ -36,13 +36,22 @@ export function useHoldsTicketForEvent(eventId: string | null): {
  * including someone whose ticket is still waiting to be claimed, who claims it first.
  */
 export function useOwnTicketForEvent(eventId: string | null): Ticket | null {
-  const ticketsQuery = useTickets(['active']);
-  return useMemo(() => {
+  return useOwnTicketForEventQuery(eventId).ticket;
+}
+
+/**
+ * `useOwnTicketForEvent`, with the query behind it, for a caller that must not decide anything
+ * until the answer is in: `null` while the tickets are loading means "not known yet", not "none".
+ */
+export function useOwnTicketForEventQuery(eventId: string | null) {
+  const query = useTickets(['active']);
+  const ticket = useMemo(() => {
     if (!eventId) return null;
     return (
-      (ticketsQuery.data?.data ?? []).find(
-        (ticket) => ticket.event.id === eventId && ticket.status === 'active',
+      (query.data?.data ?? []).find(
+        (item) => item.event.id === eventId && item.status === 'active',
       ) ?? null
     );
-  }, [eventId, ticketsQuery.data]);
+  }, [eventId, query.data]);
+  return { ticket, query };
 }
