@@ -9,7 +9,7 @@ import { TULUA_ID } from '../../src/api/mock/fixtures';
 import { availableStays, stayPhotos } from '../../src/lib/addons';
 import { useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
-import { fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
+import { fireEvent, renderWithProviders, screen, waitFor, within } from '../../src/test-utils';
 import ChoosePassScreen from '../checkout/pass';
 import EventDetailScreen from '../event/[slug]';
 
@@ -102,8 +102,8 @@ describe('Accommodation available, on the event page', () => {
     mockParams.slug = 'tulua';
     renderWithProviders(<EventDetailScreen />);
 
-    expect(await box()).toBeTruthy();
-    expect(screen.getByText('Desert Lodge Room')).toBeTruthy();
+    // Within the box: Tulua's "Staying the night" content block names the lodge too.
+    expect(within(await box()).getByText('Desert Lodge Room')).toBeTruthy();
     expect(screen.queryByText(/Camp Tent/)).toBeNull();
     expect(screen.getByText('Book your stay')).toBeTruthy();
     expect(screen.queryByText('Add-ons available')).toBeNull();
