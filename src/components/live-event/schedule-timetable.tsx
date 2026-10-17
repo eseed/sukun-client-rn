@@ -65,7 +65,12 @@ export function ScheduleTimetable<T extends ScheduleBlock>({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingRight: bleed }}
       >
-        <View>
+        {/*
+          Claims the touch for the stages. Screen wraps the page in a touchable (tap to dismiss
+          the keyboard), which otherwise takes a touch that starts between sessions, and then the
+          stages only scroll from a session's own Pressable.
+        */}
+        <View onStartShouldSetResponder={() => true}>
           <View
             onLayout={(event) => setHeadHeight(event.nativeEvent.layout.height)}
             style={styles.heads}
