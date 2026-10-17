@@ -5,7 +5,6 @@ import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import {
   BackIcon,
-  BellIcon,
   Button,
   CalendarIcon,
   HelpIcon,
@@ -17,6 +16,7 @@ import {
   ShirtIcon,
   Text,
 } from '../../../src/components/ui';
+import { NotificationBell } from '../../../src/components/notifications/NotificationBell';
 import { LiveEventSubnav } from '../../../src/components/live-event/live-event-shell';
 import { EntryPassSheet } from '../../../src/components/live-event/entry-pass-sheet';
 import { useEvent, useMySchedule, usePublicEventSchedule } from '../../../src/hooks/queries';
@@ -130,6 +130,10 @@ export default function LiveEventHomeScreen() {
     router.push(`/event/${event.slug}`);
   };
 
+  const openNotifications = () => {
+    router.push('/notifications');
+  };
+
   const openSupport = () => {
     track('live_support_opened', { event_id: eventId });
     void Linking.openURL('https://sukunwellness.co/support').catch(() => undefined);
@@ -137,7 +141,7 @@ export default function LiveEventHomeScreen() {
 
   return (
     <Screen scroll padded={false} edges={{ bottom: false }} contentStyle={styles.content}>
-      {/* Screen 01 app bar: back, centred wordmark, account. */}
+      {/* Screen 01 app bar: back, centred wordmark, notifications (Profile stays in the bottom bar). */}
       <View style={styles.topBar}>
         <Pressable
           accessibilityRole="button"
@@ -149,15 +153,11 @@ export default function LiveEventHomeScreen() {
           <BackIcon size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={styles.wordmark}>SUKUN</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Account"
-          onPress={() => router.replace('/(tabs)/profile')}
-          hitSlop={10}
-          style={styles.topButton}
-        >
-          <BellIcon size={22} color={colors.textPrimary} />
-        </Pressable>
+        {/* The same bell as Discover's header, centred in the back button's box so the
+            wordmark stays centred. The layout only renders for a signed-in account. */}
+        <View style={styles.topButton}>
+          <NotificationBell onPress={openNotifications} />
+        </View>
       </View>
 
       {/* Full-bleed hero: badges over the photo, title block at its foot. */}
@@ -183,15 +183,9 @@ export default function LiveEventHomeScreen() {
               <Text style={styles.placeLabel}>{(event?.title ?? 'Tulua').toUpperCase()}</Text>
             </View>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Account"
-            onPress={() => router.replace('/(tabs)/profile')}
-            hitSlop={10}
-            style={styles.heroBell}
-          >
-            <BellIcon size={22} color={colors.creme} />
-          </Pressable>
+          <View style={styles.heroBell}>
+            <NotificationBell onPress={openNotifications} color={colors.creme} />
+          </View>
         </View>
         <View style={styles.heroCopy}>
           <Text variant="titleHero" style={styles.eventName}>{event?.title ?? 'Your Event'}</Text>

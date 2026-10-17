@@ -10,7 +10,10 @@ import { useAuthStore } from '../../src/stores/auth';
 import { useFlagsStore } from '../../src/stores/flags';
 import { fireEvent, renderWithProviders, screen, waitFor } from '../../src/test-utils';
 
+import { TULUA_ID } from '../../src/api/mock/fixtures';
+
 import DiscoverScreen from '../(tabs)/discover';
+import LiveEventHomeScreen from '../live-event/[eventId]/index';
 import NotificationsScreen from '../notifications';
 
 const mockRouter = {
@@ -21,9 +24,11 @@ const mockRouter = {
   canGoBack: jest.fn(() => false),
 };
 
+let mockParams: Record<string, string> = {};
+
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockParams,
   useIsFocused: () => true,
   usePathname: () => '/discover',
   Redirect: () => null,
@@ -55,12 +60,33 @@ beforeEach(() => {
   mockConfig.latencyMs = 0;
   mockConfig.now = () => NOW;
   jest.clearAllMocks();
+  mockParams = {};
   useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
   useFlagsStore.setState({ status: 'ready', allowGuestBrowsing: true });
 });
 
 afterEach(() => {
   mockConfig.now = () => Date.now();
+});
+
+describe('Event Home bells', () => {
+  it('opens the inbox from both bells, with the unread count, instead of Profile', async () => {
+    await signIn();
+    mockParams = { eventId: TULUA_ID };
+    setMockNotifications([notification('a'), notification('b')]);
+    renderWithProviders(<LiveEventHomeScreen />);
+
+    await waitFor(() => expect(screen.getAllByLabelText('Notifications, 2 unread')).toHaveLength(2));
+    const bells = screen.getAllByLabelText('Notifications, 2 unread');
+    expect(screen.getAllByTestId('notification-badge')).toHaveLength(2);
+    expect(screen.queryByLabelText('Account')).toBeNull();
+
+    for (const bell of bells) fireEvent.press(bell);
+    expect(mockRouter.push).toHaveBeenCalledTimes(2);
+    expect(mockRouter.push).toHaveBeenNthCalledWith(1, '/notifications');
+    expect(mockRouter.push).toHaveBeenNthCalledWith(2, '/notifications');
+    expect(mockRouter.replace).not.toHaveBeenCalledWith('/(tabs)/profile');
+  });
 });
 
 describe('Discover bell', () => {
