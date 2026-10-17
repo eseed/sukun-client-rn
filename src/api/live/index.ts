@@ -49,6 +49,7 @@ import type {
   UpdateProfileInput,
 } from '../types';
 import { ApiError, request } from './http';
+import { normalizeEventDetail } from './content-blocks';
 import { normalizePhone } from '../../lib/phone';
 
 /**
@@ -243,7 +244,7 @@ export const liveApi: SukunApi = {
       request<LiveEventDetail>(`public/events/${encodeURIComponent(identifier)}`, {
         auth: false,
         signal,
-      }),
+      }).then(normalizeEventDetail),
 
     meta: (identifier) =>
       request<EventMeta>(`public/events/${encodeURIComponent(identifier)}/meta`, { auth: false }),

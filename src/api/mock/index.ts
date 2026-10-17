@@ -65,6 +65,7 @@ import {
 import { multiply, toEgp, toPiastres } from './money';
 import { mockConfig, resetMockPaymentConfig } from './config';
 import { tuluaSchedule } from './schedule-fixtures';
+import { contentBlocksByEvent } from './content-block-fixtures';
 import { seedNotifications } from './notification-fixtures';
 import {
   buildAddonDetail,
@@ -527,7 +528,8 @@ function findEvent(identifier: string): EventDetail {
     eventDetails[identifier] ??
     Object.values(eventDetails).find((item) => item.slug === identifier);
   if (!event) throw new MockApiError('EVENT_NOT_FOUND', 'Event not found', 404);
-  return liveDetail(event);
+  const contentBlocks = contentBlocksByEvent[event.id];
+  return liveDetail(contentBlocks ? { ...event, contentBlocks } : event);
 }
 
 /* -------------------------------------------------------------- cart helpers */
