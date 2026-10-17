@@ -11,11 +11,18 @@ const BELL_BOX = 32;
 const BADGE_SIZE = 16;
 
 /**
- * The Home header's bell, which opens the notification inbox. Its badge counts unread pushes,
- * hidden at 0 and "9+" above 9, in the gold the app spends on "this needs you" (the Tickets tab's
- * waiting dot). Only rendered for a signed-in account: a guest has no inbox.
+ * The header bell (Discover, Event Home), which opens the notification inbox. Its badge counts
+ * unread pushes, hidden at 0 and "9+" above 9, in the gold the app spends on "this needs you"
+ * (the Tickets tab's waiting dot). Only rendered for a signed-in account: a guest has no inbox.
+ * `color` tints the bell for a dark background, such as Event Home's hero photo.
  */
-export function NotificationBell({ onPress }: { onPress: () => void }) {
+export function NotificationBell({
+  onPress,
+  color = colors.textPrimary,
+}: {
+  onPress: () => void;
+  color?: string;
+}) {
   const { data } = useNotificationUnreadCount();
   const count = data?.unreadCount ?? 0;
   const badge = formatUnreadBadge(count);
@@ -28,7 +35,7 @@ export function NotificationBell({ onPress }: { onPress: () => void }) {
       hitSlop={6}
       style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
     >
-      <BellIcon size={22} color={colors.textPrimary} />
+      <BellIcon size={22} color={color} />
       {badge ? (
         <View style={styles.badge} testID="notification-badge">
           <Text style={styles.badgeLabel}>{badge}</Text>
