@@ -1127,3 +1127,58 @@ describe('extras for a ticket holder who never signed up', () => {
     expect({ ...noAccount, phoneNumber: '' }).toEqual({ ...accountNoTicket, phoneNumber: '' });
   });
 });
+
+describe('notification inbox', () => {
+  it('needs a signed-in account', async () => {
+    await expect(mockApi.notifications.unreadCount()).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('pages the inbox newest first by cursor', async () => {
+    await signIn();
+    const first = await mockApi.notifications.list();
+    expect(first.data).toHaveLength(20);
+    expect(first.meta).toMatchObject({ limit: 20, hasNextPage: true });
+    const times = first.data.map((item) => Date.parse(item.createdAt));
+    expect([...times].sort((a, b) => b - a)).toEqual(times);
+
+    const second = await mockApi.notifications.list({ cursor: first.meta.nextCursor });
+    expect(second.data.length).toBeGreaterThan(0);
+    expect(second.meta).toMatchObject({ hasNextPage: false, nextCursor: null });
+    const ids = new Set(first.data.map((item) => item.id));
+    expect(second.data.some((item) => ids.has(item.id))).toBe(false);
+  });
+
+  it('refuses a cursor it did not hand out', async () => {
+    await signIn();
+    await expect(mockApi.notifications.list({ cursor: 'stale' })).rejects.toMatchObject({
+      code: 'INVALID_CURSOR',
+      status: 400,
+    });
+  });
+
+  it('counts unread, and marks one or all as read idempotently', async () => {
+    await signIn();
+    const { unreadCount } = await mockApi.notifications.unreadCount();
+    expect(unreadCount).toBeGreaterThan(1);
+
+    const unread = (await mockApi.notifications.list()).data.find((item) => !item.readAt)!;
+    await mockApi.notifications.markRead(unread.id);
+    await mockApi.notifications.markRead(unread.id);
+    await expect(mockApi.notifications.unreadCount()).resolves.toEqual({
+      unreadCount: unreadCount - 1,
+    });
+
+    await mockApi.notifications.markAllRead();
+    await expect(mockApi.notifications.unreadCount()).resolves.toEqual({ unreadCount: 0 });
+    const page = await mockApi.notifications.list({ limit: 100 });
+    expect(page.data.every((item) => item.readAt !== null)).toBe(true);
+  });
+
+  it('hides an id that is not in this inbox as not found', async () => {
+    await signIn();
+    await expect(mockApi.notifications.markRead('not-mine')).rejects.toMatchObject({
+      code: 'NOTIFICATION_NOT_FOUND',
+      status: 404,
+    });
+  });
+});

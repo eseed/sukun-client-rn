@@ -8,6 +8,7 @@ import type {
   AddonDetail,
   AddonSummary,
   AppConfig,
+  AppNotification,
   Authenticated,
   Cart,
   CartAddonInput,
@@ -22,6 +23,8 @@ import type {
   EntryPass,
   GuestValidationInput,
   ListEventsQuery,
+  ListNotificationsQuery,
+  NotificationUnreadCount,
   OrderDetail,
   OrderSummary,
   OtpRequested,
@@ -46,6 +49,7 @@ import type {
   UpdateProfileInput,
 } from '../types';
 import { ApiError, request } from './http';
+import { normalizeEventDetail } from './content-blocks';
 import { normalizePhone } from '../../lib/phone';
 
 /**
@@ -240,7 +244,7 @@ export const liveApi: SukunApi = {
       request<LiveEventDetail>(`public/events/${encodeURIComponent(identifier)}`, {
         auth: false,
         signal,
-      }),
+      }).then(normalizeEventDetail),
 
     meta: (identifier) =>
       request<EventMeta>(`public/events/${encodeURIComponent(identifier)}/meta`, { auth: false }),
@@ -488,6 +492,29 @@ export const liveApi: SukunApi = {
         method: 'POST',
         body: { phoneNumber: normalizePhoneForRequest(phoneNumber) },
       }),
+  },
+
+  notifications: {
+    // MobileNotificationsController — GET mobile/notifications?cursor=&limit=
+    list: (query?: ListNotificationsQuery) =>
+      request<CursorPage<AppNotification>>('mobile/notifications', {
+        query: { cursor: query?.cursor ?? undefined, limit: query?.limit },
+      }),
+
+    // GET mobile/notifications/unread-count
+    unreadCount: () => request<NotificationUnreadCount>('mobile/notifications/unread-count'),
+
+    // POST mobile/notifications/:id/read — 204, idempotent
+    markRead: async (notificationId) => {
+      await request<void>(`mobile/notifications/${encodeURIComponent(notificationId)}/read`, {
+        method: 'POST',
+      });
+    },
+
+    // POST mobile/notifications/read-all — 204
+    markAllRead: async () => {
+      await request<void>('mobile/notifications/read-all', { method: 'POST' });
+    },
   },
 
   account: {

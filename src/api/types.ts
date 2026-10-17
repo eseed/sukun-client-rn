@@ -361,9 +361,98 @@ export interface EventDetail {
   gallery: EventGalleryItem[];
   documents: { id: string; label: string | null; url: string; orderIndex: number }[];
   youtubeLinks: string[];
+  /**
+   * The admin's published content blocks, in the admin's order. Missing on a backend from
+   * before them: read as none (`normalizeEventDetail` in `src/api/live/content-blocks.ts`).
+   */
+  contentBlocks?: EventContentBlock[];
   tiers: EventTier[];
   priceFromEgp: string | null;
 }
+
+/* -------------------------------------------------------- content blocks */
+
+/** `EventContentBlockType` */
+export type EventContentBlockType =
+  'faq' | 'inclusions' | 'sponsors' | 'logistics' | 'accessibility';
+
+/**
+ * `PublicEventContentBlockBaseResponseDto`. `body` on every block is the admin's Markdown,
+ * rendered and sanitised to a small HTML subset by the backend; show it with `MarkdownText`.
+ */
+interface EventContentBlockBase {
+  id: string;
+  /** The heading the admin typed; null shows the kind's own heading. */
+  title: string | null;
+}
+
+/** `PublicEventContentFaqItemResponseDto` */
+export interface EventContentFaqItem {
+  question: string;
+  answer: string;
+}
+
+/** `PublicEventContentInclusionItemResponseDto` */
+export interface EventContentInclusionItem {
+  label: string;
+  description?: string;
+}
+
+/**
+ * `PublicEventContentSponsorItemResponseDto`. `tier` is free text the admin types ("Presenting
+ * partner"). `link` is mirrored from the DTO but never shown: sponsors are not tappable
+ * (owner's call, 2026-10-17).
+ */
+export interface EventContentSponsorItem {
+  name: string;
+  logoUrl?: string;
+  link?: string;
+  tier?: string;
+}
+
+/** `PublicEventContentFaqResponseDto` */
+export interface EventContentFaqBlock extends EventContentBlockBase {
+  type: 'faq';
+  body: string | null;
+  items: EventContentFaqItem[];
+}
+
+/** `PublicEventContentInclusionsResponseDto` */
+export interface EventContentInclusionsBlock extends EventContentBlockBase {
+  type: 'inclusions';
+  body: string | null;
+  items: EventContentInclusionItem[];
+}
+
+/** `PublicEventContentSponsorsResponseDto` */
+export interface EventContentSponsorsBlock extends EventContentBlockBase {
+  type: 'sponsors';
+  body: string | null;
+  items: EventContentSponsorItem[];
+}
+
+/**
+ * `PublicEventContentLogisticsResponseDto`. `addonId` is the linked add-on while it is switched
+ * on, else null: resolve it against the event's add-on catalogue, never price it here.
+ */
+export interface EventContentLogisticsBlock extends EventContentBlockBase {
+  type: 'logistics';
+  body: string;
+  addonId: string | null;
+}
+
+/** `PublicEventContentAccessibilityResponseDto` */
+export interface EventContentAccessibilityBlock extends EventContentBlockBase {
+  type: 'accessibility';
+  body: string;
+}
+
+export type EventContentBlock =
+  | EventContentFaqBlock
+  | EventContentInclusionsBlock
+  | EventContentSponsorsBlock
+  | EventContentLogisticsBlock
+  | EventContentAccessibilityBlock;
 
 /* ------------------------------------------------------------- schedules */
 
@@ -1251,4 +1340,35 @@ export interface BuyerRoom {
   occupants: RoomOccupant[];
   openPlaces: number;
   canAddOccupants: boolean;
+}
+
+/* ----------------------------------------------------------- notifications */
+
+/**
+ * `MobileNotificationItemDto`: one push an admin sent this account, as the in-app inbox keeps it
+ * (`GET mobile/notifications`, newest first, kept for 12 months).
+ *
+ * `deepLink` is the backend's own event link (`sukun://events/<slug>`) or null. It is validated
+ * before it is followed, exactly as a push tap's is, so a malformed one does nothing.
+ */
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  deepLink: string | null;
+  /** When it was read, or null while unread. */
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface ListNotificationsQuery {
+  /** Opaque, from the previous page's `meta.nextCursor`. A stale one is refused, INVALID_CURSOR. */
+  cursor?: string | null;
+  /** 1 to 100; the backend defaults to 20. */
+  limit?: number;
+}
+
+/** `MobileUnreadCountDto` */
+export interface NotificationUnreadCount {
+  unreadCount: number;
 }

@@ -19,7 +19,7 @@ import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { track } from '../../src/lib/analytics';
 import { trackMetaAddTickets } from '../../src/lib/meta-events';
 import { messageForError } from '../../src/lib/errors';
-import { useEvent, useGroupQuote } from '../../src/hooks/queries';
+import { useAddons, useEvent, useGroupQuote } from '../../src/hooks/queries';
 import { useCheckoutSteps } from '../../src/hooks/useCheckoutSteps';
 import { formatEgp } from '../../src/lib/format';
 import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
@@ -46,6 +46,7 @@ import { useHoldsTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
 export default function ChoosePassScreen() {
   const router = useRouter();
   // `for=stay`: sent here by "Book your stay", which needs a ticket to attach the room to.
+  // `for=addon`: sent here by a logistics block's "Add", which needs a ticket for the same reason.
   const { eventId, for: purpose } = useLocalSearchParams<{ eventId: string; for?: string }>();
   const validEventId =
     typeof eventId === 'string' && /^[A-Za-z0-9_-]+$/.test(eventId) ? eventId : undefined;
@@ -81,6 +82,12 @@ export default function ChoosePassScreen() {
   const eventQuery = useEvent(validEventId);
   const { data: event } = eventQuery;
   const steps = useCheckoutSteps(validEventId);
+  const preselectedAddonId = useCheckoutStore((s) => s.preselectedAddonId);
+  // The same catalogue `useCheckoutSteps` reads, so no second fetch.
+  const addonsQuery = useAddons(validEventId);
+  const preselectedAddon = (addonsQuery.data ?? []).find(
+    (addon) => addon.id === preselectedAddonId,
+  );
 
   useEffect(() => {
     if (!event || !tierId) return;
@@ -220,6 +227,12 @@ export default function ChoosePassScreen() {
       {purpose === 'stay' ? (
         <View style={styles.stayNotice}>
           <Text style={styles.stayNoticeText}>Get your ticket first to book your stay</Text>
+        </View>
+      ) : purpose === 'addon' && preselectedAddon ? (
+        <View style={styles.stayNotice}>
+          <Text style={styles.stayNoticeText}>
+            {`Get your ticket first, then add ${preselectedAddon.name}`}
+          </Text>
         </View>
       ) : null}
 

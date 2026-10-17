@@ -1,8 +1,9 @@
-import { type ReactNode, type Ref } from 'react';
+import { type ReactElement, type ReactNode, type Ref } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  type RefreshControlProps,
   ScrollView,
   StyleSheet,
   TouchableWithoutFeedback,
@@ -28,6 +29,8 @@ export interface ScreenProps {
   onEndReachedThreshold?: number;
   /** The scroll view of a `scroll` screen, so a form can bring a field into view. */
   scrollRef?: Ref<ScrollView>;
+  /** Pull to refresh on a `scroll` screen: a `RefreshControl`. */
+  refreshControl?: ReactElement<RefreshControlProps>;
 }
 
 /** Only numeric padding participates in the inset maths; percentages fall back to the default. */
@@ -64,6 +67,7 @@ export function Screen({
   onEndReached,
   onEndReachedThreshold = 160,
   scrollRef,
+  refreshControl,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const top = edges?.top === false ? 0 : insets.top;
@@ -94,6 +98,7 @@ export function Screen({
   const body = scroll ? (
     <ScrollView
       ref={scrollRef}
+      refreshControl={refreshControl}
       style={styles.flex}
       // `flexGrow` rather than a plain height, so a screen whose spacer pins a CTA to the
       // bottom still fills a tall screen, and still scrolls once the keyboard shrinks it.

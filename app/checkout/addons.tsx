@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
   Badge,
@@ -44,6 +45,29 @@ export default function AddonsBrowseScreen() {
   // Only for whether the event's prices include VAT, which the extras list itself does not carry.
   const eventQuery = useEvent(validEventId);
   const picked = useCheckoutStore((s) => s.addons);
+  const preselectedAddonId = useCheckoutStore((s) => s.preselectedAddonId);
+  const clearPreselectedAddon = useCheckoutStore((s) => s.clearPreselectedAddon);
+
+  // An extra asked for on the event page ("Add" on a logistics block) before there was a ticket:
+  // checkout opens it here, once, with its first option chosen as the detail screen always does.
+  // Back returns to this list. One no longer on sale, or already picked, is simply let go.
+  useEffect(() => {
+    if (!preselectedAddonId || !validEventId || access.loading || !addonsQuery.isSuccess) return;
+    clearPreselectedAddon();
+    const addon = addonsQuery.data.find((item) => item.id === preselectedAddonId);
+    if (!addon || addon.availability === 'unavailable') return;
+    if (picked.some((line) => line.addonId === addon.id)) return;
+    router.push(`/checkout/addon/${addon.id}?eventId=${validEventId}`);
+  }, [
+    access.loading,
+    addonsQuery.data,
+    addonsQuery.isSuccess,
+    clearPreselectedAddon,
+    picked,
+    preselectedAddonId,
+    router,
+    validEventId,
+  ]);
 
   // Answered before either loading guard: `useAddons` is disabled without an event id, and a
   // disabled TanStack Query v5 query reports `isPending` forever, so a missing or malformed

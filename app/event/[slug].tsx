@@ -27,6 +27,7 @@ import {
 } from '../../src/components/ui';
 import { useAddons, useEvent, usePublicEventSchedule } from '../../src/hooks/queries';
 import { AccommodationBox, BookedStayBox } from '../../src/components/events/AccommodationBox';
+import { EventContentSection } from '../../src/components/events/ContentBlocks';
 import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
 import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
@@ -46,6 +47,7 @@ import { colors, fontFamily } from '../../src/theme/tokens';
 import { useLiveEventContext } from '../../src/hooks/useLiveEventContext';
 import { GroupDiscountTeaser } from '../../src/components/checkout/GroupDiscount';
 import { groupDiscountTeaser } from '../../src/lib/groupDiscount';
+import type { AddonSummary } from '../../src/api/types';
 
 const HERO_HEIGHT = 280;
 
@@ -230,6 +232,37 @@ export default function EventDetailScreen() {
     router.push(`/checkout/pass?eventId=${eventId}&for=stay`);
   }
 
+  /**
+   * "Add" on a logistics block linked to an add-on (owner's call, 2026-10-17). An add-on attaches
+   * to a ticket, so like "Book your stay": a holder adds it to their ticket, with it chosen
+   * (`/ticket/:id/extras?addon=`); a waiting invitee claims first, never shown a price; anyone
+   * else starts the ticket checkout, whose extras step opens the add-on (`preselectedAddonId`).
+   */
+  function onAddAddon(addon: AddonSummary) {
+    track('content_addon_opened', {
+      event_id: eventId,
+      addon_id: addon.id,
+      has_ticket: ownTicket !== null,
+      invited: invitation !== null,
+    });
+    if (ownTicket) {
+      router.push(`/ticket/${ownTicket.id}/extras?addon=${encodeURIComponent(addon.id)}`);
+      return;
+    }
+    if (invitation || !firstPurchasableTier) {
+      onGetTickets();
+      return;
+    }
+    startCheckout(eventId, firstPurchasableTier.id, { addonId: addon.id });
+    track('checkout_started', {
+      event_id: eventId,
+      event_slug: eventSlug ?? '',
+      tier_id: firstPurchasableTier.id,
+    });
+    router.push(`/checkout/pass?eventId=${eventId}&for=addon`);
+  }
+  const canAddAddon = ownTicket !== null || invitation !== null || Boolean(firstPurchasableTier);
+
   return (
     <View style={styles.root}>
       {/* Dark cover image and black full-screen viewer both need a light clock; the cream page
@@ -270,6 +303,13 @@ export default function EventDetailScreen() {
 
         <View style={styles.body}>
           <MarkdownText markdown={description} variant="bodyLead" style={styles.lead} />
+
+          {/* The admin's content blocks, each kind where it fits (placement A). */}
+          <EventContentSection
+            kind="inclusions"
+            blocks={event.contentBlocks}
+            style={styles.contentAfterLead}
+          />
 
           {hasSchedule || offerCalendar ? (
             <View style={styles.scheduleLink}>
@@ -426,6 +466,20 @@ export default function EventDetailScreen() {
             </View>
           </Pressable>
 
+          <EventContentSection
+            kind="logistics"
+            blocks={event.contentBlocks}
+            addons={addonsQuery.data ?? []}
+            onAddAddon={onAddAddon}
+            canAddAddon={canAddAddon}
+            style={styles.contentSection}
+          />
+          <EventContentSection
+            kind="accessibility"
+            blocks={event.contentBlocks}
+            style={styles.contentSection}
+          />
+
           <Text variant="bodyMuted" style={styles.availability}>
             {availability}
           </Text>
@@ -438,6 +492,12 @@ export default function EventDetailScreen() {
               <Text variant="bodyMuted">{event.whatToBring}</Text>
             </>
           ) : null}
+
+          <EventContentSection
+            kind="faq"
+            blocks={event.contentBlocks}
+            style={styles.contentSection}
+          />
 
           {/*
             The event's own terms and cancellation policy, on the page as well as under a
@@ -456,6 +516,12 @@ export default function EventDetailScreen() {
               ) : null}
             </>
           ) : null}
+
+          <EventContentSection
+            kind="sponsors"
+            blocks={event.contentBlocks}
+            style={styles.contentSection}
+          />
         </View>
       </ScrollView>
 
@@ -599,6 +665,13 @@ const styles = StyleSheet.create({
   },
   lead: {
     marginBottom: 18,
+  },
+  contentAfterLead: {
+    marginBottom: 20,
+  },
+  /* As `sectionLabelSpaced`: a content block's heading sits where the page's own would. */
+  contentSection: {
+    marginTop: 22,
   },
   availability: {
     marginTop: 12,

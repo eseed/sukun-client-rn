@@ -38,7 +38,12 @@ import { formatDateRangeShort, formatEgp } from '../../../src/lib/format';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import { designAsset } from '../../../src/theme/assets';
 import { colors, fontFamily, space } from '../../../src/theme/tokens';
-import type { AddonDetail, AddonOption, CartPreview } from '../../../src/api/types';
+import type {
+  AddonDetail,
+  AddonOption,
+  CartPreview,
+  TicketAddonContext,
+} from '../../../src/api/types';
 import { trackMetaAddExtrasToTicket } from '../../../src/lib/meta-events';
 
 /**
@@ -57,8 +62,11 @@ import { trackMetaAddExtrasToTicket } from '../../../src/lib/meta-events';
  */
 export default function TicketExtrasScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `addon`: the extra a logistics block's "Add" on the event page asked for (preselected below).
+  const { id, addon: addonParam } = useLocalSearchParams<{ id: string; addon?: string }>();
   const ticketId = typeof id === 'string' && id.length > 0 ? id : undefined;
+  const preselectedAddonId =
+    typeof addonParam === 'string' && addonParam.length > 0 ? addonParam : undefined;
 
   const contextQuery = useTicketAddonContext(ticketId);
   // A second call: `TicketAddonContext` carries ids only, and artboard 22 names the ticket being
@@ -182,6 +190,20 @@ export default function TicketExtrasScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(chosen), context?.eventId]);
 
+  /**
+   * The extra asked for on the event page, chosen once the catalogue is here (see
+   * `preselectedOption`). Set while rendering rather than in an effect, guarded to happen once: a
+   * choice like any tap, which the pricing effect above then sends to the server.
+   */
+  const [preselectionDone, setPreselectionDone] = useState(false);
+  if (!preselectionDone && preselectedAddonId && context) {
+    setPreselectionDone(true);
+    const option = preselectedOption(context, preselectedAddonId);
+    if (option) {
+      setChosen((current) => (current[option.id] ? current : { ...current, [option.id]: 1 }));
+    }
+  }
+
   // `isLoading`, not `isPending`: the context query is disabled while signed out or without a
   // ticket id, and a disabled TanStack Query v5 query stays `isPending` forever, which held this
   // screen on a spinner instead of letting it reach the error state two lines below.
@@ -242,6 +264,10 @@ export default function TicketExtrasScreen() {
     context.catalog.flatMap((addon) => addon.options.map((option) => option.id)),
   );
   // What the catalogue rows below already show as yours stays off the summary card.
+  // The extra asked for on the event page leads the list; the rest keep their order.
+  const catalog = [...context.catalog].sort(
+    (a, b) => Number(b.id === preselectedAddonId) - Number(a.id === preselectedAddonId),
+  );
   const listedElsewhere = context.existing.addons.filter(
     (addon) =>
       !(addon.room ? roomGroupId !== undefined : catalogOptionIds.has(addon.addonOptionId)),
@@ -299,7 +325,7 @@ export default function TicketExtrasScreen() {
 
       <PricesIncludeVat event={eventQuery.data} style={styles.vatCaption} />
 
-      {context.catalog.map((addon) =>
+      {catalog.map((addon) =>
         hasAccommodation && addon.type === 'accommodation' ? (
           addon.id === roomGroupId ? (
             <View key={addon.id} style={styles.group}>
@@ -480,6 +506,24 @@ function OwnedCard({
         </Pressable>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * What "Add" on the event page chooses here: the add-on's first option on sale, as the checkout's
+ * add-on detail opens on its first option. Never one this ticket already has (its room, or a seat
+ * on that trip), and nothing when none is on sale or the add-on is not in the catalogue.
+ */
+function preselectedOption(context: TicketAddonContext, addonId: string): AddonOption | undefined {
+  const addon = context.catalog.find((item) => item.id === addonId);
+  if (!addon) return undefined;
+  if (addon.type === 'accommodation' && context.existing.hasAccommodation) return undefined;
+  const owned = new Set(context.existing.addons.map((item) => item.addonOptionId));
+  return addon.options.find(
+    (item) =>
+      item.availability !== 'unavailable' &&
+      item.priceEgpNow !== null &&
+      !(addon.type === 'transport' && owned.has(item.id)),
   );
 }
 
