@@ -4,11 +4,13 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import type { DesignAssetKey } from '../../src/theme/assets';
 import { ResourceState, Screen, SearchIcon, Tag, Text } from '../../src/components/ui';
 import { EventListRow, FeaturedEventCard } from '../../src/components/events/EventCards';
+import { NotificationBell } from '../../src/components/notifications/NotificationBell';
 import { useEvents } from '../../src/hooks/queries';
 import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
 import { messageForError } from '../../src/lib/errors';
 import { formatTagLabel } from '../../src/lib/format';
 import { trackMetaSearch } from '../../src/lib/meta-events';
+import { useAuthStore } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { LiveEventReturnBanner } from '../../src/components/live-event/live-event-return-banner';
 
@@ -20,6 +22,8 @@ const THUMBS: DesignAssetKey[] = ['eventThumb1', 'eventThumb2', 'eventThumb3'];
 /** Design screen 06 · Discover (home). */
 export default function DiscoverScreen() {
   const router = useRouter();
+  // The inbox belongs to an account, so a guest browsing Discover sees no bell.
+  const signedIn = useAuthStore((s) => s.status === 'signed-in');
 
   const [tag, setTag] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -87,7 +91,10 @@ export default function DiscoverScreen() {
     >
       <View style={styles.headerRow}>
         <View style={styles.ring} />
-        <Text variant="titleMd">Discover</Text>
+        <Text variant="titleMd" style={styles.title}>
+          Discover
+        </Text>
+        {signedIn ? <NotificationBell onPress={() => router.push('/notifications')} /> : null}
       </View>
 
       <Text variant="bodyMuted" style={styles.subtitle}>
@@ -181,6 +188,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginBottom: 4,
+  },
+  title: {
+    flex: 1,
+    minWidth: 0,
   },
   ring: {
     width: 13,

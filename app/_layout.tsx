@@ -135,6 +135,7 @@ export default function RootLayout() {
               name="claim"
               options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
             />
+            <Stack.Screen name="notifications" />
             <Stack.Screen name="orders/index" />
             <Stack.Screen name="orders/[id]" />
             <Stack.Screen name="account/profile" />
