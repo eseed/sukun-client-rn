@@ -2,7 +2,8 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
-import { eventSlugFromDeepLink } from './deep-link';
+import { landingFromLinks, type NotificationLanding } from './deep-link';
+import { openNotificationLanding } from './open-landing';
 
 const MAX_SEEN_RESPONSES = 32;
 
@@ -18,13 +19,20 @@ if (Platform.OS === 'ios' || Platform.OS === 'android') {
   });
 }
 
-function eventSlugFromResponse(response: Notifications.NotificationResponse): string | null {
+/**
+ * Where a tapped push lands: `data.landingLink` when the admin chose more than the event page,
+ * else the bare event link in `data.deepLink` (`sukun://tickets` comes as `landingLink` alone).
+ */
+export function landingFromResponse(
+  response: Notifications.NotificationResponse,
+): NotificationLanding | null {
   if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return null;
 
   const data: unknown = response.notification.request.content.data;
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;
 
-  return eventSlugFromDeepLink((data as Record<string, unknown>).deepLink);
+  const { landingLink, deepLink } = data as Record<string, unknown>;
+  return landingFromLinks(landingLink, deepLink);
 }
 
 function responseKey(response: Notifications.NotificationResponse): string {
@@ -35,7 +43,7 @@ function responseKey(response: Notifications.NotificationResponse): string {
   ]);
 }
 
-/** Displays foreground pushes and maps only validated event links to in-app routes. */
+/** Displays foreground pushes and maps only validated Sukun links to in-app routes. */
 export function NotificationResponseRouter() {
   const router = useRouter();
   const seenResponses = useRef(new Set<string>());
@@ -58,8 +66,8 @@ export function NotificationResponseRouter() {
         if (oldest) seenResponses.current.delete(oldest);
       }
 
-      const slug = eventSlugFromResponse(response);
-      if (slug) router.push({ pathname: '/event/[slug]', params: { slug } });
+      const landing = landingFromResponse(response);
+      if (landing) openNotificationLanding(router, landing);
       void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
     };
 

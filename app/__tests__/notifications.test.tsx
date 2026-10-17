@@ -76,7 +76,9 @@ describe('Event Home bells', () => {
     setMockNotifications([notification('a'), notification('b')]);
     renderWithProviders(<LiveEventHomeScreen />);
 
-    await waitFor(() => expect(screen.getAllByLabelText('Notifications, 2 unread')).toHaveLength(2));
+    await waitFor(() =>
+      expect(screen.getAllByLabelText('Notifications, 2 unread')).toHaveLength(2),
+    );
     const bells = screen.getAllByLabelText('Notifications, 2 unread');
     expect(screen.getAllByTestId('notification-badge')).toHaveLength(2);
     expect(screen.queryByLabelText('Account')).toBeNull();
@@ -171,6 +173,48 @@ describe('Notification inbox', () => {
     await waitFor(async () =>
       expect(await mockApi.notifications.unreadCount()).toEqual({ unreadCount: 1 }),
     );
+  });
+
+  it('opens where the landing link says, over the event link', async () => {
+    await signIn();
+    setMockNotifications([
+      notification('a', {
+        title: 'Rooms are open',
+        deepLink: 'sukun://events/tulua',
+        landingLink: 'sukun://events/tulua/stay',
+      }),
+      notification('b', { title: 'Your tickets', landingLink: 'sukun://tickets' }),
+    ]);
+    renderWithProviders(<NotificationsScreen />);
+
+    fireEvent.press(await screen.findByLabelText(/^Unread\. Rooms are open\./));
+    expect(mockRouter.push).toHaveBeenLastCalledWith({
+      pathname: '/event/[slug]',
+      params: { slug: 'tulua', landing: 'stay' },
+    });
+
+    // A landing with no event (My tickets) still opens something.
+    fireEvent.press(screen.getByLabelText(/^Unread\. Your tickets\./));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/(tabs)/tickets');
+    expect(mockRouter.push).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens the event when a landing link is one this build cannot follow', async () => {
+    await signIn();
+    setMockNotifications([
+      notification('a', {
+        title: 'Newer landing',
+        deepLink: 'sukun://events/tulua',
+        landingLink: 'sukun://events/tulua/rooms',
+      }),
+    ]);
+    renderWithProviders(<NotificationsScreen />);
+
+    fireEvent.press(await screen.findByLabelText(/^Unread\. Newer landing\./));
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      pathname: '/event/[slug]',
+      params: { slug: 'tulua' },
+    });
   });
 
   it('does nothing with a malformed link but mark the row read', async () => {

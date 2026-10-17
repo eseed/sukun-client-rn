@@ -21,14 +21,14 @@ function spoken(parts: (string | null)[]): string {
 export function NotificationRow({
   notification,
   now,
-  opensSomething,
+  opens,
   onPress,
 }: {
   notification: AppNotification;
   /** The clock the relative times are measured against, shared by every row. */
   now: number;
-  /** Whether the tap leads anywhere besides marking it read. */
-  opensSomething: boolean;
+  /** Where the tap leads besides marking it read (`landingHint`), or null for nowhere. */
+  opens: string | null;
   onPress: () => void;
 }) {
   const unread = notification.readAt === null;
@@ -43,7 +43,7 @@ export function NotificationRow({
         notification.body,
         when,
       ])}
-      accessibilityHint={opensSomething ? 'Opens the event' : undefined}
+      accessibilityHint={opens ?? undefined}
       onPress={onPress}
       style={({ pressed }) => [pressed && styles.pressed]}
     >

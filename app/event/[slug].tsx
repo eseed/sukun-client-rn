@@ -35,7 +35,7 @@ import { AccommodationBox, BookedStayBox } from '../../src/components/events/Acc
 import { EventContentSection } from '../../src/components/events/ContentBlocks';
 import { PricesIncludeVat } from '../../src/components/checkout/VatNotes';
 import { useClaimableTickets } from '../../src/hooks/useClaimableTickets';
-import { useOwnTicketForEvent } from '../../src/hooks/useHoldsTicketForEvent';
+import { useOwnTicketForEventQuery } from '../../src/hooks/useHoldsTicketForEvent';
 import { addToCalendar } from '../../src/lib/add-to-calendar';
 import { availableStays, describeAddonKinds, ticketRoom } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
@@ -46,6 +46,8 @@ import { formatDateRange, formatEgp } from '../../src/lib/format';
 import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
 import { trackMetaFindLocation, trackMetaViewContent } from '../../src/lib/meta-events';
 import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
+import { isEventPageLanding } from '../../src/services/notifications/deep-link';
+import { useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
@@ -56,9 +58,47 @@ import type { AddonSummary } from '../../src/api/types';
 
 const HERO_HEIGHT = 280;
 
-/** Design screen 07 · Event detail. */
+/**
+ * Takes a notification's landing once, when `ready`, then drops its params so that coming back to
+ * the page does not take it again. Rendered with the loaded page, so `take` sees its data.
+ */
+function LandingOnce({
+  landingKey,
+  ready,
+  take,
+}: {
+  landingKey: string | null;
+  ready: boolean;
+  take: () => void;
+}) {
+  const router = useRouter();
+  const handled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!landingKey) {
+      handled.current = null;
+      return;
+    }
+    if (!ready || handled.current === landingKey) return;
+    handled.current = landingKey;
+    take();
+    router.setParams({ landing: undefined, addon: undefined });
+  }, [landingKey, ready, take, router]);
+  return null;
+}
+
+/**
+ * Design screen 07 · Event detail.
+ *
+ * A notification can land here with an action to take (`landing`: `stay`, `extras`, or `addon`
+ * with `addon=<id>`; `openNotificationLanding`). The page takes it once, as its own button would,
+ * when it knows everything that button depends on, then drops the params.
+ */
 export default function EventDetailScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const {
+    slug,
+    landing,
+    addon: landingAddonId,
+  } = useLocalSearchParams<{ slug: string; landing?: string; addon?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const startCheckout = useCheckoutStore((s) => s.start);
@@ -100,9 +140,27 @@ export default function EventDetailScreen() {
   const addonsQuery = useAddons(eventSlug);
   // An invitation waiting on this holder for this event: the bar offers to claim it instead of
   // selling them a ticket. Nobody signed in has none.
-  const { tickets: waitingInvitations } = useClaimableTickets();
+  const { tickets: waitingInvitations, query: invitationsQuery } = useClaimableTickets();
   // A holder's own ticket takes a stay straight away ("Book your stay"). Nobody signed in has one.
-  const ownTicket = useOwnTicketForEvent(event?.id ?? null);
+  const { ticket: ownTicket, query: ownTicketQuery } = useOwnTicketForEventQuery(event?.id ?? null);
+
+  // A notification's landing waits for who is asking: acting on a ticket list still loading would
+  // take a holder into checkout for a ticket they already have. Signed out, there is nothing to
+  // wait for; signed in, both lists must be in. A list that failed drops the landing, leaving
+  // them on the page. Stays and add-ons are also read from the catalogue.
+  const pageLanding = isEventPageLanding(landing) ? landing : null;
+  const landingKey = pageLanding ? `${pageLanding}:${landingAddonId ?? ''}` : null;
+  const authStatus = useAuthStore((s) => s.status);
+  const viewerFailed =
+    authStatus === 'signed-in' && (ownTicketQuery.isError || invitationsQuery.isError);
+  const viewerKnown =
+    authStatus === 'signed-out' ||
+    (authStatus === 'signed-in' && ownTicketQuery.isSuccess && invitationsQuery.isSuccess);
+  const landingReady =
+    pageLanding !== null &&
+    event !== undefined &&
+    (viewerKnown || viewerFailed) &&
+    (pageLanding === 'extras' || !addonsQuery.isPending);
 
   // An admin can attach a video either in the dedicated links field or by pasting one into the
   // description, and the same video often arrives both ways. Collect them into one ordered,
@@ -212,67 +270,92 @@ export default function EventDetailScreen() {
   }
 
   /**
-   * "Book your stay". A room attaches to a ticket, so where it leads depends on theirs: a holder
-   * adds it to their ticket now; a waiting invitee claims first, as "Claim ticket" does; anyone
-   * else starts the ticket checkout, whose pass step says why (`for=stay`) and whose add-ons step
-   * offers the room with the ticket.
+   * Adding something to a ticket: a room ("Book your stay"), one add-on ("Add" on a logistics
+   * block), or extras in general (a notification's extras landing). It attaches to a ticket, so
+   * where it leads depends on theirs: a holder adds it to their ticket now, with the add-on
+   * chosen (`/ticket/:id/extras?addon=`); a waiting invitee claims first, as "Claim ticket" does,
+   * never shown a price; anyone else starts the ticket checkout, whose pass step says why
+   * (`for=stay` / `for=addon`) and whose extras step opens the add-on (`preselectedAddonId`).
+   * Extras in general have nothing to say why, so that is "Get tickets" itself.
    */
-  function onBookStay() {
-    track('stay_box_opened', {
-      event_id: eventId,
-      has_ticket: ownTicket !== null,
-      invited: invitation !== null,
-    });
+  function addToTicket(purpose: 'stay' | 'addon' | 'extras', addonId?: string) {
     if (ownTicket) {
-      router.push(`/ticket/${ownTicket.id}/extras`);
+      router.push(
+        addonId
+          ? `/ticket/${ownTicket.id}/extras?addon=${encodeURIComponent(addonId)}`
+          : `/ticket/${ownTicket.id}/extras`,
+      );
       return;
     }
-    if (invitation || !firstPurchasableTier) {
+    if (invitation || !firstPurchasableTier || purpose === 'extras') {
       onGetTickets();
       return;
     }
-    startCheckout(eventId, firstPurchasableTier.id);
+    startCheckout(eventId, firstPurchasableTier.id, addonId ? { addonId } : undefined);
     track('checkout_started', {
       event_id: eventId,
       event_slug: eventSlug ?? '',
       tier_id: firstPurchasableTier.id,
     });
-    router.push(`/checkout/pass?eventId=${eventId}&for=stay`);
+    router.push(`/checkout/pass?eventId=${eventId}&for=${purpose}`);
+  }
+
+  /** "Book your stay", from its box or a notification's stay landing (`source`). */
+  function onBookStay(source?: 'notification') {
+    track('stay_box_opened', {
+      event_id: eventId,
+      has_ticket: ownTicket !== null,
+      invited: invitation !== null,
+      ...(source ? { source } : {}),
+    });
+    addToTicket('stay');
   }
 
   /**
-   * "Add" on a logistics block linked to an add-on (owner's call, 2026-10-17). An add-on attaches
-   * to a ticket, so like "Book your stay": a holder adds it to their ticket, with it chosen
-   * (`/ticket/:id/extras?addon=`); a waiting invitee claims first, never shown a price; anyone
-   * else starts the ticket checkout, whose extras step opens the add-on (`preselectedAddonId`).
+   * "Add" on a logistics block linked to an add-on (owner's call, 2026-10-17), or a
+   * notification's add-on landing (`source`).
    */
-  function onAddAddon(addon: AddonSummary) {
+  function onAddAddon(addon: AddonSummary, source?: 'notification') {
     track('content_addon_opened', {
       event_id: eventId,
       addon_id: addon.id,
       has_ticket: ownTicket !== null,
       invited: invitation !== null,
+      ...(source ? { source } : {}),
     });
-    if (ownTicket) {
-      router.push(`/ticket/${ownTicket.id}/extras?addon=${encodeURIComponent(addon.id)}`);
-      return;
-    }
-    if (invitation || !firstPurchasableTier) {
-      onGetTickets();
-      return;
-    }
-    startCheckout(eventId, firstPurchasableTier.id, { addonId: addon.id });
-    track('checkout_started', {
-      event_id: eventId,
-      event_slug: eventSlug ?? '',
-      tier_id: firstPurchasableTier.id,
-    });
-    router.push(`/checkout/pass?eventId=${eventId}&for=addon`);
+    addToTicket('addon', addon.id);
   }
   const canAddAddon = ownTicket !== null || invitation !== null || Boolean(firstPurchasableTier);
 
+  /**
+   * A notification's landing, taken once its data is in (`LandingOnce`). Each does what the page
+   * would offer: a stay only while the box offers one (not to someone who has their room, nor
+   * when none is on sale), an add-on only while its "Add" would be there and enabled. Anything
+   * else, or a ticket list that failed to load, leaves them on the page.
+   */
+  function takeLanding() {
+    if (viewerFailed) return;
+    if (pageLanding === 'stay') {
+      if (!heldRoom.held && stays.length > 0) onBookStay('notification');
+    } else if (pageLanding === 'extras') {
+      track('ticket_extras_opened', {
+        event_id: eventId,
+        has_ticket: ownTicket !== null,
+        invited: invitation !== null,
+        source: 'notification',
+      });
+      addToTicket('extras');
+    } else if (pageLanding === 'addon') {
+      const addon = (addonsQuery.data ?? []).find((item) => item.id === landingAddonId);
+      if (addon && addon.availability !== 'unavailable' && canAddAddon) {
+        onAddAddon(addon, 'notification');
+      }
+    }
+  }
+
   return (
     <View style={styles.root}>
+      <LandingOnce landingKey={landingKey} ready={landingReady} take={takeLanding} />
       {/* Dark cover image and black full-screen viewer both need a light clock; the cream page
           below them needs a dark one. */}
       {isFocused ? (
@@ -435,7 +518,7 @@ export default function EventDetailScreen() {
               onPress={() => ownTicket && router.push(`/ticket/${ownTicket.id}`)}
             />
           ) : stays.length > 0 ? (
-            <AccommodationBox stays={stays} onPress={onBookStay} />
+            <AccommodationBox stays={stays} onPress={() => onBookStay()} />
           ) : addonKinds ? (
             <View
               accessible

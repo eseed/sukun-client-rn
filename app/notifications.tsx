@@ -12,7 +12,8 @@ import {
   useNotificationUnreadCount,
 } from '../src/hooks/queries';
 import { useNow } from '../src/hooks/useNow';
-import { eventSlugFromDeepLink } from '../src/services/notifications/deep-link';
+import { landingFromLinks, landingHint } from '../src/services/notifications/deep-link';
+import { openNotificationLanding } from '../src/services/notifications/open-landing';
 import { useAuthStore } from '../src/stores/auth';
 import { colors, space } from '../src/theme/tokens';
 
@@ -21,8 +22,9 @@ const CLOCK_TICK_MS = 60_000;
 
 /**
  * The notification inbox, opened from the bell on Discover: every push Sukun sent this account,
- * newest first, kept for 12 months. Tapping a row marks it read and opens its event, if it names
- * one; a link that is malformed does nothing (`eventSlugFromDeepLink`, shared with push taps).
+ * newest first, kept for 12 months. Tapping a row marks it read and opens where the admin chose
+ * (`landingLink`, else the event in `deepLink`), as a push tap does; a link that is malformed does
+ * nothing (`landingFromLinks` and `openNotificationLanding`, shared with push taps).
  */
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -49,8 +51,8 @@ export default function NotificationsScreen() {
 
   const open = (item: AppNotification) => {
     if (item.readAt === null) markRead.mutate(item.id);
-    const slug = eventSlugFromDeepLink(item.deepLink);
-    if (slug) router.push({ pathname: '/event/[slug]', params: { slug } });
+    const landing = landingFromLinks(item.landingLink, item.deepLink);
+    if (landing) openNotificationLanding(router, landing);
   };
 
   const loadMore = () => {
@@ -140,7 +142,7 @@ export default function NotificationsScreen() {
               key={item.id}
               notification={item}
               now={now}
-              opensSomething={eventSlugFromDeepLink(item.deepLink) !== null}
+              opens={landingHint(landingFromLinks(item.landingLink, item.deepLink))}
               onPress={() => open(item)}
             />
           ))}
