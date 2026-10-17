@@ -64,6 +64,13 @@ jest.mock('expo-contacts/legacy', () => ({
   presentContactPickerAsync: jest.fn(async () => null),
 }));
 
+// "Add to calendar" opens the OS new-event screen through the legacy entry point. Cancelled by
+// default, with access granted, so no test reaches a real calendar.
+jest.mock('expo-calendar/legacy', () => ({
+  createEventInCalendarAsync: jest.fn(async () => ({ action: 'canceled', id: null })),
+  requestCalendarPermissionsAsync: jest.fn(async () => ({ granted: true, status: 'granted' })),
+}));
+
 // The native bundle's own version and build number. Null under Jest without this, which would
 // make the profile screen's version line say "unavailable" in every test that renders it.
 jest.mock('expo-application', () => ({
