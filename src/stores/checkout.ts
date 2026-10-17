@@ -74,8 +74,14 @@ interface CheckoutState {
    * already hold a ticket for the event, which makes every ticket in the order a guest's.
    */
   buyerTakesTicket: boolean;
+  /**
+   * An extra the buyer asked for before they had a ticket (a logistics block's "Add" on the event
+   * page). The extras step opens it once, when checkout reaches it, then clears it. A selection,
+   * never a price.
+   */
+  preselectedAddonId: string | null;
 
-  start: (eventId: string, tierId: string) => void;
+  start: (eventId: string, tierId: string, options?: { addonId?: string }) => void;
   setTier: (tierId: string) => void;
   /** How many tickets on a pass other than the main one (0 takes it off). Keeps `quantity` whole. */
   setOtherTierCount: (tierId: string, count: number) => void;
@@ -120,6 +126,8 @@ interface CheckoutState {
    */
   setAddons: (addons: DraftAddon[]) => void;
   clearAddons: () => void;
+  /** The extras step has opened the preselected extra (or found it no longer on sale). */
+  clearPreselectedAddon: () => void;
   reset: () => void;
 }
 
@@ -135,13 +143,14 @@ const initial = {
   cartId: null,
   addons: [],
   buyerTakesTicket: true,
+  preselectedAddonId: null,
 } satisfies Partial<CheckoutState>;
 
 export const useCheckoutStore = create<CheckoutState>((set, get) => ({
   ...initial,
 
-  start(eventId, tierId) {
-    set({ ...initial, eventId, tierId });
+  start(eventId, tierId, options) {
+    set({ ...initial, eventId, tierId, preselectedAddonId: options?.addonId ?? null });
   },
 
   setTier(tierId) {
@@ -293,6 +302,10 @@ export const useCheckoutStore = create<CheckoutState>((set, get) => ({
 
   clearAddons() {
     set({ addons: [] });
+  },
+
+  clearPreselectedAddon() {
+    set({ preselectedAddonId: null });
   },
 
   reset() {
