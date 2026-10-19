@@ -14,6 +14,7 @@ import {
   SummaryRow,
   Text,
 } from '../../../src/components/ui';
+import { HeldOrderPanel, useHeldOrder } from '../../../src/components/checkout/HeldOrder';
 import { IncludesVatNote } from '../../../src/components/checkout/VatNotes';
 import {
   useApplyCartPromo,
@@ -36,7 +37,12 @@ import { trackMetaAddPaymentInfo, trackMetaInitiateCheckout } from '../../../src
 import { beginPaymentAttempt, trackPaymentFailed } from '../../../src/lib/purchase-analytics';
 import { useCheckoutStore } from '../../../src/stores/checkout';
 import { colors, fontFamily, space } from '../../../src/theme/tokens';
-import type { AddonDetail, AddonOption, CartPricingLine, OrderDetail } from '../../../src/api/types';
+import type {
+  AddonDetail,
+  AddonOption,
+  CartPricingLine,
+  OrderDetail,
+} from '../../../src/api/types';
 
 /**
  * Design screen 23 · Extras checkout.
@@ -74,6 +80,9 @@ export default function TicketExtrasReviewScreen() {
   const placeOrder = usePlaceCartOrder();
   const initiatePayment = useInitiatePayment();
   const sheet = usePaymobSheet();
+  const held = useHeldOrder(contextQuery.data?.eventId, (orderId) =>
+    router.replace(`/checkout/payment?orderId=${orderId}`),
+  );
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -209,7 +218,8 @@ export default function TicketExtrasReviewScreen() {
   const appliedPromo = pricing?.promo?.code ?? null;
   const droppedPromo = cart?.promoAdjustment?.previousPromoCode ?? null;
 
-  const canPay = Boolean(priced?.canPlaceOrder && pricing?.status === 'complete' && token) && termsAccepted;
+  const canPay =
+    Boolean(priced?.canPlaceOrder && pricing?.status === 'complete' && token) && termsAccepted;
 
   /**
    * What a line costs, in the server's own words.
@@ -354,17 +364,12 @@ export default function TicketExtrasReviewScreen() {
 
       /**
        * An unpaid order for this event already holds it, most often one whose card sheet was
-       * cancelled, so a second one is refused. The refusal names that order, and the payment
-       * screen is where it can be paid or cancelled, the same way out `app/checkout/review.tsx`
-       * gives. Reporting the conflict here left the buyer with nothing to tap.
+       * cancelled, so a second one is refused. It is shown with its own lines, to cancel and pay
+       * for these extras or to pay as it is (`useHeldOrder`), never paid in their place.
        */
       const heldOrderId = heldOrderIdFromError(err);
       if (heldOrderId) {
-        track('checkout_resumed_held_order', {
-          event_id: contextQuery.data?.eventId ?? '',
-          order_id: heldOrderId,
-        });
-        router.replace(`/checkout/payment?orderId=${heldOrderId}`);
+        await held.meet(heldOrderId);
         return;
       }
 
@@ -397,7 +402,9 @@ export default function TicketExtrasReviewScreen() {
           {pricing.addonLines.map((line) => (
             <View key={line.addonOptionId} style={styles.totalsLine}>
               <SummaryRow
-                label={line.quantity > 1 ? `${lineLabel(line)} × ${line.quantity}` : lineLabel(line)}
+                label={
+                  line.quantity > 1 ? `${lineLabel(line)} × ${line.quantity}` : lineLabel(line)
+                }
                 value={lineValue(line)}
               />
               {lineMeta(line) ? (
@@ -493,14 +500,34 @@ export default function TicketExtrasReviewScreen() {
       {sheetError ? <InlineError message={sheetError} /> : null}
       {error ? <InlineError message={error} /> : null}
 
-      <View style={styles.spacer} />
+      {held.order ? (
+        <HeldOrderPanel
+          order={held.order}
+          error={held.error}
+          busy={held.cancelling || placeOrder.isPending || initiatePayment.isPending}
+          continueLabel={
+            pricing?.totalEgp
+              ? `Cancel it and pay ${formatEgp(pricing.totalEgp)}`
+              : 'Cancel it and pay for these'
+          }
+          onCancelAndContinue={() => void held.cancelAndContinue(onPay)}
+          onPayHeld={() => {
+            const orderId = held.order?.id;
+            if (orderId) router.replace(`/checkout/payment?orderId=${orderId}`);
+          }}
+        />
+      ) : (
+        <>
+          <View style={styles.spacer} />
 
-      <Button
-        label={pricing?.totalEgp ? `Pay ${formatEgp(pricing.totalEgp)}` : 'Pay'}
-        disabled={!canPay}
-        loading={preview.isPending || placeOrder.isPending || initiatePayment.isPending}
-        onPress={onPay}
-      />
+          <Button
+            label={pricing?.totalEgp ? `Pay ${formatEgp(pricing.totalEgp)}` : 'Pay'}
+            disabled={!canPay}
+            loading={preview.isPending || placeOrder.isPending || initiatePayment.isPending}
+            onPress={onPay}
+          />
+        </>
+      )}
     </Screen>
   );
 }

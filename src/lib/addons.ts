@@ -132,6 +132,20 @@ export function ticketAddonStatusLabel(addon: TicketAddon | OrderAddon): string 
 }
 
 /**
+ * An order line's name: its addon, then the option ("Bus: Sokhna → Cairo · Friday 23 · New
+ * Cairo"), with the units when there are several. Two addons can share option labels (a bus
+ * there and a bus back), so the option alone does not say which was bought. A label that repeats
+ * its addon's name says it once, and a backend that predates `addonName` leaves the label alone.
+ */
+export function orderAddonLabel(
+  addon: Pick<OrderAddon, 'addonName' | 'label' | 'quantity'>,
+): string {
+  const parts = [addon.addonName, addon.label].filter(Boolean) as string[];
+  const name = parts.filter((part, index) => parts.indexOf(part) === index).join(' · ');
+  return addon.quantity > 1 ? `${name} × ${addon.quantity}` : name;
+}
+
+/**
  * Who an order's addon line was bought for, for the receipt.
  *
  * A recipient the buyer sold a ticket to comes back named. One who already had their own ticket
