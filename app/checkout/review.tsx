@@ -16,6 +16,7 @@ import {
 } from '../../src/components/ui';
 import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
 import { IncludesVatNote } from '../../src/components/checkout/VatNotes';
+import { HeldOrderPanel, useHeldOrder } from '../../src/components/checkout/HeldOrder';
 import { HoldTimer } from '../../src/components/checkout/HoldTimer';
 import {
   useApplyCartPromo,
@@ -78,6 +79,9 @@ export default function ReviewScreen() {
   const placeOrder = usePlaceCartOrder();
   const initiatePayment = useInitiatePayment();
   const sheet = usePaymobSheet();
+  const held = useHeldOrder(validEventId, (orderId) =>
+    router.replace(`/checkout/payment?orderId=${orderId}`),
+  );
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [promoDraft, setPromoDraft] = useState('');
@@ -334,18 +338,13 @@ export default function ReviewScreen() {
       /**
        * An order for this event is already holding the capacity, which is what cancelling the
        * card sheet leaves behind: the order stays `awaiting_payment` until it is paid or its
-       * hold lapses, so placing a second one is refused. The buyer's way through is to finish
-       * the one they have, and the payment screen already knows how to pick up an order with
-       * an open attempt, so send them there rather than reporting a conflict they cannot act
-       * on. Before this, a cancelled payment could not be retried at all.
+       * hold lapses, so placing a second one is refused. It is shown with its own lines, to
+       * cancel and pay for this selection or to pay as it is (`useHeldOrder`). Sending the buyer
+       * straight to pay it charged one for the bus there after she picked the bus back.
        */
       const heldOrderId = heldOrderIdFromError(err);
       if (heldOrderId) {
-        track('checkout_resumed_held_order', {
-          event_id: validEventId ?? '',
-          order_id: heldOrderId,
-        });
-        router.replace(`/checkout/payment?orderId=${heldOrderId}`);
+        await held.meet(heldOrderId);
         return;
       }
 
@@ -569,31 +568,51 @@ export default function ReviewScreen() {
         check with your bank and update your order.
       </Text>
 
-      <View style={styles.spacer} />
+      {held.order && !placed ? (
+        <HeldOrderPanel
+          order={held.order}
+          error={held.error}
+          busy={held.cancelling || placeOrder.isPending || initiatePayment.isPending}
+          continueLabel={
+            pricing?.totalEgp
+              ? `Cancel it and pay ${formatEgp(pricing.totalEgp)}`
+              : 'Cancel it and pay for this'
+          }
+          onCancelAndContinue={() => void held.cancelAndContinue(onContinue)}
+          onPayHeld={() => {
+            const orderId = held.order?.id;
+            if (orderId) router.replace(`/checkout/payment?orderId=${orderId}`);
+          }}
+        />
+      ) : null}
+
+      {held.order && !placed ? null : <View style={styles.spacer} />}
 
       {/*
         A blocked CTA is grey rather than black, but grey at the bottom of a long screen still
         reads as "tap me": the label is the only thing that says why it will not move. The two
         blockers are different problems, and the box is the one the buyer can actually solve.
       */}
-      <Button
-        label={
-          placed
-            ? recoveryOrderId
-              ? 'Continue to payment'
-              : 'Back to the event'
-            : !termsAccepted
-              ? 'Accept the terms to pay'
-              : canPlace
+      {held.order && !placed ? null : (
+        <Button
+          label={
+            placed
+              ? recoveryOrderId
                 ? 'Continue to payment'
-                : 'This order cannot be paid yet'
-        }
-        disabled={placed ? false : !canPlace || !termsAccepted}
-        loading={
-          !placed && (placeOrder.isPending || initiatePayment.isPending || preview.isPending)
-        }
-        onPress={onContinue}
-      />
+                : 'Back to the event'
+              : !termsAccepted
+                ? 'Accept the terms to pay'
+                : canPlace
+                  ? 'Continue to payment'
+                  : 'This order cannot be paid yet'
+          }
+          disabled={placed ? false : !canPlace || !termsAccepted}
+          loading={
+            !placed && (placeOrder.isPending || initiatePayment.isPending || preview.isPending)
+          }
+          onPress={onContinue}
+        />
+      )}
     </Screen>
   );
 }

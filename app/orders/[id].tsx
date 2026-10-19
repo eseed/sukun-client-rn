@@ -15,7 +15,11 @@ import { RoomSpotsPanel } from '../../src/components/tickets/RoomSpotsPanel';
 import { IncludesVatNote } from '../../src/components/checkout/VatNotes';
 import type { OrderAddon } from '../../src/api/types';
 import { useCancelOrder, useEvent, useOrder } from '../../src/hooks/queries';
-import { describeOrderAddonRecipients, ticketAddonStatusLabel } from '../../src/lib/addons';
+import {
+  describeOrderAddonRecipients,
+  orderAddonLabel,
+  ticketAddonStatusLabel,
+} from '../../src/lib/addons';
 import { messageForError } from '../../src/lib/errors';
 import { formatDate, formatDateRange, formatEgp } from '../../src/lib/format';
 import { colors, space } from '../../src/theme/tokens';
@@ -150,10 +154,7 @@ export default function OrderDetailScreen() {
                     {data.addons.map((addon) => (
                       <View key={addon.orderAddonItemId} style={styles.item}>
                         <View style={styles.itemText}>
-                          <Text variant="bodyValue">
-                            {addon.label}
-                            {addon.quantity > 1 ? ` × ${addon.quantity}` : ''}
-                          </Text>
+                          <Text variant="bodyValue">{orderAddonLabel(addon)}</Text>
                           {describeReceiptAddon(addon) ? (
                             <Text variant="meta">{describeReceiptAddon(addon)}</Text>
                           ) : null}

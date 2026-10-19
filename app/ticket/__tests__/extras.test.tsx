@@ -695,7 +695,7 @@ describe('23 Extras checkout', () => {
    * cancel it, as the ticket checkout does, instead of being told about a conflict with nothing
    * to tap.
    */
-  it('sends the buyer to the unpaid order already holding the event', async () => {
+  it('shows the unpaid order holding the event instead of paying it', async () => {
     await signInAndComplete();
     const held = await placeUnpaidTicketOrder();
 
@@ -703,11 +703,31 @@ describe('23 Extras checkout', () => {
     await renderReview();
     await acceptTermsAndPay();
 
+    // Its own lines, never paid in place of the extras just picked.
     await waitFor(() =>
-      expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${held.id}`),
+      expect(screen.getByText('You have an unpaid order for this event')).toBeTruthy(),
     );
-    expect(screen.queryByText('You already have an order in progress for this event.')).toBeNull();
+    expect(mockRouter.replace).not.toHaveBeenCalled();
     expect(mockPaymob.presentPayVC!).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('Pay for that order instead'));
+    expect(mockRouter.replace).toHaveBeenCalledWith(`/checkout/payment?orderId=${held.id}`);
+  });
+
+  it('cancels the unpaid order and pays for the extras just picked', async () => {
+    await signInAndComplete();
+    const held = await placeUnpaidTicketOrder();
+
+    await browseAndContinue(['Dinner voucher']);
+    await renderReview();
+    await acceptTermsAndPay();
+
+    const cancel = await screen.findByText(/^Cancel it and pay/);
+    fireEvent.press(cancel);
+
+    await waitFor(() => expect(mockPaymob.presentPayVC!).toHaveBeenCalled());
+    expect((await mockApi.orders.detail(held.id)).status).toBe('cancelled');
+    expect(mockRouter.replace).not.toHaveBeenCalledWith(`/checkout/payment?orderId=${held.id}`);
   });
 
   /**
