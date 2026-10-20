@@ -6,6 +6,7 @@ import type {
   OrderAddon,
   TicketAddon,
   TransportAddonOption,
+  TransportStop,
 } from '../api/types';
 import { formatDate, formatDateRangeShort, formatEgp } from './format';
 
@@ -27,7 +28,8 @@ export function isTransport(option: AddonOption): option is TransportAddonOption
 /** The line under an option: travel times for transport, occupancy for a room, nothing else. */
 export function describeOption(option: AddonOption): string {
   if (isTransport(option)) {
-    const out = `Out ${formatDate(option.departureDate)}, ${option.departureTime}`;
+    const stop = describeTransportStop(option);
+    const out = `${stop ? `${stop} · ` : ''}Out ${formatDate(option.departureDate)}, ${option.departureTime}`;
     return option.returnDate && option.returnTime
       ? `${out} · back ${formatDate(option.returnDate)}, ${option.returnTime}`
       : out;
@@ -68,7 +70,8 @@ export function describeTicketAddon(addon: TicketAddon): string {
   }
 
   if (addon.departureDate) {
-    const out = `Out ${formatDate(addon.departureDate)}`;
+    const stop = describeTransportStop(addon);
+    const out = `${stop ? `${stop} · ` : ''}Out ${formatDate(addon.departureDate)}`;
     return addon.returnDate ? `${out} · back ${formatDate(addon.returnDate)}` : out;
   }
 
@@ -98,7 +101,12 @@ export function ticketAddonDetail(addon: TicketAddon): string {
     const dates = formatDateRangeShort(addon.room.checkInDate, addon.room.checkOutDate);
     return `${addon.addonName} · ${dates}`;
   }
-  if (addon.type === 'transport') return addon.label;
+  if (addon.type === 'transport') {
+    // The option's label often names the place already ("Friday 23 · New Cairo"): say it once.
+    const stop = describeTransportStop(addon);
+    const named = addon.pickupPoint && addon.label.includes(addon.pickupPoint);
+    return stop && !named ? `${stop} · ${addon.label}` : addon.label;
+  }
   return `${addon.label} · redeem at the event`;
 }
 
@@ -268,4 +276,19 @@ export function isSendableAddonLine(line: {
     0,
   );
   return assigned === line.quantity;
+}
+
+/**
+ * Where a bus stops, as the website says it: "Pickup: New Cairo", "Drop-off: Sokhna", or
+ * "Place: …" when the backend gives a place but not which kind. Empty when there is nothing to say.
+ */
+export function describeTransportStop(value: TransportStop): string {
+  const label =
+    value.transportStopType === 'drop_off'
+      ? 'Drop-off'
+      : value.transportStopType === 'pickup'
+        ? 'Pickup'
+        : 'Place';
+  if (value.pickupPoint) return `${label}: ${value.pickupPoint}`;
+  return value.transportStopType ? label : '';
 }
