@@ -927,6 +927,18 @@ export type AddonType = 'accommodation' | 'meal' | 'transport' | 'other';
 /** `modules/addons/enums/addon-transport-direction.enum.ts` */
 export type AddonTransportDirection = 'one_way' | 'round_trip';
 
+/** Whether a transport option's place is where the bus picks guests up or drops them off. */
+export type AddonTransportStopType = 'pickup' | 'drop_off';
+
+/**
+ * Where a transport option stops, on options, ticket extras and order lines alike. Both are
+ * optional: a backend from before them, or an option with no place set, sends neither.
+ */
+export interface TransportStop {
+  pickupPoint?: string | null;
+  transportStopType?: AddonTransportStopType | null;
+}
+
 /** `AddonPublicAvailability` / `AddonPublicPriceWindowStatus` */
 export type AddonAvailability = 'available' | 'unavailable';
 
@@ -978,7 +990,7 @@ export interface AccommodationAddonOption extends AddonOptionBase {
 }
 
 /** `PublicTransportAddonOptionResponseDto` */
-export interface TransportAddonOption extends AddonOptionBase {
+export interface TransportAddonOption extends AddonOptionBase, TransportStop {
   transportDirection: AddonTransportDirection;
   departureDate: string;
   departureTime: string;
@@ -1228,7 +1240,7 @@ export interface TicketAddonRoom {
 }
 
 /** `MobileTicketAddonResponseDto` */
-export interface TicketAddon {
+export interface TicketAddon extends TransportStop {
   addonOptionId: string;
   type: AddonType;
   /**
@@ -1283,7 +1295,7 @@ export interface OrderAddonRecipient {
 }
 
 /** `MobileOrderAddonResponseDto` */
-export interface OrderAddon {
+export interface OrderAddon extends TransportStop {
   orderAddonItemId: string;
   addonOptionId: string;
   type: AddonType;

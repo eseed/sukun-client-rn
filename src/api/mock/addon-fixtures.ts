@@ -1,4 +1,4 @@
-import type { AddonTransportDirection, AddonType } from '../types';
+import type { AddonTransportDirection, AddonTransportStopType, AddonType } from '../types';
 import { TULUA_ID } from './fixtures';
 
 /**
@@ -38,6 +38,8 @@ export interface MockAddonOption {
   checkOutDate?: string;
   checkOutTime?: string;
   transportDirection?: AddonTransportDirection;
+  pickupPoint?: string | null;
+  transportStopType?: AddonTransportStopType | null;
   departureDate?: string;
   departureTime?: string;
   returnDate?: string | null;
@@ -224,6 +226,8 @@ export const addonOptions: MockAddonOption[] = [
     quantitySold: 38,
     priceWindows: singleWindow('pw-shuttle-one-way', '350.00'),
     transportDirection: 'one_way',
+    pickupPoint: 'New Cairo (El Rehab, Gate 13)',
+    transportStopType: 'pickup',
     departureDate: '2026-10-23',
     departureTime: '08:00',
     returnDate: null,
@@ -237,6 +241,8 @@ export const addonOptions: MockAddonOption[] = [
     quantitySold: 38,
     priceWindows: singleWindow('pw-shuttle-round-trip', '600.00'),
     transportDirection: 'round_trip',
+    pickupPoint: 'Sheikh Zayed (Arkan Plaza)',
+    transportStopType: 'pickup',
     departureDate: '2026-10-23',
     departureTime: '08:00',
     returnDate: '2026-10-25',

@@ -121,6 +121,8 @@ function toOption(
     return {
       ...base,
       transportDirection: option.transportDirection!,
+      pickupPoint: option.pickupPoint ?? null,
+      transportStopType: option.transportStopType ?? null,
       departureDate: option.departureDate!,
       departureTime: option.departureTime!,
       returnDate: option.returnDate ?? null,

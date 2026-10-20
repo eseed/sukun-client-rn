@@ -17,6 +17,7 @@ import { IncludesVatNote } from '../../src/components/checkout/VatNotes';
 import type { OrderAddon } from '../../src/api/types';
 import { useCancelOrder, useEvent, useOrder } from '../../src/hooks/queries';
 import {
+  describeTransportStop,
   describeOrderAddonRecipients,
   orderAddonLabel,
   ticketAddonStatusLabel,
@@ -53,7 +54,8 @@ function describeReceiptAddon(addon: OrderAddon): string {
   }
 
   if (addon.departureDate) {
-    const out = `Out ${formatDate(addon.departureDate)}${
+    const stop = describeTransportStop(addon);
+    const out = `${stop ? `${stop} · ` : ''}Out ${formatDate(addon.departureDate)}${
       addon.departureTime ? `, ${addon.departureTime}` : ''
     }`;
     return addon.returnDate

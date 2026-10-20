@@ -1,4 +1,9 @@
-import { isSendableAddonLine } from '../addons';
+import {
+  describeOption,
+  describeTransportStop,
+  isSendableAddonLine,
+  ticketAddonDetail,
+} from '../addons';
 
 /**
  * The shared predicate behind every cart write: accommodation rooms must hold at least one
@@ -98,5 +103,55 @@ describe('isSendableAddonLine · everything else', () => {
         assignments: [{}, {}],
       }),
     ).toBe(true);
+  });
+});
+
+describe('transport stops', () => {
+  const bus = {
+    transportDirection: 'one_way' as const,
+    departureDate: '2026-10-23',
+    departureTime: '08:00',
+    returnDate: null,
+    returnTime: null,
+  };
+
+  it('says where the bus stops, as the website does', () => {
+    expect(describeTransportStop({ pickupPoint: 'New Cairo', transportStopType: 'pickup' })).toBe(
+      'Pickup: New Cairo',
+    );
+    expect(describeTransportStop({ pickupPoint: 'Sokhna', transportStopType: 'drop_off' })).toBe(
+      'Drop-off: Sokhna',
+    );
+    expect(describeTransportStop({ pickupPoint: 'Gate 13' })).toBe('Place: Gate 13');
+    expect(describeTransportStop({ transportStopType: 'pickup' })).toBe('Pickup');
+    expect(describeTransportStop({})).toBe('');
+  });
+
+  it('puts the stop before the times on an option', () => {
+    const option = { ...bus, pickupPoint: 'New Cairo', transportStopType: 'pickup' as const };
+    expect(describeOption(option as never)).toMatch(/^Pickup: New Cairo · Out /);
+    expect(describeOption(bus as never)).toMatch(/^Out /);
+  });
+
+  it("adds the stop to a ticket's bus once, not when its label already names it", () => {
+    const issued = {
+      ...bus,
+      type: 'transport',
+      addonName: 'Bus: Cairo → Sokhna',
+      status: 'active',
+      room: null,
+      quantity: 1,
+      transportStopType: 'pickup',
+    };
+    expect(
+      ticketAddonDetail({ ...issued, label: 'Friday 23', pickupPoint: 'New Cairo' } as never),
+    ).toBe('Pickup: New Cairo · Friday 23');
+    expect(
+      ticketAddonDetail({
+        ...issued,
+        label: 'Friday 23 · New Cairo',
+        pickupPoint: 'New Cairo',
+      } as never),
+    ).toBe('Friday 23 · New Cairo');
   });
 });
