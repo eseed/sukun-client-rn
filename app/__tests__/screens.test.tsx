@@ -652,7 +652,9 @@ describe('09 Guests', () => {
     expect(screen.getByTestId('person-Friend 1')).toBeTruthy();
     expect(screen.queryByTestId('person-Friend 2')).toBeNull();
     expect(
-      screen.getByText('A full name and WhatsApp number for each of the 2 tickets. Tickets arrive on WhatsApp.'),
+      screen.getByText(
+        'A full name and WhatsApp number for each of the 2 tickets. Tickets arrive on WhatsApp.',
+      ),
     ).toBeTruthy();
   });
 
@@ -663,7 +665,9 @@ describe('09 Guests', () => {
     useCheckoutStore.getState().setQuantity(3);
 
     renderWithProviders(<GuestsScreen />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled(),
+    );
     fireEvent.press(screen.getByText('Continue'));
 
     expect(screen.getByText('Fill in a full name and WhatsApp number for everyone.')).toBeTruthy();
@@ -743,7 +747,9 @@ describe('09 Guests', () => {
     await waitFor(() => expect(screen.getByTestId('person-Friend 1')).toBeTruthy());
     expect(screen.queryByText('You')).toBeNull();
     expect(
-      screen.getByText('You already have a ticket, so these are all for friends. Tickets arrive on WhatsApp.'),
+      screen.getByText(
+        'You already have a ticket, so these are all for friends. Tickets arrive on WhatsApp.',
+      ),
     ).toBeTruthy();
 
     fillFriend('Friend 1', 'Nour Hassan', '1022334455');
@@ -764,12 +770,16 @@ describe('09 Guests', () => {
     });
 
     renderWithProviders(<GuestsScreen />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled(),
+    );
     fillFriend('Friend 1', 'Nour Hassan', '1022334455');
     fireEvent.press(screen.getByText('Continue'));
 
     await waitFor(() =>
-      expect(within(person('Friend 1')).getByText(messageForCode('GUEST_ALREADY_HAS_TICKET'))).toBeTruthy(),
+      expect(
+        within(person('Friend 1')).getByText(messageForCode('GUEST_ALREADY_HAS_TICKET')),
+      ).toBeTruthy(),
     );
     expect(mockRouter.push).not.toHaveBeenCalled();
     validate.mockRestore();
@@ -810,7 +820,9 @@ describe('09 Guests', () => {
     useCheckoutStore.getState().setQuantity(2);
 
     renderWithProviders(<GuestsScreen />);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled(),
+    );
     fireEvent.press(within(person('Friend 1')).getByLabelText('Country: +20. Change'));
     fireEvent.changeText(screen.getByLabelText('Search country'), 'germany');
     fireEvent.press(screen.getByLabelText('Germany +49'));
@@ -957,7 +969,9 @@ describe('09 Guests', () => {
     expect(kept).toHaveLength(1);
     const after = (await mockApi.carts.get(cart.id)).attendees;
     const sameNour = after.find((a) => a.phoneNumber === '+201022334455')!;
-    expect(kept[0]!.assignments).toEqual([{ cartAttendeeId: sameNour.cartAttendeeId, quantity: 1 }]);
+    expect(kept[0]!.assignments).toEqual([
+      { cartAttendeeId: sameNour.cartAttendeeId, quantity: 1 },
+    ]);
   });
 
   it('puts each friend on their own pass, and adds a friend at the bottom', async () => {
@@ -1305,7 +1319,7 @@ describe('10 Review & pay', () => {
    * whose whole point is the order id it carries. The buyer is sent to finish the order they
    * already have.
    */
-  it('resumes the held order when a cancelled payment is tried again', async () => {
+  it('shows the held order when a cancelled payment is tried again', async () => {
     await signInAndComplete();
     await placeOrderViaCart({
       eventId: TULUA_ID,
@@ -1332,14 +1346,18 @@ describe('10 Review & pay', () => {
     mockPaymob.presentPayVC!.mockClear();
     fireEvent.press(screen.getByText('Continue to payment'));
 
+    // The held order is shown with its own lines, to pay as it is or cancel: never paid silently.
     await waitFor(() =>
-      expect(mockRouter.replace).toHaveBeenCalledWith(
-        expect.stringContaining('/checkout/payment?orderId='),
-      ),
+      expect(screen.getByText('You have an unpaid order for this event')).toBeTruthy(),
     );
     // Never the dead end the tester saw, and no second sheet for a second order.
     expect(screen.queryByText('Something went wrong. Try again.')).toBeNull();
     expect(mockPaymob.presentPayVC!).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText('Pay for that order instead'));
+    expect(mockRouter.replace).toHaveBeenCalledWith(
+      expect.stringContaining('/checkout/payment?orderId='),
+    );
   });
 
   /** Once placed, no cart edit is offered and every way out leads to payment. */

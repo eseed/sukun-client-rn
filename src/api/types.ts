@@ -1287,6 +1287,8 @@ export interface OrderAddon {
   orderAddonItemId: string;
   addonOptionId: string;
   type: AddonType;
+  /** The addon the option belongs to. Optional: a backend from before it does not send it. */
+  addonName?: string;
   label: string;
   transportDirection: AddonTransportDirection | null;
   departureDate: string | null;
