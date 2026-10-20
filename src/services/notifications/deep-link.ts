@@ -7,11 +7,15 @@
  * - `extras`: the event page, then a holder's extras, or a ticket first (`.../extras`)
  * - `addon`: the event page, then what "Add" on that add-on does (`.../addons/<addonId>`)
  * - `tickets`: the My tickets tab (`sukun://tickets`)
+ * - `accommodation`: a room's documents (the website's `/accommodation?eventId=<uuid>`, which the
+ *   backend sends as a plain web link; the app has the same screen). Any other website page is
+ *   inert here, as before: the app has its own event pages and checkout.
  */
 export type NotificationLanding =
   | { kind: 'event' | 'schedule' | 'stay' | 'extras'; slug: string }
   | { kind: 'addon'; slug: string; addonId: string }
-  | { kind: 'tickets' };
+  | { kind: 'tickets' }
+  | { kind: 'accommodation'; eventId: string };
 
 /** The landings the event page itself carries out once its data has loaded (`?landing=`). */
 export type EventPageLanding = 'stay' | 'extras' | 'addon';
@@ -28,6 +32,9 @@ const EVENT_SUBPAGE_LINK = new RegExp(`^sukun://events/(${SLUG})/(schedule|stay|
 const ADDON_LINK = new RegExp(`^sukun://events/(${SLUG})/addons/(${UUID})$`);
 const TICKETS_LINK = 'sukun://tickets';
 const MAX_DEEP_LINK_LENGTH = 256;
+/** The website's hosts (production, staging). */
+const WEB_HOSTS = new Set(['book.sukunwellness.co', 'clientstaging.sukunwellness.co']);
+const UUID_ONLY = new RegExp(`^${UUID}$`);
 const MAX_SLUG_LENGTH = 160;
 
 /**
@@ -55,6 +62,34 @@ export function parseNotificationLink(link: unknown): NotificationLanding | null
     return validSlug(addon[1]) ? { kind: 'addon', slug: addon[1]!, addonId: addon[2]! } : null;
   }
 
+  return parseWebLink(link);
+}
+
+/**
+ * The website's room documents page (`https`, one of its hosts, no credentials, an event id),
+ * which has its own screen in the app. Any other web link is null.
+ */
+function parseWebLink(link: string): NotificationLanding | null {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    return null;
+  }
+  if (
+    url.protocol !== 'https:' ||
+    !WEB_HOSTS.has(url.hostname.toLowerCase()) ||
+    url.port !== '' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.pathname.length <= 1
+  ) {
+    return null;
+  }
+  if (url.pathname.replace(/\/$/, '') === '/accommodation') {
+    const eventId = url.searchParams.get('eventId')?.toLowerCase() ?? '';
+    return UUID_ONLY.test(eventId) ? { kind: 'accommodation', eventId } : null;
+  }
   return null;
 }
 
@@ -78,6 +113,8 @@ export function landingHint(landing: NotificationLanding | null): string | null 
       return 'Opens your tickets';
     case 'schedule':
       return 'Opens the event schedule';
+    case 'accommodation':
+      return 'Opens your room documents';
     default:
       return 'Opens the event';
   }

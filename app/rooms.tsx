@@ -21,6 +21,7 @@ import { useContacts } from '../src/hooks/useContacts';
 import { track } from '../src/lib/analytics';
 import { messageForError } from '../src/lib/errors';
 import { formatDate } from '../src/lib/format';
+import { roomAsksForDocuments, roomNeedsDocuments } from '../src/lib/room-documents';
 import {
   countryOf,
   DEFAULT_COUNTRY,
@@ -84,6 +85,15 @@ export default function RoomsScreen() {
           <Text variant="bodyMuted">You have no rooms for this event.</Text>
         ) : (
           <View style={styles.rooms}>
+            {rooms.some(roomAsksForDocuments) ? (
+              <Button
+                label={
+                  rooms.some(roomNeedsDocuments) ? 'Upload room documents' : 'View room documents'
+                }
+                variant="secondary"
+                onPress={() => router.push(`/accommodation?eventId=${validEventId}`)}
+              />
+            ) : null}
             {rooms.map((room) => (
               <RoomCard key={room.roomId} room={room} />
             ))}
@@ -114,6 +124,7 @@ function RoomCard({ room }: { room: BuyerRoom }) {
         />
       </View>
       <Text variant="metaSm" color={colors.textMuted}>
+        {room.roomNumber ? `Room ${room.roomNumber} · ` : ''}
         Check-in {formatDate(room.checkInDate)} · Check-out {formatDate(room.checkOutDate)}
       </Text>
 

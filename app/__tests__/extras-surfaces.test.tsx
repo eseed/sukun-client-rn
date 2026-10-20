@@ -149,7 +149,7 @@ describe('20 · My tickets, extras on the card', () => {
     // mock also lists the ticket she bought Nour, who shares the room and has a dinner of her
     // own, so the shuttle, hers alone, is what tells her card apart.
     await waitFor(() => expect(screen.getByText('Cairo shuttle')).toBeTruthy());
-    expect(screen.getByText('Round trip')).toBeTruthy();
+    expect(screen.getByText('Pickup: Sheikh Zayed (Arkan Plaza) · Round trip')).toBeTruthy();
     expect(screen.getAllByText('Your stay').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Double · 2 nights').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Desert Lodge Room · 23–25 Oct').length).toBeGreaterThan(0);
@@ -207,7 +207,9 @@ describe('20 · My tickets, extras on the card', () => {
     expect(screen.getByText('Omar Sabae')).toBeTruthy();
     expect(screen.getByText('Kids Weekend Pass · no add-ons')).toBeTruthy();
     // Laila's shuttle is hers, listed under her name.
-    expect(screen.getByText('Cairo shuttle · Round trip')).toBeTruthy();
+    expect(
+      screen.getByText('Cairo shuttle · Pickup: Sheikh Zayed (Arkan Plaza) · Round trip'),
+    ).toBeTruthy();
     expect(
       screen.getByText('They come in with you: your QR code admits them all at the gate.'),
     ).toBeTruthy();
@@ -338,7 +340,7 @@ describe('21 · Entry pass, attached extras', () => {
     expect(screen.getByText('Dinner voucher')).toBeTruthy();
     expect(screen.getByText('Dinner voucher · redeem at the event')).toBeTruthy();
     expect(screen.getByText('Cairo shuttle')).toBeTruthy();
-    expect(screen.getByText('Round trip')).toBeTruthy();
+    expect(screen.getByText('Pickup: Sheikh Zayed (Arkan Plaza) · Round trip')).toBeTruthy();
   });
 
   it('names the children one scan lets in, with their extras', async () => {
@@ -391,7 +393,9 @@ describe('21 · Entry pass, attached extras', () => {
     }
     expect(screen.getByText('23 Oct 2026 → 25 Oct 2026 · redeem at the event')).toBeTruthy();
     expect(screen.getByText('Redeem at the event')).toBeTruthy();
-    expect(screen.getByText('Out 23 Oct 2026 · back 25 Oct 2026')).toBeTruthy();
+    expect(
+      screen.getByText('Pickup: Sheikh Zayed (Arkan Plaza) · Out 23 Oct 2026 · back 25 Oct 2026'),
+    ).toBeTruthy();
 
     addons.mockRestore();
   });
@@ -509,7 +513,11 @@ describe('19 · Order receipt', () => {
     }
     // The room and the shuttle each carry the design's detail line; the voucher has none.
     expect(screen.getByText('Check-in 23 Oct 2026 · check-out 25 Oct 2026')).toBeTruthy();
-    expect(screen.getByText('Out 23 Oct 2026, 08:00 · back 25 Oct 2026, 16:00')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Pickup: Sheikh Zayed (Arkan Plaza) · Out 23 Oct 2026, 08:00 · back 25 Oct 2026, 16:00',
+      ),
+    ).toBeTruthy();
     // Decision 6: a recipient who brought their own ticket comes back with no name, so the
     // receipt says how many rather than inventing a label for a stranger.
     expect(screen.getByText('For a ticket holder')).toBeTruthy();

@@ -16,6 +16,7 @@ import { codeForError } from '../lib/errors';
 import type {
   AppNotification,
   BuyerRoom,
+  RoomAttachmentUpload,
   CartAddonInput,
   CurrentUser,
   CursorPage,
@@ -831,7 +832,7 @@ export function useTicketAddonContext(ticketId: string | undefined) {
   });
 }
 
-/** Rooms this account paid for at an event, with who is in them and the places left. */
+/** Rooms this account paid for, or is in, at an event: who is in them, places, documents. */
 export function useEventRooms(eventId: string | undefined) {
   const signedIn = useAuthStore((s) => s.status === 'signed-in');
   return useQuery({
@@ -853,7 +854,25 @@ export function useAddRoomOccupant() {
         rooms?.map((item) => (item.roomId === room.roomId ? room : item)),
       );
       void client.invalidateQueries({ queryKey: queryKeys.rooms(room.eventId) });
-      void client.invalidateQueries({ queryKey: queryKeys.order(room.orderId) });
+      if (room.orderId) void client.invalidateQueries({ queryKey: queryKeys.order(room.orderId) });
+    },
+  });
+}
+
+/**
+ * Uploads a room's documents, once for the whole room, and writes the room the server answers
+ * with into the event's list. Any guest in the room, or its buyer, may upload.
+ */
+export function useUploadRoomAttachments() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { roomId: string; uploads: RoomAttachmentUpload[] }) =>
+      api.rooms.uploadAttachments(input.roomId, input.uploads),
+    onSuccess: (room) => {
+      client.setQueryData<BuyerRoom[]>(queryKeys.rooms(room.eventId), (rooms) =>
+        rooms?.map((item) => (item.roomId === room.roomId ? room : item)),
+      );
+      void client.invalidateQueries({ queryKey: queryKeys.rooms(room.eventId) });
     },
   });
 }

@@ -80,6 +80,10 @@ const MESSAGES: Record<string, string> = {
   ADDON_ROOM_FULL: 'This room is full.',
   ADDON_ROOM_CHANGES_CLOSED: 'This event is over, so its rooms can no longer change.',
   ADDON_ROOM_BOOKING_NOT_FOUND: "We couldn't find this room.",
+  ADDON_ROOM_ATTACHMENTS_NOT_REQUIRED: "This room doesn't ask for any documents.",
+  ADDON_ROOM_ATTACHMENTS_ALREADY_UPLOADED: 'Someone in your room already uploaded this.',
+  ADDON_ROOM_ATTACHMENTS_INCOMPLETE: 'Add every required document.',
+  ADDON_ROOM_ATTACHMENTS_INVALID: "These files don't match what the room asks for. Try again.",
   RECIPIENT_LOOKUP_RATE_LIMITED: 'Too many tries. Wait a few minutes and try again.',
   ADDON_ASSIGNMENT_COUNT_MISMATCH: 'Every extra needs somebody to go to.',
 

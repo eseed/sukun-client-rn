@@ -133,3 +133,43 @@ describe('landingHint', () => {
     expect(landingHint(null)).toBeNull();
   });
 });
+
+describe('website links', () => {
+  const EVENT = '22222222-2222-4222-8222-222222222222';
+
+  it("opens a room's documents in the app, from production or staging", () => {
+    for (const host of ['book.sukunwellness.co', 'clientstaging.sukunwellness.co']) {
+      expect(parseNotificationLink(`https://${host}/accommodation?eventId=${EVENT}`)).toEqual({
+        kind: 'accommodation',
+        eventId: EVENT,
+      });
+    }
+    // The backend sends it as the bare deepLink, with no landingLink.
+    expect(
+      landingFromLinks(undefined, `https://book.sukunwellness.co/accommodation?eventId=${EVENT}`),
+    ).toEqual({ kind: 'accommodation', eventId: EVENT });
+  });
+
+  it('leaves any other website page alone', () => {
+    expect(parseNotificationLink('https://book.sukunwellness.co/events/tulua')).toBeNull();
+  });
+
+  it('follows nothing off the website, over http, with credentials, or without an event', () => {
+    for (const link of [
+      `https://evil.example.com/accommodation?eventId=${EVENT}`,
+      `http://book.sukunwellness.co/accommodation?eventId=${EVENT}`,
+      `https://user:pass@book.sukunwellness.co/accommodation?eventId=${EVENT}`,
+      'https://book.sukunwellness.co/',
+      'https://book.sukunwellness.co/accommodation',
+      'https://book.sukunwellness.co/accommodation?eventId=not-a-uuid',
+    ]) {
+      expect(parseNotificationLink(link)).toBeNull();
+    }
+  });
+
+  it('says where a website link leads', () => {
+    expect(landingHint({ kind: 'accommodation', eventId: EVENT })).toBe(
+      'Opens your room documents',
+    );
+  });
+});

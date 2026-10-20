@@ -4,6 +4,8 @@ import type { SukunApi } from '../contract';
 import type {
   GroupQuote,
   BuyerRoom,
+  RoomAttachment,
+  RoomRequiredAttachment,
   ClaimAvailability,
   PlusOneGuestStatus,
   AccountDeletionPreview,
@@ -197,6 +199,8 @@ interface MockState {
   ticketAddons: Map<string, TicketAddon[]>;
   /** Which tickets occupy a room, per event, so one-room-per-person survives fulfilment. */
   accommodationTicketIds: Map<string, Set<string>>;
+  /** Documents uploaded per room id, once for the whole room. */
+  roomAttachments: Map<string, RoomAttachment[]>;
   /** The invitation behind each granted ticket, keyed by ticket id. */
   invitations: Map<string, MockInvitation>;
 }
@@ -242,6 +246,7 @@ const state: MockState = {
   pricingTokens: new Map(),
   ticketAddons: new Map(),
   accommodationTicketIds: new Map(),
+  roomAttachments: new Map(),
   invitations: new Map(),
 };
 
@@ -330,6 +335,7 @@ export function resetMockState(): void {
   state.pricingTokens.clear();
   state.ticketAddons.clear();
   state.accommodationTicketIds.clear();
+  state.roomAttachments.clear();
   state.invitations.clear();
   liveEventIds.clear();
   savedScheduleBlocks.clear();
@@ -722,6 +728,8 @@ function toOrderAddon(
     type: addon?.type ?? 'other',
     label: `${addon?.name ?? 'Extra'}${option ? ` · ${option.label}` : ''}`,
     transportDirection: option?.transportDirection ?? null,
+    pickupPoint: option?.pickupPoint ?? null,
+    transportStopType: option?.transportStopType ?? null,
     departureDate: option?.departureDate ?? null,
     departureTime: option?.departureTime ?? null,
     returnDate: option?.returnDate ?? null,
@@ -1052,6 +1060,8 @@ function issueAddonsFor(order: OrderDetail): void {
         addonName: addonForOption(line.addonOptionId)?.name ?? line.label,
         label: option?.label ?? line.label,
         transportDirection: line.transportDirection,
+        pickupPoint: line.pickupPoint ?? null,
+        transportStopType: line.transportStopType ?? null,
         departureDate: line.departureDate,
         departureTime: line.departureTime,
         returnDate: line.returnDate,
@@ -1106,6 +1116,19 @@ function holderPhoneOf(ticketId: string): string | null {
   return state.ticketOwnerPhones.get(ticketId) ?? state.ticketBuyerPhones.get(ticketId) ?? null;
 }
 
+/** What every mock room asks for: an ID per guest (two files allowed), and an optional one. */
+const MOCK_ROOM_DOCUMENTS: RoomRequiredAttachment[] = [
+  { key: 'national_id', label: 'National ID / Passport', required: true, maxFiles: 2 },
+  { key: 'marriage_certificate', label: 'Marriage certificate', required: false, maxFiles: 1 },
+];
+const MOCK_ROOM_DOCUMENT_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]);
+const MOCK_ROOM_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
+
 /**
  * The rooms a paid order of this account bought at an event, as `GET mobile/rooms` answers. The
  * mock keys a room by its room group and keeps its occupants as the order line's recipients.
@@ -1136,6 +1159,7 @@ function mockRoomsFor(user: CurrentUser, eventId: string): BuyerRoom[] {
               isYou: recipient.phoneNumber === user.phoneNumber,
             }));
           const openPlaces = Math.max(room.capacity - occupants.length, 0);
+          const attachments = state.roomAttachments.get(roomGroupId) ?? [];
           return [
             {
               roomId: roomGroupId,
@@ -1154,7 +1178,18 @@ function mockRoomsFor(user: CurrentUser, eventId: string): BuyerRoom[] {
               status: room.status,
               occupants,
               openPlaces,
+              isBuyer: true,
               canAddOccupants: openPlaces > 0 && !closed,
+              roomNumber: null,
+              requiredAttachments: MOCK_ROOM_DOCUMENTS,
+              attachments,
+              attachmentsValid: false,
+              attachmentsUploadedAt: attachments[0]?.uploadedAt ?? null,
+              canUploadAttachments:
+                !closed &&
+                MOCK_ROOM_DOCUMENTS.some(
+                  (document) => !attachments.some((file) => file.key === document.key),
+                ),
             },
           ];
         });
@@ -2369,6 +2404,81 @@ export const mockApi: SukunApi = {
         displayName: null,
         roomGroupId: roomId,
       });
+      return delay(mockRoomsFor(user, order.eventId).find((r) => r.roomId === roomId)!);
+    },
+
+    /** The backend's rules: each document once, required ones first, 20 MB for the room. */
+    async uploadAttachments(roomId, uploads): Promise<BuyerRoom> {
+      const user = requireUser();
+      const order = state.orders.find(
+        (item) =>
+          item.status === 'paid' &&
+          state.orderBuyerPhones.get(item.id) === user.phoneNumber &&
+          item.addons.some((addon) =>
+            addon.recipients.some((recipient) => recipient.roomGroupId === roomId),
+          ),
+      );
+      const current = order
+        ? mockRoomsFor(user, order.eventId).find((r) => r.roomId === roomId)
+        : undefined;
+      if (!order || !current) {
+        throw new MockApiError('ADDON_ROOM_BOOKING_NOT_FOUND', 'The room was not found', 404);
+      }
+      if (uploads.length === 0) {
+        throw new MockApiError('INVALID_MULTIPART_PAYLOAD', 'Invalid multipart payload', 400);
+      }
+      const stored = current.attachments;
+      const totalBytes = [
+        ...stored.map((file) => file.sizeBytes),
+        ...uploads.map((u) => u.file.size),
+      ].reduce((sum, size) => sum + size, 0);
+      if (totalBytes > MOCK_ROOM_DOCUMENT_MAX_BYTES) {
+        throw new MockApiError('FILE_TOO_LARGE', 'File is too large', 400);
+      }
+      if (uploads.some((upload) => !MOCK_ROOM_DOCUMENT_TYPES.has(upload.file.mimeType))) {
+        throw new MockApiError('UNSUPPORTED_CONTENT_TYPE', 'Unsupported file type', 400);
+      }
+      const counts = new Map<string, number>();
+      for (const upload of uploads) {
+        const document = MOCK_ROOM_DOCUMENTS.find((item) => item.key === upload.key);
+        if (!document) {
+          throw new MockApiError('ADDON_ROOM_ATTACHMENTS_INVALID', 'Invalid documents', 400);
+        }
+        if (stored.some((file) => file.key === upload.key)) {
+          throw new MockApiError(
+            'ADDON_ROOM_ATTACHMENTS_ALREADY_UPLOADED',
+            'Already uploaded',
+            409,
+          );
+        }
+        const count = (counts.get(upload.key) ?? 0) + 1;
+        if (count > (document.maxFiles ?? 1)) {
+          throw new MockApiError('ADDON_ROOM_ATTACHMENTS_INVALID', 'Too many files', 400);
+        }
+        counts.set(upload.key, count);
+      }
+      const missingRequired = MOCK_ROOM_DOCUMENTS.some(
+        (document) =>
+          document.required &&
+          !counts.has(document.key) &&
+          !stored.some((file) => file.key === document.key),
+      );
+      if (missingRequired) {
+        throw new MockApiError('ADDON_ROOM_ATTACHMENTS_INCOMPLETE', 'Documents missing', 400);
+      }
+      const uploadedAt = new Date().toISOString();
+      state.roomAttachments.set(roomId, [
+        ...stored,
+        ...uploads.map(({ key, file }) => ({
+          key,
+          label: MOCK_ROOM_DOCUMENTS.find((document) => document.key === key)!.label,
+          fileName: file.name,
+          contentType: file.mimeType,
+          sizeBytes: file.size,
+          uploadedAt,
+          url: file.uri,
+        })),
+      ]);
       return delay(mockRoomsFor(user, order.eventId).find((r) => r.roomId === roomId)!);
     },
   },

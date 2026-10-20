@@ -11,11 +11,13 @@ import {
   Text,
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
+import { RoomDocumentsPanel } from '../../src/components/tickets/RoomDocumentsPanel';
 import { RoomSpotsPanel } from '../../src/components/tickets/RoomSpotsPanel';
 import { IncludesVatNote } from '../../src/components/checkout/VatNotes';
 import type { OrderAddon } from '../../src/api/types';
 import { useCancelOrder, useEvent, useOrder } from '../../src/hooks/queries';
 import {
+  describeTransportStop,
   describeOrderAddonRecipients,
   orderAddonLabel,
   ticketAddonStatusLabel,
@@ -52,7 +54,8 @@ function describeReceiptAddon(addon: OrderAddon): string {
   }
 
   if (addon.departureDate) {
-    const out = `Out ${formatDate(addon.departureDate)}${
+    const stop = describeTransportStop(addon);
+    const out = `${stop ? `${stop} · ` : ''}Out ${formatDate(addon.departureDate)}${
       addon.departureTime ? `, ${addon.departureTime}` : ''
     }`;
     return addon.returnDate
@@ -235,6 +238,10 @@ export default function OrderDetailScreen() {
 
               {paid && data.addons.some((addon) => addon.room) ? (
                 <RoomSpotsPanel eventId={data.eventId} orderId={data.id} />
+              ) : null}
+
+              {paid && data.addons.some((addon) => addon.room) ? (
+                <RoomDocumentsPanel eventId={data.eventId} orderId={data.id} />
               ) : null}
 
               {data.addons.length > 0 ? (

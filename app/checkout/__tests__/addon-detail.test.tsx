@@ -430,9 +430,15 @@ describe('add-on detail · meals and transport (design 12)', () => {
     await signInAndComplete();
     await openAddon(ADDON_TRANSPORT);
 
-    expect(within(cardFor('One way')).getByText('Out 23 Oct 2026, 08:00')).toBeTruthy();
     expect(
-      within(cardFor('Round trip')).getByText('Out 23 Oct 2026, 08:00 · back 25 Oct 2026, 16:00'),
+      within(cardFor('One way')).getByText(
+        'Pickup: New Cairo (El Rehab, Gate 13) · Out 23 Oct 2026, 08:00',
+      ),
+    ).toBeTruthy();
+    expect(
+      within(cardFor('Round trip')).getByText(
+        'Pickup: Sheikh Zayed (Arkan Plaza) · Out 23 Oct 2026, 08:00 · back 25 Oct 2026, 16:00',
+      ),
     ).toBeTruthy();
   });
 
