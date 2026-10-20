@@ -1589,6 +1589,43 @@ describe('12 Confirmation', () => {
     );
   });
 
+  /** As on the website: a room with a free spot, and a room asking for documents, each lead on. */
+  it("offers the room's next steps: a roommate for its free spot, then its documents", async () => {
+    await signInAndComplete();
+    const cart = await mockApi.carts.create(TULUA_ID);
+    const withTickets = await mockApi.carts.replaceTickets(cart.id, {
+      buyerTierId: null,
+      items: [{ tierId: TIER_WEEKEND, quantity: 1 }],
+      guests: [{ phoneNumber: '+201022334455', name: 'Nour Hassan', tierId: TIER_WEEKEND }],
+    });
+    await mockApi.carts.replaceAddons(cart.id, [
+      {
+        optionId: 'opt-lodge-double-2',
+        quantity: 1,
+        // A double with one person in it: the other place is left for later.
+        rooms: [{ occupants: [{ cartAttendeeId: withTickets.attendees[0]!.cartAttendeeId }] }],
+      },
+    ]);
+    const preview = await mockApi.carts.preview(cart.id);
+    const order = await mockApi.carts.placeOrder(
+      cart.id,
+      preview.pricing.pricingConfirmationToken!,
+    );
+    await payOrder(order.id);
+    mockParams.orderId = order.id;
+
+    renderWithProviders(<ConfirmationScreen />);
+
+    await waitFor(() => expect(screen.getByText('Add a roommate')).toBeTruthy());
+    expect(screen.getByText('Free spot in your room. Add a roommate any time.')).toBeTruthy();
+    fireEvent.press(screen.getByText('Add a roommate'));
+    expect(mockRouter.push).toHaveBeenCalledWith(`/rooms?eventId=${order.eventId}`);
+
+    await waitFor(() => expect(screen.getByText('Upload room documents')).toBeTruthy());
+    fireEvent.press(screen.getByText('Upload room documents'));
+    expect(mockRouter.push).toHaveBeenCalledWith(`/accommodation?eventId=${order.eventId}`);
+  });
+
   it('says nothing about a selfie to a buyer who already has one', async () => {
     await signInAndComplete();
     const order = await placeOrderViaCart({
