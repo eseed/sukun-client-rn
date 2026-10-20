@@ -566,13 +566,35 @@ async function documentPart(document: PickedDocument): Promise<Blob> {
       throw new ApiError('FILE_READ_FAILED', 'The document could not be read.', response.status);
     }
     const blob = await response.blob();
-    return new globalThis.File([blob], document.name, { type: document.mimeType });
+    return new globalThis.File([blob], partFileName(document.name), { type: document.mimeType });
   }
   const file = new File(document.uri);
   return {
-    name: document.name,
+    name: partFileName(document.name),
     type: document.mimeType,
     size: document.size,
     bytes: () => file.bytes(),
   } as unknown as Blob;
+}
+
+/**
+ * The file name a part carries: Expo's encoder percent-encodes anything outside plain ASCII
+ * ("ID%20front.jpg"), and the backend stores the name as sent, so it is cleaned here instead.
+ * A name with nothing readable left (an Arabic one) becomes `document.<ext>`.
+ */
+export function partFileName(name: string): string {
+  const dot = name.lastIndexOf('.');
+  const extension =
+    dot > 0
+      ? name
+          .slice(dot + 1)
+          .replace(/[^A-Za-z0-9]/g, '')
+          .toLowerCase()
+      : '';
+  const base = (dot > 0 ? name.slice(0, dot) : name)
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 80);
+  const readable = /[A-Za-z0-9]/.test(base) ? base : 'document';
+  return extension ? `${readable}.${extension}` : readable;
 }
