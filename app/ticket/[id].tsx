@@ -14,6 +14,7 @@ import {
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
 import { PlusOnePanel } from '../../src/components/tickets/PlusOnePanel';
+import { RoomDocumentsPanel } from '../../src/components/tickets/RoomDocumentsPanel';
 import { RoomSpotsPanel } from '../../src/components/tickets/RoomSpotsPanel';
 import {
   queryKeys,
@@ -566,6 +567,8 @@ export default function EntryPassScreen() {
         {ticket.plusOne && !needsClaim && !unusable ? <PlusOnePanel ticket={ticket} /> : null}
 
         {!needsClaim && !unusable ? <RoomSpotsPanel eventId={ticket.event.id} /> : null}
+
+        {!needsClaim && !unusable ? <RoomDocumentsPanel eventId={ticket.event.id} /> : null}
 
         {ticket.children.length > 0 && !unusable ? (
           <View style={styles.addons}>

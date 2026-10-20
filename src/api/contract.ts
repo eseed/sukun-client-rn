@@ -2,6 +2,7 @@ import type {
   GroupQuote,
   AccountDeletionPreview,
   BuyerRoom,
+  RoomAttachmentUpload,
   AddonDetail,
   AddonSummary,
   AppConfig,
@@ -101,7 +102,10 @@ export interface SukunApi {
     detail(identifier: string, signal?: AbortSignal): Promise<EventDetail>;
     meta(identifier: string): Promise<EventMeta>;
     /** A mix of passes priced as a group (`POST public/events/:id/group-quote`). Public. */
-    groupQuote(identifier: string, items: { tierId: string; quantity: number }[]): Promise<GroupQuote>;
+    groupQuote(
+      identifier: string,
+      items: { tierId: string; quantity: number }[],
+    ): Promise<GroupQuote>;
   };
 
   schedule: {
@@ -212,13 +216,19 @@ export interface SukunApi {
   };
 
   rooms: {
-    /** Rooms this account paid for at an event, with who is in them and the places left. */
+    /** Rooms this account paid for, or is in, at an event: who is in them, places, documents. */
     list(eventId: string): Promise<BuyerRoom[]>;
     /**
      * Puts the ticket holder on this number in an empty place of a room this account paid for.
      * A number with no ticket to the event is refused the same whether or not it has an account.
      */
     addOccupant(roomId: string, phoneNumber: string): Promise<BuyerRoom>;
+    /**
+     * Uploads documents for the whole room, any guest in it or its buyer. Every required document
+     * comes in the first upload; optional ones may follow later. Each document is sent once, with
+     * up to its `maxFiles`, and all the room's files together stay within 20 MB.
+     */
+    uploadAttachments(roomId: string, uploads: RoomAttachmentUpload[]): Promise<BuyerRoom>;
   };
 
   /**

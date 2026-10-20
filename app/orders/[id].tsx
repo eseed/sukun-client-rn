@@ -11,6 +11,7 @@ import {
   Text,
 } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
+import { RoomDocumentsPanel } from '../../src/components/tickets/RoomDocumentsPanel';
 import { RoomSpotsPanel } from '../../src/components/tickets/RoomSpotsPanel';
 import { IncludesVatNote } from '../../src/components/checkout/VatNotes';
 import type { OrderAddon } from '../../src/api/types';
@@ -235,6 +236,10 @@ export default function OrderDetailScreen() {
 
               {paid && data.addons.some((addon) => addon.room) ? (
                 <RoomSpotsPanel eventId={data.eventId} orderId={data.id} />
+              ) : null}
+
+              {paid && data.addons.some((addon) => addon.room) ? (
+                <RoomDocumentsPanel eventId={data.eventId} orderId={data.id} />
               ) : null}
 
               {data.addons.length > 0 ? (
