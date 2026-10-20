@@ -35,5 +35,8 @@ export function openNotificationLanding(router: Router, landing: NotificationLan
         params: { slug: landing.slug, landing: 'addon', addon: landing.addonId },
       });
       return;
+    case 'accommodation':
+      router.push({ pathname: '/accommodation', params: { eventId: landing.eventId } });
+      return;
   }
 }

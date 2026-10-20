@@ -45,6 +45,11 @@ const ROOM: BuyerRoom = {
   ],
   openPlaces: 1,
   canAddOccupants: true,
+  requiredAttachments: [],
+  attachments: [],
+  attachmentsValid: false,
+  attachmentsUploadedAt: null,
+  canUploadAttachments: false,
 };
 
 const mutateAsync = jest.fn();

@@ -1318,20 +1318,49 @@ export interface RoomOccupant {
   isYou: boolean;
 }
 
+/** `MobileRoomRequiredAttachmentResponseDto`: a document the room asks its guests to upload. */
+export interface RoomRequiredAttachment {
+  /** The slug sent back with the upload (`national_id`). */
+  key: string;
+  label: string;
+  /** False marks a document that may be skipped and added later. */
+  required: boolean;
+  /** Images or PDFs accepted together for this document. Absent from older backends: one. */
+  maxFiles?: number;
+}
+
+/** `MobileRoomAttachmentResponseDto`: a document uploaded for the whole room. */
+export interface RoomAttachment {
+  key: string;
+  label: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  /** Signed read link for the private document, valid a day. Re-fetch the room for a fresh one. */
+  url: string;
+}
+
 /**
- * `MobileRoomResponseDto`: a room this account paid for (`GET mobile/rooms`).
+ * `MobileRoomResponseDto`: a room this account has a stake in (`GET mobile/rooms`): one it paid
+ * for, or one its own ticket is in.
  *
  * A room needs one person in it at checkout; its other places may stay empty, and its buyer fills
  * them later with people who hold a ticket to the event (`POST mobile/rooms/:roomId/occupants`).
+ * Any guest in the room, or its buyer, uploads the documents the room asks for, once for the whole
+ * room (`POST mobile/rooms/:roomId/attachments`).
  */
 export interface BuyerRoom {
   roomId: string;
   eventId: string;
-  orderId: string;
-  orderNumber: string;
+  /** Null on a room the account did not buy (its ticket is in it). */
+  orderId: string | null;
+  orderNumber: string | null;
   addonName: string;
   label: string;
   roomType: string;
+  /** Set by the team once rooms are allocated. */
+  roomNumber?: string | null;
   nights: number;
   checkInDate: string;
   checkInTime: string;
@@ -1341,7 +1370,33 @@ export interface BuyerRoom {
   status: TicketAddonRoom['status'];
   occupants: RoomOccupant[];
   openPlaces: number;
+  /** True for the account that paid for the room; only it can add roommates. */
+  isBuyer?: boolean;
   canAddOccupants: boolean;
+  requiredAttachments: RoomRequiredAttachment[];
+  attachments: RoomAttachment[];
+  /** The team checked the documents. */
+  attachmentsValid: boolean;
+  attachmentsUploadedAt: string | null;
+  /** True while a document the room asks for is still missing and the event is not over. */
+  canUploadAttachments: boolean;
+}
+
+/**
+ * One file picked on the phone for a room document. `uri` is a local file (the photo library,
+ * the camera, or the Files app); `mimeType` and `size` are what the picker reported.
+ */
+export interface PickedDocument {
+  uri: string;
+  name: string;
+  mimeType: string;
+  size: number;
+}
+
+/** A document upload: each file with the key of the document it is for. */
+export interface RoomAttachmentUpload {
+  key: string;
+  file: PickedDocument;
 }
 
 /* ----------------------------------------------------------- notifications */

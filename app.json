@@ -20,8 +20,8 @@
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry.",
-        "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification.",
+        "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry, and to photograph the room documents you choose to upload.",
+        "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification or a room document to upload.",
         "NSContactsUsageDescription": "Sukun uses your contacts so you can attach guests to tickets by phone number.",
         "NSCalendarsUsageDescription": "Sukun opens your calendar so you can add the events you choose to it."
       }

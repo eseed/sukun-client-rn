@@ -5,6 +5,7 @@ import type {
   GroupQuote,
   AccountDeletionPreview,
   BuyerRoom,
+  PickedDocument,
   AddonDetail,
   AddonSummary,
   AppConfig,
@@ -492,6 +493,20 @@ export const liveApi: SukunApi = {
         method: 'POST',
         body: { phoneNumber: normalizePhoneForRequest(phoneNumber) },
       }),
+
+    // POST mobile/rooms/:roomId/attachments (multipart): `data` = JSON `{ keys }`, then `files` in
+    // the same order. A key repeats once per file of a document with several.
+    async uploadAttachments(roomId, uploads) {
+      const form = new FormData();
+      form.append('data', JSON.stringify({ keys: uploads.map((upload) => upload.key) }));
+      for (const { file } of uploads) {
+        form.append('files', await documentPart(file));
+      }
+      return request<BuyerRoom>(`mobile/rooms/${encodeURIComponent(roomId)}/attachments`, {
+        method: 'POST',
+        form,
+      });
+    },
   },
 
   notifications: {
@@ -534,3 +549,30 @@ export const liveApi: SukunApi = {
       }),
   },
 };
+
+/**
+ * One picked document as a multipart part, under its own name and type.
+ *
+ * Expo's `fetch` writes a part from its `name`, its `type` and its `bytes()` (`convertFormData`),
+ * so the part is exactly that: the name and type the picker reported, and the bytes of the local
+ * file. An `expo-file-system` File alone would name the part after its cache path and guess the
+ * type from that, which loses the name the guest sees and the type the server checks. The web
+ * target has no local files, so it reads the picked `blob:` uri into a real Blob.
+ */
+async function documentPart(document: PickedDocument): Promise<Blob> {
+  if (Platform.OS === 'web') {
+    const response = await fetch(document.uri);
+    if (!response.ok) {
+      throw new ApiError('FILE_READ_FAILED', 'The document could not be read.', response.status);
+    }
+    const blob = await response.blob();
+    return new globalThis.File([blob], document.name, { type: document.mimeType });
+  }
+  const file = new File(document.uri);
+  return {
+    name: document.name,
+    type: document.mimeType,
+    size: document.size,
+    bytes: () => file.bytes(),
+  } as unknown as Blob;
+}
