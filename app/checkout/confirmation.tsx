@@ -3,8 +3,15 @@ import { useEffect } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Button, ResourceState, Screen, Text } from '../../src/components/ui';
 import { BottomNav } from '../../src/components/ui/BottomNav';
-import { useEvent, useOrder, usePaymentStatus, useTickets } from '../../src/hooks/queries';
+import {
+  useEvent,
+  useEventRooms,
+  useOrder,
+  usePaymentStatus,
+  useTickets,
+} from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
+import { roomAsksForDocuments, roomNeedsDocuments } from '../../src/lib/room-documents';
 import { clearPendingPayment } from '../../src/lib/pending-payment';
 import { trackPurchaseCompleted } from '../../src/lib/purchase-analytics';
 import { designAsset } from '../../src/theme/assets';
@@ -110,6 +117,8 @@ export default function ConfirmationScreen() {
    * server says paid: the sheet's verdict alone is not proof of payment.
    */
   const paid = orderQuery.data?.status === 'paid';
+  // The rooms this order bought, for the documents they ask for. Asked only once it is paid.
+  const roomsQuery = useEventRooms(paid ? orderQuery.data?.eventId : undefined);
   const statusQuery = usePaymentStatus(validOrderId, { poll: Boolean(orderQuery.data) && !paid });
   const serverStatus = statusQuery.data?.orderStatus;
   /** The server has failed the order or its attempt: retrying belongs to the payment screen. */
@@ -248,6 +257,10 @@ export default function ConfirmationScreen() {
     return [...groups.values()].some((count) => count < addon.room!.capacity);
   });
 
+  const roomsAskingForDocuments = (roomsQuery.data ?? []).filter(
+    (room) => room.orderId === order.id && roomAsksForDocuments(room),
+  );
+
   function openTicket() {
     if (firstTicket) router.replace(`/ticket/${firstTicket.id}`);
     else router.replace('/(tabs)/tickets');
@@ -302,9 +315,36 @@ export default function ConfirmationScreen() {
 
             {attachedLine ? <Text style={styles.attached}>{attachedLine}</Text> : null}
             {roomHasSpot ? (
-              <Text style={styles.attached}>
-                Free spot in your room: add a roommate from your ticket.
-              </Text>
+              <View style={styles.roomAction}>
+                <Text style={styles.roomActionText}>
+                  Free spot in your room. Add a roommate any time.
+                </Text>
+                <Button
+                  label="Add a roommate"
+                  variant="secondary"
+                  size="inline"
+                  onPress={() => router.push(`/rooms?eventId=${order.eventId}`)}
+                />
+              </View>
+            ) : null}
+            {roomsAskingForDocuments.length > 0 ? (
+              <View style={styles.roomAction}>
+                <Text style={styles.roomActionText}>
+                  {roomsAskingForDocuments.some(roomNeedsDocuments)
+                    ? 'Your room needs documents. Upload them any time.'
+                    : 'Your room documents are in.'}
+                </Text>
+                <Button
+                  label={
+                    roomsAskingForDocuments.some(roomNeedsDocuments)
+                      ? 'Upload room documents'
+                      : 'View room documents'
+                  }
+                  variant="secondary"
+                  size="inline"
+                  onPress={() => router.push(`/accommodation?eventId=${order.eventId}`)}
+                />
+              </View>
             ) : null}
 
             {promptForSelfie ? (
@@ -404,6 +444,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.textMuted,
     marginBottom: 20,
+  },
+  // A room's next step under the order: its line, then its button, centred like the rest.
+  roomAction: {
+    alignItems: 'center',
+    gap: space.s2,
+    marginBottom: 20,
+  },
+  roomActionText: {
+    fontSize: fontSize.label,
+    lineHeight: fontSize.label * 1.6,
+    textAlign: 'center',
+    color: colors.textMuted,
   },
   /*
    * The gold tonal pair the design system already spends on "this ticket needs something":

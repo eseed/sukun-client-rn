@@ -47,6 +47,8 @@ import { openVenueInMaps, venueMapUrl } from '../../src/lib/maps';
 import { trackMetaFindLocation, trackMetaViewContent } from '../../src/lib/meta-events';
 import { extractYoutubeIds, stripYoutubeEmbeds, youtubeVideoId } from '../../src/lib/youtube';
 import { isEventPageLanding } from '../../src/services/notifications/deep-link';
+import { RoomDocumentsPanel } from '../../src/components/tickets/RoomDocumentsPanel';
+import { RoomSpotsPanel } from '../../src/components/tickets/RoomSpotsPanel';
 import { useAuthStore } from '../../src/stores/auth';
 import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
@@ -393,6 +395,14 @@ export default function EventDetailScreen() {
         </View>
 
         <View style={styles.body}>
+          {/* A room they have here, as on the website: its free spots, then its documents. */}
+          {authStatus === 'signed-in' ? (
+            <>
+              <RoomSpotsPanel eventId={event.id} />
+              <RoomDocumentsPanel eventId={event.id} />
+            </>
+          ) : null}
+
           <MarkdownText markdown={description} variant="bodyLead" style={styles.lead} />
 
           {/* The admin's content blocks, each kind where it fits (placement A). */}
