@@ -54,6 +54,8 @@ import { useCheckoutStore } from '../../src/stores/checkout';
 import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { useLiveEventContext } from '../../src/hooks/useLiveEventContext';
+import { useEnterLiveMode } from '../../src/components/live-event/live-event-return-banner';
+import { useLiveModeOn } from '../../src/stores/liveMode';
 import { GroupDiscountTeaser } from '../../src/components/checkout/GroupDiscount';
 import { groupDiscountTeaser } from '../../src/lib/groupDiscount';
 import type { AddonSummary } from '../../src/api/types';
@@ -121,6 +123,13 @@ export default function EventDetailScreen() {
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
   const liveContext = useLiveEventContext();
+  const eventHappeningForHolder = Boolean(event) && (
+    (liveContext.status === 'ready' && liveContext.context.eventId === event?.id) ||
+    (liveContext.status === 'choose' && liveContext.choices.some((choice) => choice.event.id === event?.id))
+  );
+  const viewerId = useAuthStore((state) => state.user?.id ?? null);
+  const liveModeOn = useLiveModeOn(viewerId, event?.id);
+  const enterLiveMode = useEnterLiveMode();
   // The schedule link shows only once the event has published sessions: loading, failed (a
   // backend without schedules answers 404) and empty all leave it out, never a dead end.
   const scheduleQuery = usePublicEventSchedule(eventSlug);
@@ -496,12 +505,12 @@ export default function EventDetailScreen() {
             ) : null}
           </View>
 
-          {liveContext.status === 'ready' && liveContext.context.eventId === event.id ? (
+          {/* A holder whose event is happening can switch live mode on from here too. */}
+          {eventHappeningForHolder ? (
             <View style={styles.liveCta}>
               <Button
-                label={`Open LIVE ${event.title}`}
-                size="inline"
-                onPress={() => router.push(`/live-event/${event.id}`)}
+                label={liveModeOn ? 'Back to live mode' : 'Enter live mode'}
+                onPress={() => enterLiveMode(event.id, 'event_page')}
               />
             </View>
           ) : null}

@@ -3,8 +3,9 @@ import { useEffect } from 'react';
 import { api } from '../api';
 import type { EventDetail, EventListItem, Ticket } from '../api/types';
 import { queryKeys } from './queries';
-import { groupActiveTickets, liveEventChoices, type LiveEventContextState } from '../lib/live-event';
+import { groupActiveTickets, isEventHappening, type LiveEventContextState } from '../lib/live-event';
 import { useAuthStore } from '../stores/auth';
+import { useLiveModeStore } from '../stores/liveMode';
 
 async function loadAllTickets(signal: AbortSignal): Promise<Ticket[]> {
   let page = await api.tickets.list({ statuses: ['active'], limit: 100 }, signal);
@@ -28,18 +29,6 @@ function clearSessionLiveEventChoice() {
   sessionLiveEventChoice = null;
 }
 
-async function loadAllLiveEvents(signal: AbortSignal): Promise<EventListItem[]> {
-  let page = await api.events.list({ state: ['live'], limit: 100 }, signal);
-  const events = [...page.data];
-  const seen = new Set<string>();
-  while (page.meta.hasNextPage && page.meta.nextCursor && !seen.has(page.meta.nextCursor)) {
-    seen.add(page.meta.nextCursor);
-    page = await api.events.list({ state: ['live'], limit: 100, cursor: page.meta.nextCursor }, signal);
-    events.push(...page.data);
-  }
-  return events.filter((event) => event.state === 'live');
-}
-
 function ticketEventDistance(tickets: Ticket[], now: number): number {
   let nearest = Number.POSITIVE_INFINITY;
   for (const ticket of tickets) {
@@ -59,7 +48,8 @@ function asEventListItem(event: EventDetail): EventListItem {
     title: event.title,
     tagline: event.tagline,
     coverImageUrl: event.coverImageUrl,
-    state: 'live',
+    // Public detail never serves a draft.
+    state: event.state as EventListItem['state'],
     startDate: event.startDate,
     endDate: event.endDate,
     venueName: event.venue?.name ?? null,
@@ -69,7 +59,12 @@ function asEventListItem(event: EventDetail): EventListItem {
   };
 }
 
-async function loadTicketedLiveEvents(
+/**
+ * The holder's ticketed Events that are happening now (`isEventHappening`). Events stay on
+ * sale while they run, so the public LIVE list no longer finds them: each candidate's detail
+ * is the authoritative check.
+ */
+async function loadHappeningTicketedEvents(
   tickets: Ticket[],
   signal: AbortSignal,
 ): Promise<{
@@ -85,11 +80,12 @@ async function loadTicketedLiveEvents(
     else groups.set(key, [ticket]);
   }
 
+  const now = Date.now();
   const candidates = [...groups.values()]
-    .map((group) => ({ group, distance: ticketEventDistance(group, Date.now()) }))
+    .map((group) => ({ group, distance: ticketEventDistance(group, now) }))
     .sort((a, b) => a.distance - b.distance)
-    // A holder usually has only a few active event tickets. Bound the fallback so a large
-    // account cannot fan out unbounded event-detail requests when the LIVE list is empty.
+    // A holder usually has only a few active event tickets. Bound the lookups so a large
+    // account cannot fan out unbounded event-detail requests.
     .slice(0, 5);
 
   const checked = await Promise.all(
@@ -98,25 +94,25 @@ async function loadTicketedLiveEvents(
       if (!first) return null;
       try {
         const detail = await api.events.detail(first.event.slug || first.event.id, signal);
-        if (detail.state !== 'live') return null;
+        if (!isEventHappening(detail, now)) return null;
         return {
           distance,
           event: asEventListItem(detail),
-          ticket: group.find((ticket) => ticket.event.id === detail.id) ?? first,
+          ticket: groupActiveTickets(group, detail.id)[0] ?? first,
           detail,
         };
       } catch {
-        // An old ticket can point to an event detail that is no longer public. Other candidates
-        // still get checked, and the LIVE list remains the primary source.
+        // An old ticket can point to an event detail that is no longer public. Other
+        // candidates still get checked.
         return null;
       }
     }),
   );
 
-  const live = checked.filter((choice): choice is NonNullable<typeof choice> => choice !== null);
-  if (!live.length) return { choices: [], details: new Map() };
-  const nearest = Math.min(...live.map((choice) => choice.distance));
-  const nearestChoices = live.filter((choice) => choice.distance === nearest);
+  const happening = checked.filter((choice): choice is NonNullable<typeof choice> => choice !== null);
+  if (!happening.length) return { choices: [], details: new Map() };
+  const nearest = Math.min(...happening.map((choice) => choice.distance));
+  const nearestChoices = happening.filter((choice) => choice.distance === nearest);
   return {
     choices: nearestChoices.map(({ event, ticket }) => ({ event, ticket })),
     details: new Map(nearestChoices.map(({ event, detail }) => [event.id, detail])),
@@ -128,22 +124,7 @@ async function resolveLiveEventContext(selectedEventId: string | null, signal: A
   const activeTickets = tickets.filter((ticket) => ticket.status === 'active');
   if (!activeTickets.length) return { status: 'none' };
 
-  // The public LIVE list is the efficient primary lookup. If it omits a ticket's Event, resolve
-  // a bounded set of the holder's own ticketed Events by slug as a fallback; event detail is the
-  // authoritative state check and avoids silently sending a holder to Discover on list drift.
-  let events: EventListItem[] = [];
-  try {
-    events = await loadAllLiveEvents(signal);
-  } catch {
-    // Ticket-specific public detail checks below can still resolve the holder's LIVE Event.
-  }
-  let choices = liveEventChoices(events, activeTickets);
-  let directDetails = new Map<string, EventDetail>();
-  if (!choices.length) {
-    const fallback = await loadTicketedLiveEvents(activeTickets, signal);
-    choices = fallback.choices;
-    directDetails = fallback.details;
-  }
+  const { choices, details } = await loadHappeningTicketedEvents(activeTickets, signal);
   if (!choices.length) return { status: 'none' };
   if (choices.length > 1 && !choices.some(({ event }) => event.id === selectedEventId)) {
     return { status: 'choose', choices };
@@ -151,9 +132,8 @@ async function resolveLiveEventContext(selectedEventId: string | null, signal: A
   const selected = choices.find(({ event }) => event.id === selectedEventId) ?? choices[0];
   if (!selected) return { status: 'none' };
 
-  const event = directDetails.get(selected.event.id) ??
-    await api.events.detail(selected.event.slug || selected.event.id, signal);
-  if (event.state !== 'live') return { status: 'none' };
+  const event = details.get(selected.event.id);
+  if (!event) return { status: 'none' };
   const activeTicketsForEvent = activeTickets.filter(
     (ticket) => ticket.event.id === event.id || ticket.event.slug === event.slug,
   );
@@ -165,11 +145,17 @@ async function resolveLiveEventContext(selectedEventId: string | null, signal: A
   };
 }
 
-/** Resolve an active ticket and a backend-live Event as one cached launch context. */
+/**
+ * Resolve an active ticket and an Event happening now as one cached context. `ready` means the
+ * holder may switch live mode on; whether it is on is `useLiveModeStore`.
+ */
 export function useLiveEventContext(enabled = true, selectedEventId?: string): LiveEventContextState {
   const authStatus = useAuthStore((state) => state.status);
   const userId = useAuthStore((state) => state.user?.id ?? null);
-  const selection = selectedEventId ?? (sessionLiveEventChoice?.userId === userId ? sessionLiveEventChoice.eventId : null);
+  const liveModeEventId = useLiveModeStore((state) => state.choice?.userId === userId ? state.choice.eventId : null);
+  const selection = selectedEventId ??
+    (sessionLiveEventChoice?.userId === userId ? sessionLiveEventChoice.eventId : null) ??
+    liveModeEventId;
   useEffect(() => {
     if (authStatus === 'signed-out') clearSessionLiveEventChoice();
   }, [authStatus]);
