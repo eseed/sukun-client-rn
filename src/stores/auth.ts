@@ -112,6 +112,13 @@ interface AuthState {
    * `pendingCheckoutEventId`.
    */
   pendingClaimTicketId: string | null;
+  /**
+   * The event whose room documents a website link asked for (`app/+native-intent.tsx`) before
+   * the session was known: a cold start, or someone not signed in. The entry gate opens the
+   * documents once they are signed in. In memory, for the same reasons as
+   * `pendingCheckoutEventId`.
+   */
+  pendingAccommodationEventId: string | null;
 
   restore: () => Promise<void>;
   setPendingPhone: (phone: string | null) => void;
@@ -121,6 +128,7 @@ interface AuthState {
   takePendingCheckoutEventId: () => string | null;
   setPendingClaimTicketId: (ticketId: string | null) => void;
   takePendingClaimTicketId: () => string | null;
+  setPendingAccommodationEventId: (eventId: string | null) => void;
   deferSetup: () => Promise<void>;
   browseAsGuest: () => Promise<void>;
   signIn: (
@@ -138,6 +146,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   guestBrowsing: false,
   pendingCheckoutEventId: null,
   pendingClaimTicketId: null,
+  pendingAccommodationEventId: null,
   user: null,
   pendingPhone: null,
 
@@ -211,6 +220,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return ticketId;
   },
 
+  setPendingAccommodationEventId(eventId) {
+    set({ pendingAccommodationEventId: eventId });
+  },
+
   /**
    * Record that this user is browsing with an unfinished profile. The session is kept: the
    * number is already verified, and throwing it away would cost the signup this exit exists
@@ -274,6 +287,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       setupDeferred: false,
       pendingCheckoutEventId: null,
       pendingClaimTicketId: null,
+      pendingAccommodationEventId: null,
     });
     resetAnalytics();
 

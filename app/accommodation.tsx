@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
@@ -24,6 +24,7 @@ import {
 } from '../src/components/ui';
 import { useEvent, useEventRooms, useUploadRoomAttachments } from '../src/hooks/queries';
 import { track } from '../src/lib/analytics';
+import { useAuthStore } from '../src/stores/auth';
 import { codeForError, messageForError } from '../src/lib/errors';
 import { formatDate } from '../src/lib/format';
 import {
@@ -62,6 +63,11 @@ export default function AccommodationScreen() {
   const roomsQuery = useEventRooms(validEventId);
   const eventQuery = useEvent(validEventId);
   const rooms = roomsQuery.data ?? [];
+
+  // Opened from a website link that waited for sign-in (`app/index.tsx`): it has been used.
+  useEffect(() => {
+    useAuthStore.getState().setPendingAccommodationEventId(null);
+  }, []);
 
   function close() {
     if (router.canGoBack()) router.back();

@@ -33,6 +33,7 @@ export default function Index() {
   const user = useAuthStore((s) => s.user);
   const setupDeferred = useAuthStore((s) => s.setupDeferred);
   const guestBrowsing = useAuthStore((s) => s.guestBrowsing);
+  const pendingAccommodationEventId = useAuthStore((s) => s.pendingAccommodationEventId);
   const [selectedEventId, setSelectedEventId] = useState<string>();
   const liveEvent = useLiveEventContext(status === 'signed-in', selectedEventId);
 
@@ -57,6 +58,11 @@ export default function Index() {
   }
 
   if (status === 'signed-in' && user) {
+    // A room documents link opened the app (`app/+native-intent.tsx`): it goes first, once the
+    // profile is done. The screen clears the pending event when it opens.
+    if (user.profileComplete && pendingAccommodationEventId) {
+      return <Redirect href={`/accommodation?eventId=${pendingAccommodationEventId}`} />;
+    }
     // LIVE mode is an app-ready destination only: an unfinished profile still owes its
     // onboarding step first (plan section 7). The resolver is awaited either way so an
     // incomplete account does not race past the ticket check into onboarding.

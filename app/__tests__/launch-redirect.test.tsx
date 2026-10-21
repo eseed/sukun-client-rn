@@ -65,6 +65,7 @@ beforeEach(() => {
     pendingPhone: null,
     setupDeferred: false,
     guestBrowsing: false,
+    pendingAccommodationEventId: null,
   });
 });
 
@@ -99,6 +100,26 @@ describe('Launch redirect', () => {
     useAuthStore.setState({ status: 'signed-in', user: user() });
     renderWithProviders(<Index />);
     await waitFor(() => expect(hrefs).toEqual(['/(tabs)/discover']));
+  });
+
+  it('opens the room documents a website link asked for, once signed in', () => {
+    useAuthStore.setState({
+      status: 'signed-in',
+      user: user(),
+      pendingAccommodationEventId: 'event-1',
+    });
+    renderWithProviders(<Index />);
+    expect(hrefs).toEqual(['/accommodation?eventId=event-1']);
+  });
+
+  it('lets an unfinished profile come first, then the room documents', () => {
+    useAuthStore.setState({
+      status: 'signed-in',
+      user: owesProfile(),
+      pendingAccommodationEventId: 'event-1',
+    });
+    renderWithProviders(<Index />);
+    expect(hrefs).not.toContain('/accommodation?eventId=event-1');
   });
 
   it('opens a LIVE event when the signed-in account has its active ticket', async () => {
