@@ -9,6 +9,7 @@ import {
   setMockLiveEvents,
 } from '../../src/api/mock';
 import { useAuthStore } from '../../src/stores/auth';
+import { useLiveModeStore } from '../../src/stores/liveMode';
 import { renderWithProviders, waitFor } from '../../src/test-utils';
 import Index from '../index';
 
@@ -67,6 +68,7 @@ beforeEach(() => {
     guestBrowsing: false,
     pendingAccommodationEventId: null,
   });
+  useLiveModeStore.setState({ status: 'ready', choice: null });
 });
 
 afterEach(() => {
@@ -122,7 +124,7 @@ describe('Launch redirect', () => {
     expect(hrefs).not.toContain('/accommodation?eventId=event-1');
   });
 
-  it('opens a LIVE event when the signed-in account has its active ticket', async () => {
+  it('opens live mode at launch when the holder switched it on for their happening event', async () => {
     const event: EventListItem = {
       id: 'event-live',
       slug: 'tulua-festival-2026',
@@ -152,12 +154,37 @@ describe('Launch redirect', () => {
       .mockResolvedValue({ ...event, state: 'live' } as unknown as EventDetail);
 
     useAuthStore.setState({ status: 'signed-in', user: user() });
+    useLiveModeStore.setState({ status: 'ready', choice: { userId: 'user-1', eventId: 'event-live' } });
     renderWithProviders(<Index />);
 
     await waitFor(() => expect(hrefs).toEqual(['/live-event/event-live']));
   });
 
-  it('checks the ticketed Event directly when the public LIVE list omits it', async () => {
+  it('keeps a holder in the usual app while live mode is off, even with their event happening', async () => {
+    const event = {
+      id: 'event-live',
+      slug: 'tulua-festival-2026',
+      title: 'Tulua Wellness Festival 2026',
+      state: 'live',
+      days: [],
+      venue: null,
+      tiers: [],
+    } as unknown as EventDetail;
+    const seededTicket = seedTickets('Attendee')[0]!;
+    const ticket = { ...seededTicket, event: { ...seededTicket.event, id: event.id, slug: event.slug } } as Ticket;
+    jest.spyOn(api.tickets, 'list').mockResolvedValue({
+      data: [ticket],
+      meta: { limit: 100, hasNextPage: false, nextCursor: null },
+    });
+    jest.spyOn(api.events, 'detail').mockResolvedValue(event);
+
+    useAuthStore.setState({ status: 'signed-in', user: user() });
+    renderWithProviders(<Index />);
+
+    await waitFor(() => expect(hrefs).toEqual(['/(tabs)/discover']));
+  });
+
+  it('finds an on-sale event by its days, since events no longer turn live by themselves', async () => {
     const event: EventListItem = {
       id: 'event-live',
       slug: 'tulua-festival-2026',
@@ -187,19 +214,28 @@ describe('Launch redirect', () => {
       .spyOn(api.events, 'detail')
       .mockResolvedValue({
         ...event,
-        state: 'live',
+        state: 'on_sale',
+        days: [{
+          id: 'day-1',
+          dayDate: '2026-10-23',
+          label: null,
+          startsAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          endsAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          gatesOpenAt: null,
+        }],
         venue: null,
         tiers: [],
       } as unknown as EventDetail);
 
     useAuthStore.setState({ status: 'signed-in', user: user() });
+    useLiveModeStore.setState({ status: 'ready', choice: { userId: 'user-1', eventId: 'event-live' } });
     renderWithProviders(<Index />);
 
     await waitFor(() => expect(hrefs).toEqual(['/live-event/event-live']));
     expect(api.events.detail).toHaveBeenCalledWith(event.slug, expect.anything());
   });
 
-  it('lands on LIVE Event Home for an owned ticket when the mock simulates live', async () => {
+  it('lands on live mode for an owned ticket when the mock simulates live and it is on', async () => {
     // No spies and no staging URL: the real mock backend with a locally simulated live
     // event, the way a dev session exercises the attendee switch.
     resetMockState();
@@ -220,6 +256,7 @@ describe('Launch redirect', () => {
       expect(me.profileComplete).toBe(true);
 
       useAuthStore.setState({ status: 'signed-in', user: me });
+      useLiveModeStore.setState({ status: 'ready', choice: { userId: me.id, eventId: TULUA_ID } });
       renderWithProviders(<Index />);
 
       await waitFor(() => expect(hrefs).toEqual([`/live-event/${TULUA_ID}`]));

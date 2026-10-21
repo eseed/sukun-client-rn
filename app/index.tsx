@@ -1,14 +1,13 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useState } from 'react';
 import { useAllowGuestBrowsing } from '../src/stores/flags';
 import { ONBOARDING_RESUME_ROUTE, useAuthStore } from '../src/stores/auth';
-import { colors, radius } from '../src/theme/tokens';
-import { setSessionLiveEventChoice, useLiveEventContext } from '../src/hooks/useLiveEventContext';
-import { Button, Screen, Text } from '../src/components/ui';
+import { useLiveModeStore } from '../src/stores/liveMode';
+import { colors } from '../src/theme/tokens';
+import { useLiveEventContext } from '../src/hooks/useLiveEventContext';
 
 /**
- * Entry gate. Sends signed-in holders with a LIVE event ticket into that Event, other users
+ * Entry gate. Sends signed-in holders who switched live mode on into their Event, other users
  * with a finished profile to Discover, users mid-onboarding back to their unfinished step,
  * and first-time visitors to Welcome. Successful sign-in returns here so both paths share
  * the same ticket check.
@@ -34,8 +33,9 @@ export default function Index() {
   const setupDeferred = useAuthStore((s) => s.setupDeferred);
   const guestBrowsing = useAuthStore((s) => s.guestBrowsing);
   const pendingAccommodationEventId = useAuthStore((s) => s.pendingAccommodationEventId);
-  const [selectedEventId, setSelectedEventId] = useState<string>();
-  const liveEvent = useLiveEventContext(status === 'signed-in', selectedEventId);
+  const liveModeStatus = useLiveModeStore((s) => s.status);
+  const liveModeChoice = useLiveModeStore((s) => s.choice);
+  const liveEvent = useLiveEventContext(status === 'signed-in');
 
   if (status === 'loading') {
     return (
@@ -63,38 +63,24 @@ export default function Index() {
     if (user.profileComplete && pendingAccommodationEventId) {
       return <Redirect href={`/accommodation?eventId=${pendingAccommodationEventId}`} />;
     }
-    // LIVE mode is an app-ready destination only: an unfinished profile still owes its
-    // onboarding step first (plan section 7). The resolver is awaited either way so an
-    // incomplete account does not race past the ticket check into onboarding.
-    if (user.profileComplete && liveEvent.status === 'ready') {
+    // Live mode is the holder's choice: launch opens it only when they switched it on and
+    // their event is still happening. An unfinished profile still owes its onboarding step
+    // first (plan section 7). The resolver is awaited either way so an incomplete account does
+    // not race past the ticket check into onboarding.
+    if (liveModeStatus === 'loading') {
       return (
-        <Redirect
-          href={`/live-event/${liveEvent.context.eventId}`}
-        />
+        <View style={styles.splash}>
+          <ActivityIndicator color={colors.textPrimary} />
+        </View>
       );
     }
-    if (user.profileComplete && liveEvent.status === 'choose') {
-      return (
-        <Screen scroll contentStyle={styles.chooser}>
-          <View style={styles.chooserStack}>
-          <Text variant="titleMd" accessibilityRole="header">Choose your LIVE Event</Text>
-          <Text variant="bodyMuted">You have active tickets for more than one Event happening now.</Text>
-          {liveEvent.choices.map(({ event, ticket }) => (
-            <View key={event.id} style={styles.choice}>
-              <Text variant="titleSm">{event.title}</Text>
-              <Text variant="bodyMuted">{event.venueName ?? 'Venue details unavailable'} · {ticket.tier.name}</Text>
-              <Button
-                label={`Open ${event.title}`}
-                onPress={() => {
-                  setSessionLiveEventChoice(user.id, event.id);
-                  setSelectedEventId(event.id);
-                }}
-              />
-            </View>
-          ))}
-          </View>
-        </Screen>
-      );
+    if (
+      user.profileComplete &&
+      liveEvent.status === 'ready' &&
+      liveModeChoice?.userId === user.id &&
+      liveModeChoice.eventId === liveEvent.context.eventId
+    ) {
+      return <Redirect href={`/live-event/${liveEvent.context.eventId}`} />;
     }
     if (liveEvent.status === 'loading') {
       return (
@@ -105,7 +91,7 @@ export default function Index() {
     }
   }
 
-  // A finished profile with no matching LIVE ticket reaches the public catalogue.
+  // A finished profile with live mode off reaches the public catalogue.
   if (user?.profileComplete) {
     // Resolver failures must not strand the attendee at launch.
     return <Redirect href="/(tabs)/discover" />;
@@ -125,7 +111,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.bgPage,
   },
-  chooser: { paddingHorizontal: 24 },
-  chooserStack: { gap: 16 },
-  choice: { gap: 10, padding: 16, borderRadius: radius.card, backgroundColor: colors.bgSurface, borderColor: colors.borderDefault, borderWidth: 1 },
 });

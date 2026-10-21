@@ -68,4 +68,6 @@ export const SECURE_KEYS = {
   reportedPurchases: 'sukun.analytics.reportedPurchases',
   /** The payment last handed to Paymob's sheet, as JSON. See `src/lib/pending-payment.ts`. */
   pendingPayment: 'sukun.checkout.pendingPayment',
+  /** The account and event a holder switched live mode on for, as JSON. See `src/stores/liveMode.ts`. */
+  liveMode: 'sukun.liveMode',
 } as const;

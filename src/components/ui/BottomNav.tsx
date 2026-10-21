@@ -7,6 +7,8 @@ import { text } from '../../theme/typography';
 import { TicketsTabIcon } from '../tickets/TicketsTabIcon';
 import { useHasWaitingInvitation } from '../../hooks/useClaimableTickets';
 import { useLiveEventContext } from '../../hooks/useLiveEventContext';
+import { useAuthStore } from '../../stores/auth';
+import { useLiveModeOn } from '../../stores/liveMode';
 import { DiscoverIcon, HomeIcon, ProfileIcon, TicketsIcon } from './icons';
 import { Text } from './Text';
 
@@ -46,10 +48,12 @@ export function BottomNav({
   const insets = useSafeAreaInsets();
   const invitationWaiting = useHasWaitingInvitation();
   const live = useLiveEventContext();
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const liveModeOn = useLiveModeOn(userId, live.status === 'ready' ? live.context.eventId : null);
 
-  // While the attendee's event is live, the bar grows a Home tab that always opens Event
-  // Home. Everywhere else it stays the three global destinations.
-  const destinations: Destination[] = live.status === 'ready'
+  // While the holder has live mode on, the bar grows a Home tab that always opens Event Home.
+  // Everywhere else it stays the three global destinations.
+  const destinations: Destination[] = live.status === 'ready' && liveModeOn
     ? [{ label: 'Home', href: `/live-event/${live.context.eventId}`, Icon: HomeIcon }, ...DESTINATIONS]
     : DESTINATIONS;
 

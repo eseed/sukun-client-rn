@@ -11,6 +11,7 @@ import { ForceUpdateScreen } from '../src/components/ForceUpdateScreen';
 import { PendingPaymentRecovery } from '../src/components/checkout/PendingPaymentRecovery';
 import { initializeAcquisitionAttribution } from '../src/services/attribution/acquisition-attribution';
 import { QueryProvider } from '../src/providers/QueryProvider';
+import { useLiveModeStore } from '../src/stores/liveMode';
 import { useAuthStore } from '../src/stores/auth';
 import { useConsentStore } from '../src/stores/consent';
 import { useFlagsStore } from '../src/stores/flags';
@@ -51,6 +52,10 @@ export default function RootLayout() {
   useEffect(() => {
     void restore();
   }, [restore]);
+
+  useEffect(() => {
+    void useLiveModeStore.getState().load();
+  }, []);
 
   useEffect(() => {
     void loadConsent();
