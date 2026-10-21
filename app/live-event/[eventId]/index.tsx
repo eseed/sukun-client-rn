@@ -4,9 +4,9 @@ import type { ReactNode } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import {
-  BackIcon,
   Button,
   CalendarIcon,
+  CloseIcon,
   HelpIcon,
   InfoIcon,
   PinIcon,
@@ -21,6 +21,7 @@ import { LiveEventSubnav } from '../../../src/components/live-event/live-event-s
 import { EntryPassSheet } from '../../../src/components/live-event/entry-pass-sheet';
 import { useEvent, useMySchedule, usePublicEventSchedule } from '../../../src/hooks/queries';
 import { useLiveEventContext } from '../../../src/hooks/useLiveEventContext';
+import { useLiveModeStore } from '../../../src/stores/liveMode';
 import { happeningNow } from '../../../src/lib/live-event';
 import type { ScheduleBlock } from '../../../src/api/types';
 import { formatDateRange, formatScheduleTime } from '../../../src/lib/format';
@@ -91,9 +92,12 @@ export default function LiveEventHomeScreen() {
       ? 'Complete your profile to use Entry Pass'
       : 'Show Entry Pass';
 
-  const goDiscover = () => {
-    track('live_event_discover_opened', { event_id: eventId });
+  // Exiting is one tap and needs no confirmation: the way back in is the same button on
+  // Discover, Tickets and the event page.
+  const exitLiveMode = () => {
+    track('live_mode_exited', { event_id: eventId });
     router.replace('/(tabs)/discover');
+    useLiveModeStore.getState().exit();
   };
 
   const [passTicketId, setPassTicketId] = useState<string | null>(null);
@@ -141,22 +145,27 @@ export default function LiveEventHomeScreen() {
 
   return (
     <Screen scroll padded={false} edges={{ bottom: false }} contentStyle={styles.content}>
-      {/* Screen 01 app bar: back, centred wordmark, notifications (Profile stays in the bottom bar). */}
+      {/* Screen 01 app bar: exit live mode, centred wordmark, notifications (Profile stays in
+          the bottom bar). The two sides share the width so the wordmark stays centred. */}
       <View style={styles.topBar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to Discover"
-          onPress={goDiscover}
-          hitSlop={10}
-          style={styles.topButton}
-        >
-          <BackIcon size={22} color={colors.textPrimary} />
-        </Pressable>
+        <View style={styles.topSide}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Exit live mode"
+            onPress={exitLiveMode}
+            hitSlop={8}
+            style={({ pressed }) => [styles.exitPill, pressed && styles.pressed]}
+          >
+            <CloseIcon size={14} color={colors.textPrimary} />
+            <Text style={styles.exitLabel}>Exit live mode</Text>
+          </Pressable>
+        </View>
         <Text style={styles.wordmark}>SUKUN</Text>
-        {/* The same bell as Discover's header, centred in the back button's box so the
-            wordmark stays centred. The layout only renders for a signed-in account. */}
-        <View style={styles.topButton}>
-          <NotificationBell onPress={openNotifications} />
+        {/* The same bell as Discover's header. The layout only renders for a signed-in account. */}
+        <View style={[styles.topSide, styles.topSideEnd]}>
+          <View style={styles.topButton}>
+            <NotificationBell onPress={openNotifications} />
+          </View>
         </View>
       </View>
 
@@ -317,6 +326,17 @@ export default function LiveEventHomeScreen() {
           </View>
           <Text style={styles.supportChevron}>›</Text>
         </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={exitLiveMode}
+          style={({ pressed }) => [styles.exitRow, pressed && styles.pressed]}
+        >
+          <Text style={styles.exitRowLabel}>Exit live mode</Text>
+          <Text variant="bodyMuted" style={styles.exitRowDetail}>
+            Back to the usual app. You can come back any time from Discover.
+          </Text>
+        </Pressable>
       </View>
       {/* White run-off to the tab bar: when the sections end above the fold, the page canvas
           (creme) would otherwise show as a beige strip between the sheet and the bottom nav. */}
@@ -396,9 +416,23 @@ function ActionCell({ icon, label, detail, onPress, disabled = false }: { icon: 
 const styles = StyleSheet.create({
   content: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0 },
   topBar: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: space.s4, backgroundColor: colors.bgPage },
+  topSide: { flex: 1, alignItems: 'flex-start' },
+  topSideEnd: { alignItems: 'flex-end' },
   topButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  exitPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s1,
+    minHeight: 36,
+    paddingHorizontal: space.s3,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.bgSurface,
+  },
+  exitLabel: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.label, color: colors.textPrimary },
+  pressed: { opacity: 0.7 },
   wordmark: {
-    flex: 1,
     textAlign: 'center',
     fontFamily: fontFamily.bodyMedium,
     fontSize: fontSize.bodyLg,
@@ -520,5 +554,13 @@ const styles = StyleSheet.create({
   supportCopy: { flex: 1, gap: space.s1 },
   supportTitle: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.bodyLg, color: colors.textPrimary },
   supportChevron: { fontSize: 24, color: colors.textMuted },
+  exitRow: { alignItems: 'center', gap: space.s1, paddingVertical: space.s4 },
+  exitRowLabel: {
+    fontFamily: fontFamily.bodyMedium,
+    fontSize: fontSize.bodyMd,
+    color: colors.textPrimary,
+    textDecorationLine: 'underline',
+  },
+  exitRowDetail: { textAlign: 'center' },
   disabledAction: { opacity: 0.55 },
 });

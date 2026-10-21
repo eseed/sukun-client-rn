@@ -16,6 +16,33 @@ export type LiveEventContextState =
   | { status: 'ready'; context: LiveEventContext }
   | { status: 'error'; error: unknown };
 
+/** Live mode opens this long before the first day starts, as the entry QR does. */
+export const LIVE_MODE_OPENS_BEFORE_MS = 12 * 60 * 60 * 1000;
+
+const RUNNING_STATES: ReadonlySet<EventDetail['state']> = new Set(['on_sale', 'sold_out', 'sales_closed', 'live']);
+
+/**
+ * Whether a holder can switch live mode on for this event now. The backend no longer moves
+ * events to `live` by itself (owner's call, 2026-10-21: everyone keeps buying while the
+ * festival runs), so the event's own days decide: from 12 hours before the first day starts
+ * until the last day ends, in any state that is still running. `live` set by hand still counts.
+ * Gates-open times are not used: Tulua's Friday has a mistyped one a month early.
+ */
+export function isEventHappening(event: Pick<EventDetail, 'state' | 'days'>, now = Date.now()): boolean {
+  if (event.state === 'live') return true;
+  if (!RUNNING_STATES.has(event.state)) return false;
+  let first = Number.POSITIVE_INFINITY;
+  let last = Number.NEGATIVE_INFINITY;
+  for (const day of event.days ?? []) {
+    const start = Date.parse(day.startsAt);
+    const end = Date.parse(day.endsAt);
+    if (Number.isFinite(start)) first = Math.min(first, start);
+    if (Number.isFinite(end)) last = Math.max(last, end);
+  }
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return false;
+  return first - LIVE_MODE_OPENS_BEFORE_MS <= now && now < last;
+}
+
 export function groupActiveTickets(tickets: Ticket[], eventId: string): Ticket[] {
   const priority = (ticket: Ticket) =>
     ticket.usageStatus === 'usable' ? 0 :
@@ -24,39 +51,6 @@ export function groupActiveTickets(tickets: Ticket[], eventId: string): Ticket[]
   return tickets
     .filter((ticket) => ticket.status === 'active' && ticket.event.id === eventId)
     .sort((a, b) => priority(a) - priority(b));
-}
-
-export function liveEventChoices(events: EventListItem[], tickets: Ticket[], now = Date.now()) {
-  const ticketsByEvent = new Map<string, Ticket[]>();
-  for (const ticket of tickets) {
-    if (ticket.status !== 'active') continue;
-    const eventTickets = ticketsByEvent.get(ticket.event.id);
-    if (eventTickets) eventTickets.push(ticket);
-    else ticketsByEvent.set(ticket.event.id, [ticket]);
-  }
-
-  const matching = events
-    .filter((event) => event.state === 'live' && ticketsByEvent.has(event.id))
-    .map((event) => ({ event, distance: distanceToTicketDays(ticketsByEvent.get(event.id) ?? [], now) }))
-    .sort((a, b) => a.distance - b.distance);
-  if (!matching.length) return [];
-  const nearest = matching[0]?.distance;
-  if (nearest === undefined) return [];
-  return matching.filter((item) => item.distance === nearest).map(({ event }) => ({
-    event,
-    ticket: groupActiveTickets(ticketsByEvent.get(event.id) ?? [], event.id)[0]!,
-  }));
-}
-
-function distanceToTicketDays(tickets: Ticket[], now: number): number {
-  let nearest = Number.POSITIVE_INFINITY;
-  for (const ticket of tickets) {
-    for (const day of ticket.days) {
-      const start = Date.parse(day.startsAt);
-      if (Number.isFinite(start)) nearest = Math.min(nearest, Math.abs(start - now));
-    }
-  }
-  return nearest;
 }
 
 export function happeningNow<T extends { startAt: string; endAt: string }>(blocks: T[], now = Date.now()): T[] {

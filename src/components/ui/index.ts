@@ -40,6 +40,7 @@ export {
   CalendarIcon,
   CameraIcon,
   CheckIcon,
+  CloseIcon,
   DiscoverIcon,
   ExternalLinkIcon,
   HeartIcon,
