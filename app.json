@@ -44,6 +44,16 @@
               "scheme": "https",
               "host": "clientstaging.sukunwellness.co",
               "pathPrefix": "/claim"
+            },
+            {
+              "scheme": "https",
+              "host": "book.sukunwellness.co",
+              "path": "/accommodation"
+            },
+            {
+              "scheme": "https",
+              "host": "clientstaging.sukunwellness.co",
+              "path": "/accommodation"
             }
           ],
           "category": [

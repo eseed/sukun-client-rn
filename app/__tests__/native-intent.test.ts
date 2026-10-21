@@ -3,7 +3,7 @@ import { isClaimLink, redirectSystemPath } from '../+native-intent';
 
 describe('the website claim link, opened in the app', () => {
   afterEach(() => {
-    useAuthStore.setState({ status: 'loading' });
+    useAuthStore.setState({ status: 'loading', pendingAccommodationEventId: null });
   });
 
   it('knows the claim page on either website, and nothing else', () => {
@@ -40,5 +40,40 @@ describe('the website claim link, opened in the app', () => {
     expect(redirectSystemPath({ path: 'sukun://event/tulua', initial: true })).toBe(
       'sukun://event/tulua',
     );
+  });
+
+  describe('the room documents link', () => {
+    const EVENT = '63d47a7f-afcd-4065-9d09-2db5a01a5f78';
+    const LINK = `https://book.sukunwellness.co/accommodation?eventId=${EVENT}`;
+
+    it('opens the room documents for a signed-in guest', () => {
+      useAuthStore.setState({ status: 'signed-in' });
+      expect(redirectSystemPath({ path: LINK, initial: false })).toBe(
+        `/accommodation?eventId=${EVENT}`,
+      );
+      expect(useAuthStore.getState().pendingAccommodationEventId).toBeNull();
+    });
+
+    it('keeps the event for the entry gate on a cold start or before sign-in', () => {
+      useAuthStore.setState({ status: 'loading' });
+      expect(redirectSystemPath({ path: LINK, initial: true })).toBe('/');
+      expect(useAuthStore.getState().pendingAccommodationEventId).toBe(EVENT);
+
+      useAuthStore.setState({ status: 'signed-out', pendingAccommodationEventId: null });
+      expect(
+        redirectSystemPath({
+          path: `https://clientstaging.sukunwellness.co/accommodation?eventId=${EVENT}`,
+          initial: false,
+        }),
+      ).toBe('/');
+      expect(useAuthStore.getState().pendingAccommodationEventId).toBe(EVENT);
+    });
+
+    it('leaves a link without a valid event alone', () => {
+      useAuthStore.setState({ status: 'signed-in' });
+      const bad = 'https://book.sukunwellness.co/accommodation?eventId=nope';
+      expect(redirectSystemPath({ path: bad, initial: false })).toBe(bad);
+      expect(useAuthStore.getState().pendingAccommodationEventId).toBeNull();
+    });
   });
 });

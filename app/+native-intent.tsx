@@ -1,3 +1,4 @@
+import { parseNotificationLink } from '../src/services/notifications/deep-link';
 import { useAuthStore } from '../src/stores/auth';
 
 /**
@@ -15,6 +16,11 @@ import { useAuthStore } from '../src/stores/auth';
  *   `ClaimGate` opens the claim screen once a granted ticket is waiting. It is the same route
  *   the app already takes, so no screen can reveal whether the number has an account.
  *
+ * The room documents link (`/accommodation?eventId=<uuid>`, sent over WhatsApp to guests with a
+ * room) is handed over the same way and lands on the app's screen of the same name. Signed in,
+ * with the app already running, it opens straight away; anyone else starts at the entry gate,
+ * which opens it once they are signed in (`pendingAccommodationEventId`).
+ *
  * Every other link passes through untouched.
  */
 const CLAIM_LINK_HOSTS = new Set(['book.sukunwellness.co', 'clientstaging.sukunwellness.co']);
@@ -31,6 +37,13 @@ export function isClaimLink(path: string): boolean {
 }
 
 export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
-  if (!isClaimLink(path)) return path;
-  return useAuthStore.getState().status === 'signed-in' ? '/claim' : '/';
+  const signedIn = useAuthStore.getState().status === 'signed-in';
+  if (isClaimLink(path)) return signedIn ? '/claim' : '/';
+  const landing = parseNotificationLink(path);
+  if (landing?.kind === 'accommodation') {
+    if (signedIn) return `/accommodation?eventId=${landing.eventId}`;
+    useAuthStore.getState().setPendingAccommodationEventId(landing.eventId);
+    return '/';
+  }
+  return path;
 }
