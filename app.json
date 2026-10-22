@@ -25,7 +25,7 @@
         "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry, and to photograph the room documents you choose to upload.",
         "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification or a room document to upload.",
         "NSContactsUsageDescription": "Sukun uses your contacts so you can attach guests to tickets by phone number.",
-        "NSCalendarsUsageDescription": "Sukun opens your calendar so you can add the events you choose to it."
+        "NSCalendarsUsageDescription": "Sukun adds the event you booked to your calendar when you tap Add to calendar."
       }
     },
     "android": {
@@ -75,7 +75,8 @@
         "android.permission.READ_CONTACTS"
       ],
       "blockedPermissions": [
-        "android.permission.WRITE_CONTACTS"
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.WRITE_SETTINGS"
       ],
       "versionCode": 18
     },
@@ -116,6 +117,13 @@
         "expo-contacts",
         {
           "contactsPermission": "Sukun shows your contacts so you can pick who a ticket is for. Only the numbers you pick are sent to Sukun, and your contact list stays on your device."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Sukun adds the event you booked to your calendar when you tap Add to calendar.",
+          "remindersPermission": false
         }
       ],
       "@react-native-community/datetimepicker",

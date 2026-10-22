@@ -44,7 +44,9 @@ jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
   useIsFocused: () => true,
+  useFocusEffect: jest.fn(),
   Redirect: () => null,
+  Stack: Object.assign(() => null, { Screen: () => null }),
 }));
 
 /** Every call for one event name, so an assertion reads the properties it was sent with. */

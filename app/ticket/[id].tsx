@@ -1,7 +1,7 @@
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, StyleSheet, View } from 'react-native';
+import { Alert, AppState, StyleSheet, useWindowDimensions, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import {
   BackButton,
@@ -24,9 +24,11 @@ import {
   useTicket,
   useTicketAddons,
 } from '../../src/hooks/queries';
+import { useScanReadyScreen } from '../../src/hooks/useScanReadyScreen';
 import { AddonRow, admittedWithYou, ChildrenList } from '../../src/components/tickets/TicketExtras';
 import { track } from '../../src/lib/analytics';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
+import { useEntryPassRetry } from '../../src/hooks/useEntryPassRetry';
 import {
   getEntryPassOpensAt,
   getEntryPassRefreshAt,
@@ -44,6 +46,9 @@ import {
 import { colors, fontFamily } from '../../src/theme/tokens';
 
 const QR_SIZE = 200;
+/** Bigger squares read faster at the gate; the panel and screen padding take 96pt of width. */
+const QR_MAX_SIZE = 280;
+const QR_SIDE_PADDING = 96;
 
 /**
  * Design screen 21 · Entry pass / QR.
@@ -80,6 +85,13 @@ export default function EntryPassScreen() {
   const entryPassError = passQuery.error;
   const entryPassIsFetching = passQuery.isFetching;
   const refetchEntryPass = passQuery.refetch;
+  useEntryPassRetry({
+    enabled: isFocused && Boolean(ticketId) && ticketQuery.data?.usageStatus === 'usable' && entryPassWindowOpen,
+    error: entryPassError,
+    hasPayload: Boolean(entryPassData?.payload),
+    isFetching: entryPassIsFetching,
+    refetch: refetchEntryPass,
+  });
   const claimTicket = useClaimTicket();
   const declineTicket = useDeclineTicket();
   const resumedClaim = useRef(false);
@@ -240,6 +252,16 @@ export default function EntryPassScreen() {
         .catch(() => undefined);
     }
   }, [passErrorCode, passQuery.errorUpdatedAt, queryClient, setUser]);
+
+  const qrOnScreen =
+    isFocused &&
+    isScreenClockCurrent &&
+    ticketQuery.data?.usageStatus === 'usable' &&
+    Boolean(entryPassData?.payload) &&
+    passShowUntil > currentTime;
+  useScanReadyScreen(qrOnScreen);
+  const { width: windowWidth } = useWindowDimensions();
+  const qrSize = Math.max(QR_SIZE, Math.min(QR_MAX_SIZE, windowWidth - QR_SIDE_PADDING));
 
   if (!ticketId) {
     return (
@@ -502,7 +524,9 @@ export default function EntryPassScreen() {
             ) : hasPass ? (
               <QRCode
                 value={pass?.payload ?? ''}
-                size={QR_SIZE}
+                size={qrSize}
+                // Low error correction is safe on a screen and makes each square bigger.
+                ecl="L"
                 color={colors.black}
                 backgroundColor={colors.creme}
               />

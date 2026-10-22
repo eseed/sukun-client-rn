@@ -1,10 +1,13 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { StyleSheet, Text, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClaimGate } from '../../src/components/tickets/ClaimGate';
 import { TicketsTabIcon } from '../../src/components/tickets/TicketsTabIcon';
-import { DiscoverIcon, ProfileIcon } from '../../src/components/ui';
+import { DiscoverIcon, HomeIcon, ProfileIcon } from '../../src/components/ui';
 import { useHasWaitingInvitation } from '../../src/hooks/useClaimableTickets';
+import { useLiveEventContext } from '../../src/hooks/useLiveEventContext';
+import { useAuthStore } from '../../src/stores/auth';
+import { useLiveModeOn } from '../../src/stores/liveMode';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { text } from '../../src/theme/typography';
 
@@ -59,9 +62,21 @@ const tabLabel = (title: string) => {
   return TabLabel;
 };
 
+/** Home (live mode's tab) is drawn first but is never where the tab group opens. */
+export const unstable_settings = {
+  initialRouteName: 'discover',
+};
+
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const invitationWaiting = useHasWaitingInvitation();
+  const router = useRouter();
+  const live = useLiveEventContext();
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const liveEventId = live.status === 'ready' ? live.context.eventId : null;
+  // While live mode is on, the bar keeps the Home tab live mode's own bar shows, so going to
+  // Discover, Tickets or Profile never loses the way back to Event Home.
+  const liveModeOn = useLiveModeOn(userId, liveEventId);
 
   return (
     <ClaimGate>
@@ -75,6 +90,21 @@ export default function TabsLayout() {
           sceneStyle: { backgroundColor: colors.bgPage },
         }}
       >
+        <Tabs.Screen
+          name="live"
+          options={{
+            title: 'Home',
+            href: liveModeOn ? undefined : null,
+            tabBarLabel: tabLabel('Home'),
+            tabBarIcon: ({ color }) => <HomeIcon color={color} />,
+          }}
+          listeners={{
+            tabPress: (event) => {
+              event.preventDefault();
+              if (liveEventId) router.push(`/live-event/${liveEventId}`);
+            },
+          }}
+        />
         <Tabs.Screen
           name="discover"
           options={{

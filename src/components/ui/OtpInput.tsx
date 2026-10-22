@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { colors, fontFamily } from '../../theme/tokens';
 import { KEYBOARD_DONE_ID, KeyboardDoneAccessory } from './KeyboardDone';
-import { Text } from './Text';
+import { MAX_FONT_SCALE, Text } from './Text';
 
 /**
  * The four-box code entry from design screen 03. A single hidden input backs all four boxes
@@ -40,12 +40,14 @@ export function OtpInput({
       <TextInput
         ref={inputRef}
         value={value}
+        // No `maxLength`: iOS cuts a paste to it before this runs, so a whole pasted message
+        // ("Your Sukun code is 1234") arrived as its first four characters and no digits.
         onChangeText={(next) => onChange(next.replace(/\D/g, '').slice(0, length))}
         keyboardType="number-pad"
         textContentType="oneTimeCode"
         autoComplete="one-time-code"
         autoFocus={autoFocus}
-        maxLength={length}
+        maxFontSizeMultiplier={MAX_FONT_SCALE}
         accessibilityLabel="Verification code"
         inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_DONE_ID : undefined}
         style={styles.hidden}

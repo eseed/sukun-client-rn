@@ -396,6 +396,25 @@ describe('add-on detail · adding to the cart', () => {
     expect(lines[0]?.optionId).toBe('opt-lodge-double-1');
   });
 
+  it('keeps who the extra went to when Update leaves the option as it was', async () => {
+    await signInAndComplete();
+    await openAddon(ADDON_TRANSPORT);
+
+    fireEvent.press(cardFor('Round trip'));
+    fireEvent.press(cta('Add to cart'));
+    useCheckoutStore
+      .getState()
+      .setAddonAssignments('opt-shuttle-round-trip', [{ cartAttendeeId: 'att-1', quantity: 1 }]);
+
+    screen.unmount();
+    await openAddon(ADDON_TRANSPORT);
+    fireEvent.press(cta('Update'));
+
+    expect(useCheckoutStore.getState().addons[0]?.assignments).toEqual([
+      { cartAttendeeId: 'att-1', quantity: 1 },
+    ]);
+  });
+
   it('takes the line out again on Remove from cart', async () => {
     await signInAndComplete();
     await openAddon(ADDON_MEALS);

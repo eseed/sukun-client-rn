@@ -78,8 +78,12 @@ export default function RoomsScreen() {
               : 'success'
         }
         loadingLabel="Loading your room..."
-        errorMessage="We couldn't load your rooms."
-        onRetry={() => void roomsQuery.refetch()}
+        // A link with no usable event cannot succeed on a retry, so it offers none.
+        errorTitle={validEventId ? undefined : 'Room link is not valid'}
+        errorMessage={
+          validEventId ? "We couldn't load your rooms." : 'Open your room again from Tickets.'
+        }
+        onRetry={validEventId ? () => void roomsQuery.refetch() : undefined}
       >
         {rooms.length === 0 ? (
           <Text variant="bodyMuted">You have no rooms for this event.</Text>

@@ -13,7 +13,8 @@ export default function CheckoutLayout() {
       <Stack.Screen name="pass" />
       <Stack.Screen name="guests" />
       <Stack.Screen name="review" />
-      <Stack.Screen name="payment" />
+      {/* The order is placed: back must not reopen an editable step (payment.tsx owns Back). */}
+      <Stack.Screen name="payment" options={{ gestureEnabled: false }} />
       <Stack.Screen name="confirmation" options={{ gestureEnabled: false }} />
     </Stack>
   );

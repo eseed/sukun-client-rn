@@ -137,6 +137,8 @@ export default function TicketExtrasScreen() {
 
     async function price() {
       if (cancelled || !context) return;
+      // A new selection is a new question: the last one's failure no longer applies.
+      setError(null);
 
       if (picked.length === 0) {
         setPriced(null);
@@ -551,7 +553,7 @@ const styles = StyleSheet.create({
   },
   ticketThumb: { width: 44, borderRadius: 10, flexGrow: 0, flexShrink: 0 },
   ticketBody: { flex: 1, gap: space.s1, justifyContent: 'center' },
-  ticketTier: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  ticketTier: { fontSize: 15, fontFamily: fontFamily.bodyMedium, color: colors.textPrimary },
   existing: { marginBottom: space.s4, gap: space.s1 },
   vatCaption: { marginBottom: space.s4 },
   group: { marginBottom: space.s4 },
@@ -572,8 +574,21 @@ const styles = StyleSheet.create({
     marginTop: space.s1,
   },
   optionTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  optionName: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
-  optionPrice: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  // A long name wraps rather than pushing the price off the card.
+  optionName: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 15,
+    fontFamily: fontFamily.bodyMedium,
+    color: colors.textPrimary,
+  },
+  optionPrice: {
+    flexShrink: 0,
+    marginLeft: space.s3,
+    fontSize: 15,
+    fontFamily: fontFamily.bodyMedium,
+    color: colors.textPrimary,
+  },
   quantityRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -588,7 +603,7 @@ const styles = StyleSheet.create({
     marginBottom: space.s3,
   },
   summaryText: { gap: space.s1 },
-  summaryCount: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
-  summaryMoney: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  summaryCount: { fontSize: 15, fontFamily: fontFamily.bodyMedium, color: colors.textPrimary },
+  summaryMoney: { fontSize: 15, fontFamily: fontFamily.bodyMedium, color: colors.textPrimary },
   spacer: { flex: 1, minHeight: space.s4 },
 });

@@ -70,23 +70,21 @@ afterEach(() => {
 });
 
 describe('Event Home bells', () => {
-  it('opens the inbox from both bells, with the unread count, instead of Profile', async () => {
+  it('opens the inbox from its bell, with the unread count, instead of Profile', async () => {
     await signIn();
     mockParams = { eventId: TULUA_ID };
     setMockNotifications([notification('a'), notification('b')]);
     renderWithProviders(<LiveEventHomeScreen />);
 
-    await waitFor(() =>
-      expect(screen.getAllByLabelText('Notifications, 2 unread')).toHaveLength(2),
-    );
-    const bells = screen.getAllByLabelText('Notifications, 2 unread');
-    expect(screen.getAllByTestId('notification-badge')).toHaveLength(2);
+    // One bell, in the app bar: the hero no longer repeats it.
+    const bell = await screen.findByLabelText('Notifications, 2 unread');
+    expect(screen.getAllByLabelText('Notifications, 2 unread')).toHaveLength(1);
+    expect(screen.getAllByTestId('notification-badge')).toHaveLength(1);
     expect(screen.queryByLabelText('Account')).toBeNull();
 
-    for (const bell of bells) fireEvent.press(bell);
-    expect(mockRouter.push).toHaveBeenCalledTimes(2);
-    expect(mockRouter.push).toHaveBeenNthCalledWith(1, '/notifications');
-    expect(mockRouter.push).toHaveBeenNthCalledWith(2, '/notifications');
+    fireEvent.press(bell);
+    expect(mockRouter.push).toHaveBeenCalledTimes(1);
+    expect(mockRouter.push).toHaveBeenCalledWith('/notifications');
     expect(mockRouter.replace).not.toHaveBeenCalledWith('/(tabs)/profile');
   });
 });

@@ -139,7 +139,10 @@ export default function OtpScreen() {
   }
 
   async function onResend() {
-    if (!pendingPhone || !isValidPhone(pendingPhone) || secondsLeft > 0) return;
+    // A second tap while the first request is in flight would send a second code.
+    if (!pendingPhone || !isValidPhone(pendingPhone) || secondsLeft > 0 || requestOtp.isPending) {
+      return;
+    }
     setError(null);
     try {
       const result = await requestOtp.mutateAsync(pendingPhone);
@@ -151,6 +154,8 @@ export default function OtpScreen() {
       if (wait !== null) setSecondsLeft(wait);
     }
   }
+
+  const resendLocked = secondsLeft > 0 || requestOtp.isPending;
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -179,12 +184,17 @@ export default function OtpScreen() {
         </Text>
       ) : null}
 
-      <Pressable onPress={onResend} disabled={secondsLeft > 0} accessibilityRole="button">
+      <Pressable
+        onPress={onResend}
+        disabled={resendLocked}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: resendLocked }}
+      >
         <Text variant="meta">
           Didn&apos;t get it?{' '}
           <Text
             variant="meta"
-            color={secondsLeft > 0 ? colors.textMuted : colors.accentSky}
+            color={resendLocked ? colors.textMuted : colors.accentSky}
             style={styles.resend}
           >
             {secondsLeft > 0 ? `Resend in ${formatCountdown(secondsLeft)}` : 'Resend code'}

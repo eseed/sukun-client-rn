@@ -138,6 +138,17 @@ if (globalThis.expo?.modules) {
   globalThis.expo.modules.ExpoLocalization = globalThis.expo.modules.ExpoLocalization ?? {};
 }
 
+jest.mock('expo-brightness', () => ({
+  getBrightnessAsync: jest.fn(async () => 0.5),
+  setBrightnessAsync: jest.fn(async () => undefined),
+  restoreSystemBrightnessAsync: jest.fn(async () => undefined),
+}));
+
+jest.mock('expo-keep-awake', () => ({
+  activateKeepAwakeAsync: jest.fn(async () => undefined),
+  deactivateKeepAwake: jest.fn(),
+}));
+
 jest.mock('expo-localization', () => ({
   getLocales: jest.fn(() => [{ regionCode: 'EG' }]),
   getCalendars: jest.fn(() => [{ timeZone: 'Africa/Cairo' }]),

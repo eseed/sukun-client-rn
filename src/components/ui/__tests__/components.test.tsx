@@ -141,6 +141,21 @@ describe('MarkdownText', () => {
     expect(onLinkPress).toHaveBeenCalledWith('https://sukun.test/guide');
   });
 
+  it('makes email and phone links actionable', () => {
+    const onLinkPress = jest.fn();
+    renderWithProviders(
+      <MarkdownText
+        markdown="[Email us](mailto:hello@sukun.test) or [call](tel:+201000000000)"
+        onLinkPress={onLinkPress}
+      />,
+    );
+
+    fireEvent.press(screen.getByRole('link', { name: 'Email us' }));
+    fireEvent.press(screen.getByRole('link', { name: 'call' }));
+    expect(onLinkPress).toHaveBeenCalledWith('mailto:hello@sukun.test');
+    expect(onLinkPress).toHaveBeenCalledWith('tel:+201000000000');
+  });
+
   it('does not make unsafe links actionable', () => {
     renderWithProviders(<MarkdownText markdown="[Local](javascript:alert(1))" />);
 

@@ -1,11 +1,12 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { RefreshControl, StyleSheet, TextInput, View } from 'react-native';
 import type { DesignAssetKey } from '../../src/theme/assets';
 import { ResourceState, Screen, SearchIcon, Tag, Text } from '../../src/components/ui';
 import { EventListRow, FeaturedEventCard } from '../../src/components/events/EventCards';
 import { NotificationBell } from '../../src/components/notifications/NotificationBell';
-import { useEvents } from '../../src/hooks/queries';
+import { queryKeys, useEvents } from '../../src/hooks/queries';
 import { useDebouncedValue } from '../../src/hooks/useDebouncedValue';
 import { messageForError } from '../../src/lib/errors';
 import { formatTagLabel } from '../../src/lib/format';
@@ -24,6 +25,9 @@ export default function DiscoverScreen() {
   const router = useRouter();
   // The inbox belongs to an account, so a guest browsing Discover sees no bell.
   const signedIn = useAuthStore((s) => s.status === 'signed-in');
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const client = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
 
   const [tag, setTag] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -79,6 +83,21 @@ export default function DiscoverScreen() {
 
   const [featured, ...rest] = events;
 
+  // Every listing (the chip vocabulary and the filtered one), the bell's count and the live
+  // banner, so a pull shows what changed since the tab was first opened.
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['events'] }),
+        client.invalidateQueries({ queryKey: queryKeys.notificationsUnreadCount }),
+        client.invalidateQueries({ queryKey: queryKeys.liveEventContextRoot(userId) }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <Screen
       scroll
@@ -88,6 +107,14 @@ export default function DiscoverScreen() {
       onEndReached={() => {
         if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
       }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={colors.accentGold}
+          colors={[colors.accentGold]}
+        />
+      }
     >
       <View style={styles.headerRow}>
         <View style={styles.ring} />

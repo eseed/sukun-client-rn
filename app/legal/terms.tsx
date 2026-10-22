@@ -16,7 +16,7 @@ import { BackButton, BulletHeading, Screen, StepLabel, Text } from '../../src/co
  * links to.
  */
 
-const EFFECTIVE_DATE = '7 October 2026';
+const EFFECTIVE_DATE = '22 October 2026';
 const CONTACT = 'sukunwellness.co/support';
 
 const SECTIONS: { title: string; body: string }[] = [
@@ -42,7 +42,23 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Your selfie',
-    body: 'We ask for a selfie at sign up and show it only to gate staff at admission, so a screenshotted ticket cannot let someone else in. It is stored privately, it is not shared with anyone else, it is not used for anything else, and we do not run face recognition on it or match it against any other database.',
+    /**
+     * CLAUDE.md rule 3: the selfie is required only for the QR, when an entry pass is opened in
+     * the 12 hours before its event, and offered after the profile form and from Profile. This
+     * once said it was asked "at sign up", which stopped being true when it left registration.
+     */
+    body: 'We ask for a selfie only for your entry QR code. It is offered after you fill in your profile and from the Profile tab, and it is required when you open an entry pass in the 12 hours before your event. We show it only to gate staff at admission, so a screenshotted ticket cannot let someone else in. It is stored privately, it is not shared with anyone else, it is not used for anything else, and we do not run face recognition on it or match it against any other database.',
+  },
+  {
+    /**
+     * `app/accommodation.tsx`: a room lists the documents it asks for (`requiredAttachments`),
+     * uploaded once for the whole room by any guest in it or its buyer, who can open them again
+     * through signed links that expire (`RoomAttachment.url`); the team marks them checked
+     * (`attachmentsValid`). Nothing here says how long they are kept: no rule for it exists in
+     * the app.
+     */
+    title: 'Room documents',
+    body: 'If you book a room, it may ask for documents, such as a photo of an ID or passport and a marriage certificate. They are uploaded once for the whole room, as photos or PDF files, and the guests in that room and the person who booked it can open them. Our team uses them only to allocate rooms and to verify guests at the venue. They are stored privately, opened only through links that expire, and not shared with anyone else.',
   },
   {
     title: 'Contacts',

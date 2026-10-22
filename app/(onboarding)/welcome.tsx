@@ -101,7 +101,18 @@ export default function WelcomeScreen() {
 
         {DevSignInLink ? <DevSignInLink /> : null}
 
-        <Text style={styles.terms}>By continuing you agree to our terms &amp; privacy policy</Text>
+        {/* The whole line opens them, so its small type is not a small target. */}
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Read our terms and privacy policy"
+          onPress={() => router.push('/legal/terms')}
+          hitSlop={{ top: 8, bottom: 8 }}
+        >
+          <Text style={styles.terms}>
+            By continuing you agree to our{' '}
+            <Text style={styles.termsLink}>terms &amp; privacy policy</Text>
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -170,5 +181,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.textPrimary,
     opacity: 0.6,
+  },
+  termsLink: {
+    textDecorationLine: 'underline',
   },
 });

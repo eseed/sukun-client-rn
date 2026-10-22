@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Redirect, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -22,6 +22,7 @@ import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatDateOfBirth } from '../../src/lib/format';
+import { requiresLivingArea } from '../../src/lib/phone';
 import {
   buildProfileSchema,
   type ProfileFormValues,
@@ -39,15 +40,16 @@ const GENDERS: { value: 'male' | 'female'; label: string }[] = [
   { value: 'female', label: 'Female' },
 ];
 
-/** Registration's schema; this screen asks every number for a living area, as it always has. */
-const schema = buildProfileSchema(true);
-
 type FormValues = ProfileFormValues;
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const authStatus = useAuthStore((state) => state.status);
+  // Registration's rule: the living area is an Egyptian governorate, so only an Egyptian
+  // number is asked for one.
+  const areaRequired = requiresLivingArea(user?.phoneNumber);
+  const schema = useMemo(() => buildProfileSchema(areaRequired), [areaRequired]);
   const areasQuery = useAreas();
   const areas = areasQuery.data ?? [];
   const updateProfile = useUpdateProfile();
@@ -99,7 +101,7 @@ export default function EditProfileScreen() {
           email: values.email,
           dateOfBirth: values.dateOfBirth,
           gender: values.gender,
-          areaId: values.areaId,
+          areaId: areaRequired ? values.areaId : undefined,
           marketingOptIn: values.marketingOptIn,
         });
         router.back();
@@ -197,29 +199,31 @@ export default function EditProfileScreen() {
             )}
           />
         </View>
-        <Controller
-          control={control}
-          name="areaId"
-          render={({ field, fieldState }) => (
-            <View ref={targets.fieldRef('areaId')} collapsable={false}>
-              <PickerField
-                label="Living area"
-                placeholder="Select"
-                value={areas.find((area) => area.id === field.value)?.name ?? null}
-                onPress={() => setSheet('area')}
-                error={fieldState.error?.message ?? null}
-              />
-              <OptionSheet
-                visible={sheet === 'area'}
-                title="Living area"
-                options={areas.map((area) => ({ value: area.id, label: area.name }))}
-                selectedValue={field.value || null}
-                onSelect={field.onChange}
-                onClose={() => setSheet(null)}
-              />
-            </View>
-          )}
-        />
+        {areaRequired ? (
+          <Controller
+            control={control}
+            name="areaId"
+            render={({ field, fieldState }) => (
+              <View ref={targets.fieldRef('areaId')} collapsable={false}>
+                <PickerField
+                  label="Living area"
+                  placeholder="Select"
+                  value={areas.find((area) => area.id === field.value)?.name ?? null}
+                  onPress={() => setSheet('area')}
+                  error={fieldState.error?.message ?? null}
+                />
+                <OptionSheet
+                  visible={sheet === 'area'}
+                  title="Living area"
+                  options={areas.map((area) => ({ value: area.id, label: area.name }))}
+                  selectedValue={field.value || null}
+                  onSelect={field.onChange}
+                  onClose={() => setSheet(null)}
+                />
+              </View>
+            )}
+          />
+        ) : null}
         <Controller
           control={control}
           name="marketingOptIn"
@@ -235,7 +239,7 @@ export default function EditProfileScreen() {
         />
       </View>
 
-      {areasQuery.isError ? (
+      {areaRequired && areasQuery.isError ? (
         <InlineError
           message="We couldn't load the area list. Try again before saving."
           style={styles.error}
@@ -247,7 +251,7 @@ export default function EditProfileScreen() {
         label="Save changes"
         onPress={onSubmit}
         loading={updateProfile.isPending}
-        disabled={formState.isSubmitting || areasQuery.isError}
+        disabled={formState.isSubmitting || (areaRequired && areasQuery.isError)}
       />
     </Screen>
   );

@@ -80,6 +80,9 @@ jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
   useIsFocused: () => true,
+  // Focus is a mount here: the screen is always the one showing.
+  useFocusEffect: (effect: () => void | (() => void)) =>
+    jest.requireActual<typeof import('react')>('react').useEffect(effect, [effect]),
   usePathname: () => '/discover',
   Redirect: () => null,
   Stack: Object.assign(() => null, { Screen: () => null }),

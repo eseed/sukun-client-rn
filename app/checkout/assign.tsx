@@ -29,6 +29,7 @@ import { useCartNotEditableRecovery } from '../../src/hooks/useCartNotEditableRe
 import { messageForError } from '../../src/lib/errors';
 import { formatPhoneLocal } from '../../src/lib/phone';
 import { useCheckoutStore } from '../../src/stores/checkout';
+import { isNotFoundError } from '../../src/components/checkout/checkoutNavigation';
 import { colors, space } from '../../src/theme/tokens';
 import type { CartAddonInput, CartAttendee } from '../../src/api/types';
 
@@ -170,10 +171,26 @@ export default function AssignAddonsScreen() {
   // Continue has nowhere to go without one.
   if (!cartId || !validEventId) return expired;
 
-  if (access.loading || cartQuery.isLoading) {
+  if (access.loading || cartQuery.isLoading || (cartQuery.isError && cartQuery.isFetching)) {
     return (
       <Screen>
         <ResourceState status="loading" loadingLabel="Loading your cart..." />
+      </Screen>
+    );
+  }
+
+  // Asking for the cart failed (no connection, a timeout, a server error): that is not an expired
+  // checkout, so it says what went wrong and offers to ask again.
+  if (!cartQuery.data && cartQuery.isError && !isNotFoundError(cartQuery.error)) {
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <BackButton onPress={() => router.back()} style={styles.back} />
+        <ResourceState
+          status="error"
+          errorTitle="We couldn't load your cart"
+          errorMessage={messageForError(cartQuery.error)}
+          onRetry={() => void cartQuery.refetch()}
+        />
       </Screen>
     );
   }

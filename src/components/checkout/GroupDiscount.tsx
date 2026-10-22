@@ -374,8 +374,15 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: colors.groupOfferInk,
   },
-  priceTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  priceFigures: { flexDirection: 'row', alignItems: 'baseline', gap: space.s2 },
+  // Both wrap: a large group's figures beside "N tickets" ran past a 375pt screen's edge.
+  priceTop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    columnGap: space.s2,
+  },
+  priceFigures: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: space.s2 },
   struck: { textDecorationLine: 'line-through' },
   saving: {
     alignSelf: 'flex-start',

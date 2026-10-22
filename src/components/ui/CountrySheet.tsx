@@ -1,9 +1,18 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, space } from '../../theme/tokens';
 import { dialCodeFor, flagFor, SUPPORTED_COUNTRIES } from '../../lib/phone';
-import { Text } from './Text';
+import { MAX_FONT_SCALE, Text } from './Text';
 
 /**
  * Country picker for the phone field. Unlike `OptionSheet` this one searches: the list can run
@@ -44,54 +53,65 @@ export function CountrySheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
-      <Pressable style={styles.scrim} onPress={close} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + space.s3 }]}>
-        <View style={styles.grabber} />
-        <Text variant="eyebrow" style={styles.title}>
-          Country
-        </Text>
-        <View style={styles.searchBox}>
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search country or code"
-            placeholderTextColor={colors.textMuted}
-            autoCorrect={false}
-            autoCapitalize="none"
-            style={styles.searchInput}
-            accessibilityLabel="Search country"
+      {/*
+        The search box takes the keyboard, which otherwise rises over the box and the results.
+        The sheet sits on the bottom of this view, so the padding lifts it clear and it shrinks
+        to the space left.
+      */}
+      <KeyboardAvoidingView
+        style={styles.frame}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Pressable style={styles.scrim} onPress={close} accessibilityLabel="Close" />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + space.s3 }]}>
+          <View style={styles.grabber} />
+          <Text variant="eyebrow" style={styles.title}>
+            Country
+          </Text>
+          <View style={styles.searchBox}>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search country or code"
+              placeholderTextColor={colors.textMuted}
+              autoCorrect={false}
+              autoCapitalize="none"
+              maxFontSizeMultiplier={MAX_FONT_SCALE}
+              style={styles.searchInput}
+              accessibilityLabel="Search country"
+            />
+          </View>
+          <FlatList
+            data={results}
+            keyExtractor={(item) => item.code}
+            style={styles.list}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
+              <Text variant="bodyMuted" style={styles.empty}>
+                No country matches that.
+              </Text>
+            }
+            renderItem={({ item }) => (
+              <Pressable
+                accessibilityRole="radio"
+                accessibilityState={{ selected: item.code === selectedCode }}
+                accessibilityLabel={`${item.name} +${item.dialCode}`}
+                onPress={() => {
+                  onSelect(item.code);
+                  close();
+                }}
+                style={({ pressed }) => [styles.option, pressed && styles.pressed]}
+              >
+                <Text style={styles.flag}>{flagFor(item.code)}</Text>
+                <Text variant="bodyValue" style={styles.name} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text variant="bodyMuted">+{dialCodeFor(item.code)}</Text>
+              </Pressable>
+            )}
           />
         </View>
-        <FlatList
-          data={results}
-          keyExtractor={(item) => item.code}
-          style={styles.list}
-          keyboardShouldPersistTaps="handled"
-          ListEmptyComponent={
-            <Text variant="bodyMuted" style={styles.empty}>
-              No country matches that.
-            </Text>
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              accessibilityRole="radio"
-              accessibilityState={{ selected: item.code === selectedCode }}
-              accessibilityLabel={`${item.name} +${item.dialCode}`}
-              onPress={() => {
-                onSelect(item.code);
-                close();
-              }}
-              style={({ pressed }) => [styles.option, pressed && styles.pressed]}
-            >
-              <Text style={styles.flag}>{flagFor(item.code)}</Text>
-              <Text variant="bodyValue" style={styles.name} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <Text variant="bodyMuted">+{dialCodeFor(item.code)}</Text>
-            </Pressable>
-          )}
-        />
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -101,11 +121,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: colors.overlayScrim,
   },
+  frame: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flexShrink: 1,
     maxHeight: '80%',
     backgroundColor: colors.bgSurface,
     borderTopLeftRadius: 20,

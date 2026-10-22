@@ -18,6 +18,7 @@ import { designAsset } from '../../src/theme/assets';
 import { colors, fontFamily, fontSize, space } from '../../src/theme/tokens';
 import type { AddonType, OrderAddon } from '../../src/api/types';
 import { useAuthStore } from '../../src/stores/auth';
+import { useHardwareBack } from '../../src/components/checkout/checkoutNavigation';
 
 /**
  * Design screen 18 · Confirmation.
@@ -142,6 +143,11 @@ export default function ConfirmationScreen() {
   useEffect(() => {
     if (notPaid && validOrderId) router.replace(`/checkout/payment?orderId=${validOrderId}`);
   }, [notPaid, router, validOrderId]);
+
+  // The checkout behind this screen was cleared when the order was paid, so back would land on a
+  // step that can only say it expired. Android's back goes to Tickets instead; the iOS swipe is
+  // off in the checkout layout.
+  useHardwareBack(() => router.replace('/(tabs)/tickets'));
 
   if (!validOrderId) {
     return (
