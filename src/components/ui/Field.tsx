@@ -1,5 +1,6 @@
 import { type ReactNode, type Ref } from 'react';
 import {
+  Keyboard,
   Pressable,
   StyleSheet,
   TextInput,
@@ -9,7 +10,7 @@ import {
 } from 'react-native';
 import { colors, fontFamily } from '../../theme/tokens';
 import { KEYBOARD_DONE_ID, KeyboardDoneAccessory, needsDoneAccessory } from './KeyboardDone';
-import { Text } from './Text';
+import { MAX_FONT_SCALE, Text } from './Text';
 
 /**
  * The bordered input box used across onboarding, checkout and payment:
@@ -87,6 +88,8 @@ export function TextField({
         <TextInput
           ref={ref}
           placeholderTextColor={colors.textMuted}
+          // Capped as `Text` is; a field's own `maxFontSizeMultiplier` in `rest` still wins.
+          maxFontSizeMultiplier={MAX_FONT_SCALE}
           style={[styles.input, style]}
           {...rest}
           inputAccessoryViewID={done ? KEYBOARD_DONE_ID : rest.inputAccessoryViewID}
@@ -101,6 +104,9 @@ export function TextField({
 /**
  * A field that opens a picker rather than a keyboard (gender, area, date of birth). Renders
  * identically to a `TextField` so the form reads as one thing.
+ *
+ * A press puts away any keyboard the field before left up, which would otherwise sit over the
+ * sheet or dialog the press opens. `SelectField` and `DateField` open through here too.
  */
 export function PickerField({
   label,
@@ -120,7 +126,13 @@ export function PickerField({
   return (
     <View style={[styles.field, containerStyle]}>
       <FieldLabel>{label}</FieldLabel>
-      <Pressable accessibilityRole="button" onPress={onPress}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          Keyboard.dismiss();
+          onPress();
+        }}
+      >
         <FieldBox invalid={Boolean(error)}>
           <Text
             variant="bodyValue"

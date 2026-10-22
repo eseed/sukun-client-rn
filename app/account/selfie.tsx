@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Image, Linking, Pressable, StyleSheet, View } from 'react-native';
 import {
   BackButton,
   BulletHeading,
@@ -85,6 +85,10 @@ export default function SelfieScreen() {
       Alert.alert(
         'Camera access needed',
         'Sukun needs the camera to take the selfie that verifies you at entry. You can enable it in Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+        ],
       );
       return;
     }
@@ -149,7 +153,9 @@ export default function SelfieScreen() {
   if (authStatus === 'signed-out' || !user) return <Redirect href="/(onboarding)/welcome" />;
 
   return (
-    <Screen contentStyle={styles.content}>
+    // Scrolls, so a short phone (an iPhone SE), or the taller layout once a photo is taken,
+    // still reaches the buttons. The spacer keeps them at the bottom of a tall screen.
+    <Screen scroll contentStyle={styles.content}>
       <BackButton onPress={leave} style={styles.back} />
 
       <StepLabel>{optional ? 'Optional' : 'Entry pass'}</StepLabel>
