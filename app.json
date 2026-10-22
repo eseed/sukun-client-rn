@@ -78,7 +78,7 @@
         "android.permission.WRITE_CONTACTS",
         "android.permission.WRITE_SETTINGS"
       ],
-      "versionCode": 18
+      "versionCode": 20
     },
     "web": {
       "favicon": "./assets/favicon.png",
