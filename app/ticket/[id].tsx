@@ -368,7 +368,9 @@ export default function EntryPassScreen() {
 
   return (
     <View style={styles.root}>
-      <Screen tone="inverse" edges={{ bottom: false }} contentStyle={styles.content}>
+      {/* It scrolls: the panels under the QR (rooms, room documents, children, add-ons) run
+          past the bottom bar on most phones. */}
+      <Screen tone="inverse" scroll edges={{ bottom: false }} contentStyle={styles.content}>
         <BackButton tone="inverse" onPress={() => router.back()} style={styles.back} />
 
         <View style={styles.liveRow}>
