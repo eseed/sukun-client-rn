@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import {
@@ -18,6 +18,7 @@ import { FlowerCorner } from '../../src/components/checkout/FlowerCorner';
 import { IncludesVatNote } from '../../src/components/checkout/VatNotes';
 import { HeldOrderPanel, useHeldOrder } from '../../src/components/checkout/HeldOrder';
 import { HoldTimer } from '../../src/components/checkout/HoldTimer';
+import { isNotFoundError, useHardwareBack } from '../../src/components/checkout/checkoutNavigation';
 import {
   useApplyCartPromo,
   useCart,
@@ -159,6 +160,18 @@ export default function ReviewScreen() {
     trackPaymentFailed(order.id, sheet.outcome);
   }, [order, sheet.outcome]);
 
+  /** Once placed, back must not re-enter an editable cart screen: it goes on to pay, or out. */
+  const leavePlaced = () => {
+    if (recoveryOrderId) {
+      router.replace(`/checkout/payment?orderId=${recoveryOrderId}`);
+    } else if (validEventId) {
+      router.replace(`/event/${validEventId}`);
+    } else {
+      router.replace('/(tabs)/discover');
+    }
+  };
+  useHardwareBack(placed ? leavePlaced : null);
+
   /** Takes a fresh price. Any edit invalidates the token, so the screen re-asks rather than reuses. */
   const refresh = async () => {
     if (!cartId) return;
@@ -224,10 +237,26 @@ export default function ReviewScreen() {
   // would hold this screen on a spinner that can never resolve.
   if (!cartId) return expired;
 
-  if (access.loading || cartQuery.isPending) {
+  if (access.loading || cartQuery.isPending || (cartQuery.isError && cartQuery.isFetching)) {
     return (
       <Screen>
         <ResourceState status="loading" loadingLabel="Loading your order..." />
+      </Screen>
+    );
+  }
+
+  // Asking for the cart failed (no connection, a timeout, a server error): that is not an expired
+  // checkout, so it says what went wrong and offers to ask again.
+  if (!cart && cartQuery.isError && !isNotFoundError(cartQuery.error)) {
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <BackButton onPress={() => router.back()} style={styles.back} />
+        <ResourceState
+          status="error"
+          errorTitle="We couldn't load your order"
+          errorMessage={messageForError(cartQuery.error)}
+          onRetry={() => void cartQuery.refetch()}
+        />
       </Screen>
     );
   }
@@ -236,6 +265,11 @@ export default function ReviewScreen() {
 
   const token = pricing?.pricingConfirmationToken ?? null;
   const canPlace = Boolean(priced?.canPlaceOrder && pricing?.status === 'complete' && token);
+  /**
+   * The price check itself failed, so there is no total to pay. The button asks again rather than
+   * standing disabled with nothing to tap.
+   */
+  const priceFailed = !placed && preview.isError;
 
   async function onApplyPromo() {
     setError(null);
@@ -391,18 +425,14 @@ export default function ReviewScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
+      {/* Placed: the iOS swipe would reopen an editable step, so it is off; Back leaves instead. */}
+      <Stack.Screen options={{ gestureEnabled: !placed }} />
       <FlowerCorner top={52} />
       <BackButton
         onPress={() => {
           // Once placed, Back must not re-enter an editable cart screen.
           if (placed) {
-            if (recoveryOrderId) {
-              router.replace(`/checkout/payment?orderId=${recoveryOrderId}`);
-            } else if (validEventId) {
-              router.replace(`/event/${validEventId}`);
-            } else {
-              router.replace('/(tabs)/discover');
-            }
+            leavePlaced();
             return;
           }
           router.back();
@@ -600,17 +630,26 @@ export default function ReviewScreen() {
               ? recoveryOrderId
                 ? 'Continue to payment'
                 : 'Back to the event'
-              : !termsAccepted
-                ? 'Accept the terms to pay'
-                : canPlace
-                  ? 'Continue to payment'
-                  : 'This order cannot be paid yet'
+              : priceFailed
+                ? 'Try again'
+                : !termsAccepted
+                  ? 'Accept the terms to pay'
+                  : canPlace
+                    ? 'Continue to payment'
+                    : 'This order cannot be paid yet'
           }
-          disabled={placed ? false : !canPlace || !termsAccepted}
+          disabled={placed || priceFailed ? false : !canPlace || !termsAccepted}
           loading={
             !placed && (placeOrder.isPending || initiatePayment.isPending || preview.isPending)
           }
-          onPress={onContinue}
+          onPress={
+            priceFailed
+              ? () => {
+                  setError(null);
+                  void refresh();
+                }
+              : onContinue
+          }
         />
       )}
     </Screen>

@@ -29,6 +29,7 @@ import { messageForError } from '../../src/lib/errors';
 import { formatDate, formatEgp } from '../../src/lib/format';
 import { formatPhoneLocal } from '../../src/lib/phone';
 import { useCheckoutStore, type DraftAddon } from '../../src/stores/checkout';
+import { isNotFoundError } from '../../src/components/checkout/checkoutNavigation';
 import { colors, radius, space } from '../../src/theme/tokens';
 import { groupForRoom, peopleInOrder } from '../../src/lib/roommates';
 import { track } from '../../src/lib/analytics';
@@ -220,10 +221,26 @@ export default function RoomsScreen() {
   if (!cartId || !validEventId) return expired;
   if (roomLines.length === 0) return noRoom;
 
-  if (access.loading || cartQuery.isLoading) {
+  if (access.loading || cartQuery.isLoading || (cartQuery.isError && cartQuery.isFetching)) {
     return (
       <Screen>
         <ResourceState status="loading" loadingLabel="Loading your room..." />
+      </Screen>
+    );
+  }
+
+  // Asking for the cart failed (no connection, a timeout, a server error): that is not an expired
+  // checkout, so it says what went wrong and offers to ask again.
+  if (!cartQuery.data && cartQuery.isError && !isNotFoundError(cartQuery.error)) {
+    return (
+      <Screen scroll contentStyle={styles.content}>
+        <BackButton onPress={() => router.back()} style={styles.back} />
+        <ResourceState
+          status="error"
+          errorTitle="We couldn't load your cart"
+          errorMessage={messageForError(cartQuery.error)}
+          onRetry={() => void cartQuery.refetch()}
+        />
       </Screen>
     );
   }
@@ -451,13 +468,28 @@ function RoomLineCard({
 
   // `isLoading` rather than `isPending`: this query is switched off without an addon id, and a
   // disabled query is pending forever, which would report this line as never resolved.
-  const ready = !addonQuery.isLoading;
+  // A fetch that failed is not resolved either: reporting it as a room with no places told the
+  // buyer "That room is no longer in your cart" over what was only a dropped connection. A real
+  // not-found still resolves, to no room.
+  const failed = !addonQuery.data && addonQuery.isError && !isNotFoundError(addonQuery.error);
+  const ready = !addonQuery.isLoading && !failed;
   const occupancy = room?.occupancy ?? 0;
   const roomType = room?.roomType ?? '';
 
   useEffect(() => {
     onReport(line.optionId, { ready, occupancy, roomType });
   }, [line.optionId, ready, occupancy, roomType, onReport]);
+
+  if (failed && !addonQuery.isFetching) {
+    return (
+      <ResourceState
+        status="error"
+        errorTitle={`We couldn't load ${line.addonName}`}
+        errorMessage={messageForError(addonQuery.error)}
+        onRetry={() => void addonQuery.refetch()}
+      />
+    );
+  }
 
   if (!ready) {
     return (

@@ -7,6 +7,7 @@ import { track } from '../../../src/lib/analytics';
 import { resetPurchaseAnalyticsForTests } from '../../../src/lib/purchase-analytics';
 import { loadPendingPayment } from '../../../src/lib/pending-payment';
 
+import { Alert } from 'react-native';
 import PaymentScreen from '../payment';
 
 jest.mock('../../../src/lib/analytics', () => ({
@@ -54,6 +55,7 @@ function emitSdkResult(status: string, shape: 'object' | 'string' = 'object') {
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
+  useFocusEffect: jest.fn(),
 }));
 
 jest.mock('../../../src/lib/paymob', () => ({
@@ -288,8 +290,15 @@ it('cancels the order, clears the stale checkout and returns to the event', asyn
 
   renderWithProviders(<PaymentScreen />);
 
+  const alert = jest.spyOn(Alert, 'alert');
   await waitFor(() => expect(screen.getByText('Cancel this order')).toBeTruthy());
   fireEvent.press(screen.getByText('Cancel this order'));
+
+  // One tap only asks: nothing is cancelled until the buyer confirms.
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+  const buttons = alert.mock.calls.at(-1)?.[2] ?? [];
+  expect(buttons.map((button) => button.text)).toEqual(['Keep order', 'Cancel order']);
+  act(() => buttons.find((button) => button.text === 'Cancel order')?.onPress?.());
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith(`/event/${TULUA_ID}`));
   expect(mockRouter.back).not.toHaveBeenCalled();

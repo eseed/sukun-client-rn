@@ -62,10 +62,12 @@ export function PeopleHeading() {
 /**
  * Assigns a line's units to people, one unit at a time (design screen 13).
  *
- * A tap adds a unit for that person and a second tap takes it back, which is how a buyer gives
- * two dinners to one guest without a separate quantity control per row. The picker stops handing
- * out units once the line is fully assigned, so it can never build a request the server would
- * reject for over-assignment.
+ * A tap adds a unit for that person while units are left, which is how a buyer gives two dinners
+ * to one guest without a separate quantity control per row. Once every unit is given out, a tap
+ * on someone holding one takes it back, and a tap on someone without one moves a unit to them
+ * from whoever holds the most, so changing who gets it never needs the small "−". The total
+ * never goes past the line's units, so the picker cannot build a request the server would reject
+ * for over-assignment.
  *
  * `autoKey` marks the person the screen seeded for the buyer, so design 13's "Auto" badge says
  * what happened. It disappears the moment that line is touched, because from then on the
@@ -85,14 +87,39 @@ export function RecipientPicker({
   onChange: (assignments: CartAddonAssignmentInput[]) => void;
 }) {
   const assignedTo = (person: Recipient) =>
-    assignments.find(
-      (assignment) =>
-        (assignment.cartAttendeeId !== undefined &&
-          assignment.cartAttendeeId === person.target.cartAttendeeId) ||
-        (assignment.ticketId !== undefined && assignment.ticketId === person.target.ticketId),
-    )?.quantity ?? 0;
+    assignments.find((assignment) => matches(assignment, person))?.quantity ?? 0;
 
   const total = assignments.reduce((sum, assignment) => sum + (assignment.quantity ?? 1), 0);
+
+  const matches = (assignment: CartAddonAssignmentInput, person: Recipient) =>
+    (assignment.cartAttendeeId !== undefined &&
+      assignment.cartAttendeeId === person.target.cartAttendeeId) ||
+    (assignment.ticketId !== undefined && assignment.ticketId === person.target.ticketId);
+
+  /** A tap on the row: add while units are left, otherwise take back or move one. */
+  function tap(person: Recipient) {
+    if (total < unitCount) {
+      bump(person, 1);
+      return;
+    }
+    if (assignedTo(person) > 0) {
+      bump(person, -1);
+      return;
+    }
+    // Every unit is out: take one from the biggest holder (the latest, on a tie) for this person.
+    let donor = -1;
+    assignments.forEach((assignment, index) => {
+      const quantity = assignment.quantity ?? 1;
+      if (donor === -1 || quantity >= (assignments[donor]?.quantity ?? 1)) donor = index;
+    });
+    if (donor === -1) return;
+    const next = assignments.flatMap((assignment, index) => {
+      if (index !== donor) return [assignment];
+      const left = (assignment.quantity ?? 1) - 1;
+      return left > 0 ? [{ ...assignment, quantity: left }] : [];
+    });
+    onChange([...next, { ...person.target, quantity: 1 }]);
+  }
 
   function bump(person: Recipient, by: number) {
     const current = assignedTo(person);
@@ -100,14 +127,7 @@ export function RecipientPicker({
 
     if (next < 0 || (by > 0 && total >= unitCount)) return;
 
-    const without = assignments.filter(
-      (assignment) =>
-        !(
-          (assignment.cartAttendeeId !== undefined &&
-            assignment.cartAttendeeId === person.target.cartAttendeeId) ||
-          (assignment.ticketId !== undefined && assignment.ticketId === person.target.ticketId)
-        ),
-    );
+    const without = assignments.filter((assignment) => !matches(assignment, person));
 
     onChange(next === 0 ? without : [...without, { ...person.target, quantity: next }]);
   }
@@ -124,14 +144,13 @@ export function RecipientPicker({
     <View style={styles.list}>
       {people.map((person) => {
         const count = assignedTo(person);
-        const full = total >= unitCount && count === 0;
 
         return (
           <SelectableCard
             key={person.key}
             selected={count > 0}
-            disabled={!person.eligible || full}
-            onPress={() => bump(person, 1)}
+            disabled={!person.eligible || unitCount === 0}
+            onPress={() => tap(person)}
           >
             <CheckCircle selected={count > 0} />
             <View style={styles.body}>
@@ -143,14 +162,15 @@ export function RecipientPicker({
             {autoKey === person.key && count === 1 ? <Badge label="Auto" tone="sage" /> : null}
             {count > 1 ? <Badge label={`× ${count}`} tone="sage" /> : null}
             {count > 0 ? (
-              <Text
+              <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Remove one from ${person.name}`}
+                hitSlop={8}
                 onPress={() => bump(person, -1)}
                 style={styles.remove}
               >
-                −
-              </Text>
+                <Text style={styles.removeLabel}>−</Text>
+              </Pressable>
             ) : null}
           </SelectableCard>
         );
@@ -604,9 +624,14 @@ const styles = StyleSheet.create({
   body: { flex: 1, marginLeft: space.s3 },
   name: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
   remove: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 44,
+  },
+  removeLabel: {
     color: colors.textMuted,
     fontSize: 22,
-    paddingHorizontal: space.s3,
   },
   peopleHeading: { marginTop: space.s4, marginBottom: space.s2 },
   adder: { gap: space.s2, marginTop: space.s2 },
