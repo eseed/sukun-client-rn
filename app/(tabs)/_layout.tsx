@@ -3,8 +3,10 @@ import { StyleSheet, Text, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClaimGate } from '../../src/components/tickets/ClaimGate';
 import { TicketsTabIcon } from '../../src/components/tickets/TicketsTabIcon';
-import { DiscoverIcon, HomeIcon, ProfileIcon } from '../../src/components/ui';
+import { LiveTabIcon } from '../../src/components/live-event/LiveTabIcon';
+import { DiscoverIcon, ProfileIcon } from '../../src/components/ui';
 import { useHasWaitingInvitation } from '../../src/hooks/useClaimableTickets';
+import { useCurrentTickets } from '../../src/hooks/useCurrentTickets';
 import { useLiveEventContext } from '../../src/hooks/useLiveEventContext';
 import { useAuthStore } from '../../src/stores/auth';
 import { useLiveModeOn } from '../../src/stores/liveMode';
@@ -53,16 +55,24 @@ const BAR_CONTENT_HEIGHT = 70;
  * Selecting the face, never a numeric `fontWeight` — Android has no Banana Grotesk to
  * synthesise from and would drop the brand face outright (see `assets/fonts/README.md`).
  */
-const tabLabel = (title: string) => {
+const tabLabel = (title: string, tint?: ColorValue, alwaysMedium = false) => {
   function TabLabel({ focused, color }: { focused: boolean; color: ColorValue }) {
     return (
-      <Text style={[styles.label, focused ? styles.labelActive : null, { color }]}>{title}</Text>
+      <Text
+        style={[
+          styles.label,
+          focused || alwaysMedium ? styles.labelActive : null,
+          { color: tint ?? color },
+        ]}
+      >
+        {title}
+      </Text>
     );
   }
   return TabLabel;
 };
 
-/** Home (live mode's tab) is drawn first but is never where the tab group opens. */
+/** Live (live mode's tab) is drawn first but is never where the tab group opens. */
 export const unstable_settings = {
   initialRouteName: 'discover',
 };
@@ -77,6 +87,10 @@ export default function TabsLayout() {
   // While live mode is on, the bar keeps the Home tab live mode's own bar shows, so going to
   // Discover, Tickets or Profile never loses the way back to Event Home.
   const liveModeOn = useLiveModeOn(userId, liveEventId);
+  // Owner's call, 2026-10-22: a ticket for an event ahead or under way turns Tickets orange, and
+  // when there is only one, the tab opens it rather than a list of one.
+  const current = useCurrentTickets();
+  const ticketTint = current.tickets.length > 0 ? colors.tabCurrentTicket : undefined;
 
   return (
     <ClaimGate>
@@ -93,10 +107,11 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="live"
           options={{
-            title: 'Home',
+            title: 'Live',
             href: liveModeOn ? undefined : null,
-            tabBarLabel: tabLabel('Home'),
-            tabBarIcon: ({ color }) => <HomeIcon color={color} />,
+            tabBarLabel: tabLabel('Live', colors.textPrimary, true),
+            tabBarAccessibilityLabel: 'Live, back to the event',
+            tabBarIcon: () => <LiveTabIcon />,
           }}
           listeners={{
             tabPress: (event) => {
@@ -117,11 +132,22 @@ export default function TabsLayout() {
           name="tickets"
           options={{
             title: 'Tickets',
-            tabBarLabel: tabLabel('Tickets'),
+            tabBarLabel: tabLabel('Tickets', ticketTint, ticketTint !== undefined),
             tabBarAccessibilityLabel: invitationWaiting
               ? 'Tickets, an invitation is waiting for you'
               : 'Tickets',
-            tabBarIcon: ({ color }) => <TicketsTabIcon color={color} waiting={invitationWaiting} />,
+            tabBarIcon: ({ color }) => (
+              <TicketsTabIcon color={ticketTint ?? color} waiting={invitationWaiting} />
+            ),
+          }}
+          listeners={{
+            tabPress: (event) => {
+              // A waiting invitation keeps the list, which is where it is claimed.
+              if (!current.onlyTicketId || invitationWaiting) return;
+              event.preventDefault();
+              router.navigate('/(tabs)/tickets');
+              router.push(`/ticket/${current.onlyTicketId}`);
+            },
           }}
         />
         <Tabs.Screen

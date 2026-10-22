@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import type { ScheduleBlock } from '../../api/types';
 import { formatClockTime, formatTime } from '../../lib/format';
 import { colors, fontFamily, fontSize, radius, schedule, space } from '../../theme/tokens';
+import { usePageScroll } from '../ui/page-scroll';
 import { Text } from '../ui/Text';
 import { stageTint, type Timetable, type TimetableItem } from './schedule-model';
 import { StageTag } from './stage-tag';
@@ -20,6 +21,10 @@ const COLUMN_MIN = schedule.timetableColumnMin;
  * Wider than the screen, the stages scroll sideways with the hours pinned at the left. `bleed`
  * is the screen's side padding: the stages run on to the screen's right edge, so more of them
  * show at once.
+ *
+ * On a Screen with `trackScroll`, the stage names stay pinned under the status bar while the
+ * page scrolls down the day (owner's call, 2026-10-22), so a session far down a column still
+ * says which stage it is on. They ride with the stages sideways as before.
  */
 export function ScheduleTimetable<T extends ScheduleBlock>({
   timetable,
@@ -40,13 +45,43 @@ export function ScheduleTimetable<T extends ScheduleBlock>({
   const columnWidth = Math.max(COLUMN_MIN, fill);
   const bodyHeight = HOUR * hours.length;
 
+  // Where the calendar sits inside the page's scroll content, so the stage row can pin once the
+  // page scrolls past it, and let go when the day's last hour scrolls away.
+  const page = usePageScroll();
+  const frameRef = useRef<View | null>(null);
+  const [frameTop, setFrameTop] = useState<number | null>(null);
+  const measure = () => {
+    // The content container's host view; untyped in RN's ScrollView declarations.
+    const scroller = page?.scrollRef.current as
+      | (ScrollView & { getInnerViewRef?: () => View | null })
+      | null
+      | undefined;
+    const content = scroller?.getInnerViewRef?.();
+    if (!content || !frameRef.current) return;
+    frameRef.current.measureLayout(content, (_x, y) => setFrameTop(y), () => undefined);
+  };
+  const pin =
+    page && frameTop !== null && bodyHeight > 0
+      ? page.scrollY.interpolate({
+          inputRange: [frameTop - page.topInset, frameTop - page.topInset + bodyHeight],
+          outputRange: [0, bodyHeight],
+          extrapolate: 'clamp',
+        })
+      : null;
+  const pinned = pin ? { transform: [{ translateY: pin }] } : null;
+
   return (
     <View
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      ref={frameRef}
+      onLayout={(event) => {
+        setWidth(event.nativeEvent.layout.width);
+        measure();
+      }}
       style={[styles.frame, { marginRight: -bleed }]}
     >
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.rail}>
-        <View style={{ height: headHeight }} />
+        {/* Covers the hours as they pass under the pinned stage row. */}
+        <Animated.View style={[{ height: headHeight }, pinned && styles.pinnedCorner, pinned]} />
         <View style={{ height: bodyHeight }}>
           {hours.map((hour, index) => (
             <Text
@@ -71,16 +106,16 @@ export function ScheduleTimetable<T extends ScheduleBlock>({
           stages only scroll from a session's own Pressable.
         */}
         <View onStartShouldSetResponder={() => true}>
-          <View
+          <Animated.View
             onLayout={(event) => setHeadHeight(event.nativeEvent.layout.height)}
-            style={styles.heads}
+            style={[styles.heads, pinned && styles.pinnedHeads, pinned]}
           >
             {columns.map((column) => (
               <View key={column.stage.id} style={[styles.head, { width: columnWidth }]}>
                 <StageTag name={column.stage.name} color={column.color} wrap />
               </View>
             ))}
-          </View>
+          </Animated.View>
 
           <View style={[styles.body, { height: bodyHeight }]}>
             {columns.map((column) => (
@@ -162,6 +197,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   heads: { flexDirection: 'row', alignItems: 'flex-end' },
+  // Above the sessions it slides over, on the page colour so they do not show through.
+  pinnedHeads: { zIndex: 2, elevation: 2, backgroundColor: colors.bgPage, borderBottomWidth: 1, borderBottomColor: colors.borderDefault },
+  pinnedCorner: { zIndex: 2, elevation: 2, backgroundColor: colors.bgPage },
   head: { justifyContent: 'flex-end', paddingHorizontal: space.s1, paddingBottom: space.s3 },
   body: { flexDirection: 'row' },
   column: { position: 'relative', borderLeftWidth: 1, borderLeftColor: colors.borderDefault },

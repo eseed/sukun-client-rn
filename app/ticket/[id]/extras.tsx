@@ -86,6 +86,8 @@ export default function TicketExtrasScreen() {
   const [chosen, setChosen] = useState<Record<string, number>>({});
   const [priced, setPriced] = useState<CartPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** "Buy add-on" was tapped before anything was chosen: say what to do instead of nothing. */
+  const [askedToPick, setAskedToPick] = useState(false);
 
   /**
    * The cart id, held synchronously.
@@ -212,7 +214,7 @@ export default function TicketExtrasScreen() {
   if (contextQuery.isLoading) {
     return (
       <Screen>
-        <ResourceState status="loading" loadingLabel="Loading extras..." />
+        <ResourceState status="loading" loadingLabel="Loading add-ons..." />
       </Screen>
     );
   }
@@ -223,7 +225,7 @@ export default function TicketExtrasScreen() {
         <BackButton onPress={() => router.back()} style={styles.back} />
         <ResourceState
           status="error"
-          errorTitle="Extras aren't available"
+          errorTitle="Add-ons aren't available"
           errorMessage={messageForError(contextQuery.error)}
         />
       </Screen>
@@ -243,7 +245,7 @@ export default function TicketExtrasScreen() {
 
   /** A count of things tapped, not a price, so it can be read off the selection directly. */
   const units = picked.reduce((total, [, quantity]) => total + quantity, 0);
-  const countLabel = units === 1 ? '1 extra' : `${units} extras`;
+  const countLabel = units === 1 ? '1 add-on' : `${units} add-ons`;
 
   const blockedByServer = priced != null && !priced.canPlaceOrder;
   // Continue waits for a priced cart, not just a created one: until the preview comes back there
@@ -270,6 +272,21 @@ export default function TicketExtrasScreen() {
   const catalog = [...context.catalog].sort(
     (a, b) => Number(b.id === preselectedAddonId) - Number(a.id === preselectedAddonId),
   );
+  /**
+   * Whether anything here can be bought at all: an option on sale, priced, and not one this
+   * ticket already holds (its room, or a seat on a trip it is booked on). Without one, the buy
+   * button is left out rather than drawn as a button that does nothing (owner's call, 2026-10-22).
+   */
+  const anyOnSale = context.catalog.some(
+    (addon) =>
+      !(hasAccommodation && addon.type === 'accommodation') &&
+      addon.options.some(
+        (option) =>
+          option.availability !== 'unavailable' &&
+          option.priceEgpNow !== null &&
+          !(addon.type === 'transport' && (ownedQuantity.get(option.id) ?? 0) > 0),
+      ),
+  );
   const listedElsewhere = context.existing.addons.filter(
     (addon) =>
       !(addon.room ? roomGroupId !== undefined : catalogOptionIds.has(addon.addonOptionId)),
@@ -281,7 +298,7 @@ export default function TicketExtrasScreen() {
 
       <StepLabel>Adding to an existing ticket</StepLabel>
       <View style={styles.heading}>
-        <BulletHeading title="Add extras" size="md" />
+        <BulletHeading title="Add-ons" size="md" />
       </View>
 
       {/* Artboard 22 names the ticket, so an account holding several is never ambiguous. */}
@@ -379,12 +396,13 @@ export default function TicketExtrasScreen() {
                   <SelectableCard
                     selected={quantity > 0}
                     disabled={unavailable}
-                    onPress={() =>
+                    onPress={() => {
+                      setAskedToPick(false);
                       setChosen((current) => ({
                         ...current,
                         [option.id]: current[option.id] ? 0 : 1,
-                      }))
-                    }
+                      }));
+                    }}
                   >
                     <RadioDot selected={quantity > 0} />
                     <View style={styles.optionBody}>
@@ -462,18 +480,33 @@ export default function TicketExtrasScreen() {
         </Card>
       ) : null}
 
-      <Button
-        label={picked.length > 0 ? 'Continue' : 'Choose an extra'}
-        disabled={!canContinue}
-        loading={preview.isPending || extrasCart.isPending}
-        onPress={() => {
-          trackMetaAddExtrasToTicket(
-            picked.map(([optionId, quantity]) => ({ id: optionId, quantity })),
-            subtotal,
-          );
-          router.push(`/ticket/${context.ticketId}/review`);
-        }}
-      />
+      {picked.length > 0 ? (
+        <Button
+          label="Continue"
+          disabled={!canContinue}
+          loading={preview.isPending || extrasCart.isPending}
+          onPress={() => {
+            trackMetaAddExtrasToTicket(
+              picked.map(([optionId, quantity]) => ({ id: optionId, quantity })),
+              subtotal,
+            );
+            router.push(`/ticket/${context.ticketId}/review`);
+          }}
+        />
+      ) : anyOnSale ? (
+        <>
+          {askedToPick ? (
+            <Text variant="bodyMuted" style={styles.pickHint}>
+              Tap an add-on above to choose it, then Continue.
+            </Text>
+          ) : null}
+          <Button label="Buy add-on" onPress={() => setAskedToPick(true)} />
+        </>
+      ) : (
+        <Text variant="bodyMuted" style={styles.pickHint}>
+          No add-ons are on sale right now.
+        </Text>
+      )}
     </Screen>
   );
 }
@@ -606,4 +639,5 @@ const styles = StyleSheet.create({
   summaryCount: { fontSize: 15, fontFamily: fontFamily.bodyMedium, color: colors.textPrimary },
   summaryMoney: { fontSize: 15, fontFamily: fontFamily.bodyMedium, color: colors.textPrimary },
   spacer: { flex: 1, minHeight: space.s4 },
+  pickHint: { textAlign: 'center' },
 });

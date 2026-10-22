@@ -82,7 +82,7 @@ export default function LiveEventLayout() {
         <Stack.Screen name="my-schedule" />
         <Stack.Screen name="session/[blockId]" />
       </Stack>
-      <BottomNav activeLabel="Home" onNavigate={(href) => {
+      <BottomNav activeLabel="Live" onNavigate={(href) => {
         if (href === '/(tabs)/discover' && live.status === 'ready') {
           track('live_event_discover_opened', { event_id: live.context.eventId });
         }
