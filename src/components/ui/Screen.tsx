@@ -1,5 +1,6 @@
-import { type ReactElement, type ReactNode, type Ref } from 'react';
+import { type ReactElement, type ReactNode, type Ref, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme/tokens';
+import { PageScrollContext, type PageScroll } from './page-scroll';
 
 export interface ScreenProps {
   children: ReactNode;
@@ -31,6 +33,11 @@ export interface ScreenProps {
   scrollRef?: Ref<ScrollView>;
   /** Pull to refresh on a `scroll` screen: a `RefreshControl`. */
   refreshControl?: ReactElement<RefreshControlProps>;
+  /**
+   * Share the page's scroll position with its content (`usePageScroll`), so something inside it
+   * can pin itself while the page scrolls, as the schedule calendar's stage names do.
+   */
+  trackScroll?: boolean;
 }
 
 /** Only numeric padding participates in the inset maths; percentages fall back to the default. */
@@ -68,12 +75,32 @@ export function Screen({
   onEndReachedThreshold = 160,
   scrollRef,
   refreshControl,
+  trackScroll = false,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const top = edges?.top === false ? 0 : insets.top;
   const bottom = edges?.bottom === false ? 0 : insets.bottom;
 
   const background = tone === 'inverse' ? colors.black : colors.bgPage;
+
+  const ownScrollRef = useRef<ScrollView | null>(null);
+  useImperativeHandle(scrollRef, () => ownScrollRef.current as ScrollView, []);
+  const [scrollY] = useState(() => new Animated.Value(0));
+  const pageScroll = useMemo<PageScroll | null>(
+    () => (trackScroll ? { scrollY, scrollRef: ownScrollRef, topInset: top } : null),
+    [scrollY, top, trackScroll],
+  );
+  const handleEndReached = onEndReached
+    ? (event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        if (
+          contentOffset.y + layoutMeasurement.height >=
+          contentSize.height - onEndReachedThreshold
+        ) {
+          onEndReached();
+        }
+      }
+    : undefined;
 
   // `contentStyle` is merged here rather than layered after `inner`, because a screen that sets
   // its own `paddingTop` would otherwise replace the safe-area inset outright and render under
@@ -95,9 +122,10 @@ export function Screen({
     paddingHorizontal: toPadding(contentHorizontal, padded ? 24 : 0),
   };
 
+  const ScrollComponent = trackScroll ? Animated.ScrollView : ScrollView;
   const body = scroll ? (
-    <ScrollView
-      ref={scrollRef}
+    <ScrollComponent
+      ref={ownScrollRef}
       refreshControl={refreshControl}
       style={styles.flex}
       // `flexGrow` rather than a plain height, so a screen whose spacer pins a CTA to the
@@ -106,23 +134,24 @@ export function Screen({
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
       onScroll={
-        onEndReached
-          ? (event) => {
-              const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-              if (
-                contentOffset.y + layoutMeasurement.height >=
-                contentSize.height - onEndReachedThreshold
-              ) {
-                onEndReached();
-              }
-            }
-          : undefined
+        trackScroll
+          ? Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+              useNativeDriver: true,
+              listener: handleEndReached,
+            })
+          : handleEndReached
       }
-      scrollEventThrottle={100}
+      scrollEventThrottle={trackScroll ? 16 : 100}
       showsVerticalScrollIndicator={false}
     >
-      <Dismissable style={styles.grow}>{children}</Dismissable>
-    </ScrollView>
+      <Dismissable style={styles.grow}>
+        {pageScroll ? (
+          <PageScrollContext.Provider value={pageScroll}>{children}</PageScrollContext.Provider>
+        ) : (
+          children
+        )}
+      </Dismissable>
+    </ScrollComponent>
   ) : (
     <Dismissable style={[styles.flex, inner]}>{children}</Dismissable>
   );

@@ -1,14 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import {
+  BusIcon,
   Button,
   CalendarIcon,
   CloseIcon,
-  HelpIcon,
-  InfoIcon,
+  HomeIcon,
+  MealIcon,
   PinIcon,
   QrIcon,
   ResourceState,
@@ -17,13 +18,13 @@ import {
   Text,
 } from '../../../src/components/ui';
 import { NotificationBell } from '../../../src/components/notifications/NotificationBell';
-import { LiveEventSubnav } from '../../../src/components/live-event/live-event-shell';
 import { EntryPassSheet } from '../../../src/components/live-event/entry-pass-sheet';
-import { useEvent, useMySchedule, usePublicEventSchedule } from '../../../src/hooks/queries';
+import { useEvent, useMySchedule, usePublicEventSchedule, useTicketAddonContext } from '../../../src/hooks/queries';
+import { addonKindsInOrder, addonsOnSaleForTicket } from '../../../src/lib/addons';
 import { useLiveEventContext } from '../../../src/hooks/useLiveEventContext';
 import { useLiveModeStore } from '../../../src/stores/liveMode';
 import { happeningNow } from '../../../src/lib/live-event';
-import type { ScheduleBlock } from '../../../src/api/types';
+import type { AddonType, ScheduleBlock } from '../../../src/api/types';
 import { formatDateRange, formatScheduleTime } from '../../../src/lib/format';
 import { track } from '../../../src/lib/analytics';
 import { colors, fontFamily, fontSize, radius, shadow, space, tracking } from '../../../src/theme/tokens';
@@ -102,6 +103,29 @@ export default function LiveEventHomeScreen() {
 
   const [passTicketId, setPassTicketId] = useState<string | null>(null);
 
+  // The add-ons tile (owner's call, 2026-10-22): what this ticket has booked, else what is on sale
+  // for it, with icons and names to match; with neither, no tile at all.
+  const addonContext = useTicketAddonContext(ticket?.id);
+  const addonsCell = useMemo(() => {
+    const data = addonContext.data;
+    if (!data) return null;
+    const booked = data.existing.addons.filter((addon) => addon.activeQuantity > 0);
+    if (booked.length > 0) {
+      return {
+        label: 'My Add-ons',
+        kinds: addonKindsInOrder(booked),
+        detail: uniqueNames(booked.map((addon) => addon.addonName ?? addon.label)),
+      };
+    }
+    const onSale = addonsOnSaleForTicket(data);
+    if (onSale.length === 0) return null;
+    return {
+      label: 'Buy Add-ons',
+      kinds: addonKindsInOrder(onSale),
+      detail: uniqueNames(onSale.map((addon) => addon.name)),
+    };
+  }, [addonContext.data]);
+
   const openPass = () => {
     track('live_entry_pass_tapped', { event_id: eventId, ...(ticket ? { ticket_id: ticket.id } : {}) });
     const usableTickets = context?.activeTicketsForEvent.filter((item) => item.usageStatus === 'usable') ?? [];
@@ -128,19 +152,8 @@ export default function LiveEventHomeScreen() {
     router.push(`/live-event/${eventId}/my-schedule`);
   };
 
-  const openEventInfo = () => {
-    if (!event) return;
-    track('live_event_info_opened', { event_id: eventId });
-    router.push(`/event/${event.slug}`);
-  };
-
   const openNotifications = () => {
     router.push('/notifications');
-  };
-
-  const openSupport = () => {
-    track('live_support_opened', { event_id: eventId });
-    void Linking.openURL('https://sukunwellness.co/support').catch(() => undefined);
   };
 
   return (
@@ -213,7 +226,6 @@ export default function LiveEventHomeScreen() {
           onPress={openPass}
           style={styles.passButton}
         />
-        {eventId ? <LiveEventSubnav eventId={eventId} /> : null}
 
         <View style={styles.sectionHeading}>
           <Text style={styles.sectionTitle}>{happeningTitle}</Text>
@@ -245,12 +257,9 @@ export default function LiveEventHomeScreen() {
           )}
         </ResourceState>
 
-        <View style={styles.sectionHeading}>
-          <Text style={styles.sectionTitle}>Your next session</Text>
-          <Pressable accessibilityRole="button" onPress={goMySchedule}>
-            <Text style={styles.link}>My Schedule →</Text>
-          </Pressable>
-        </View>
+        {/* No link here: the My Schedule tile below already opens it (owner's call, 2026-10-22,
+            too many things led to the same place). */}
+        <Text style={styles.sectionTitle}>Your next session</Text>
         {savedQuery.isLoading ? (
           <Text variant="bodyMuted">Loading your saved sessions...</Text>
         ) : savedQuery.isError ? (
@@ -272,14 +281,9 @@ export default function LiveEventHomeScreen() {
           <Text variant="bodyMuted">Save a session to build your personal itinerary.</Text>
         )}
 
-        {/* Screen 02 action grid: entry pass, schedules, venue, extras and event info. */}
+        {/* Screen 02 action grid: the schedules, and add-ons when there are any. The entry pass is
+            the button at the top only, and Event Info is gone (owner's calls, 2026-10-22). */}
         <View style={styles.actionGrid}>
-          <ActionCell
-            icon={<QrIcon size={30} color={colors.textPrimary} />}
-            label="Show Entry Pass"
-            detail="Quick access to your ticket"
-            onPress={openPass}
-          />
           <ActionCell
             icon={<CalendarIcon size={30} color={colors.textPrimary} />}
             label="My Schedule"
@@ -292,38 +296,22 @@ export default function LiveEventHomeScreen() {
             detail="Explore all sessions"
             onPress={goSchedule}
           />
-          <ActionCell
-            icon={<ShirtIcon size={30} color={colors.textPrimary} />}
-            label="My Extras"
-            detail="Accommodation, meals, transport"
-            onPress={() => {
-              track('live_extras_opened', { event_id: eventId, ...(ticket ? { ticket_id: ticket.id } : {}) });
-              if (ticket) router.push(`/ticket/${ticket.id}/extras`);
-              else router.push('/(tabs)/tickets');
-            }}
-          />
-          <ActionCell
-            icon={<InfoIcon size={30} color={colors.textPrimary} />}
-            label="Event Info"
-            detail="FAQs, guidelines, contacts"
-            disabled={!event}
-            onPress={openEventInfo}
-          />
+          {addonsCell ? (
+            <ActionCell
+              icon={
+                <View style={styles.addonIcons}>
+                  {addonsCell.kinds.map((kind) => <AddonKindIcon key={kind} kind={kind} />)}
+                </View>
+              }
+              label={addonsCell.label}
+              detail={addonsCell.detail}
+              onPress={() => {
+                track('live_extras_opened', { event_id: eventId, ...(ticket ? { ticket_id: ticket.id } : {}) });
+                if (ticket) router.push(`/ticket/${ticket.id}/extras`);
+              }}
+            />
+          ) : null}
         </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Need help? Get support from our team"
-          onPress={openSupport}
-          style={styles.supportRow}
-        >
-          <HelpIcon size={30} color={colors.textPrimary} />
-          <View style={styles.supportCopy}>
-            <Text style={styles.supportTitle}>Need help?</Text>
-            <Text variant="bodyMuted">Get support from our team</Text>
-          </View>
-          <Text style={styles.supportChevron}>›</Text>
-        </Pressable>
 
         <Pressable
           accessibilityRole="button"
@@ -395,6 +383,17 @@ function SessionCard({ block, now, onPress }: { block: ScheduleBlock; now: numbe
       </View>
     </Pressable>
   );
+}
+
+/** Names once each, in the order given: "Desert Lodge Room, Dinner voucher". */
+function uniqueNames(names: string[]): string {
+  return [...new Set(names)].join(', ');
+}
+
+/** One add-on kind's mark on the tile: a house for a stay, cutlery for meals, a bus, a tee. */
+function AddonKindIcon({ kind }: { kind: AddonType }) {
+  const Icon = kind === 'accommodation' ? HomeIcon : kind === 'meal' ? MealIcon : kind === 'transport' ? BusIcon : ShirtIcon;
+  return <Icon size={26} color={colors.textPrimary} />;
 }
 
 /**
@@ -549,10 +548,7 @@ const styles = StyleSheet.create({
   actionCell: { width: '48%', minHeight: 168, gap: space.s1, padding: space.s4, backgroundColor: colors.bgSurface, borderWidth: 1, borderColor: colors.borderDefault, borderRadius: radius.card },
   actionIcon: { alignItems: 'flex-start', marginBottom: space.s2 },
   actionLabel: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.bodyLg, color: colors.textPrimary },
-  supportRow: { flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s4, backgroundColor: colors.bgSurface, borderWidth: 1, borderColor: colors.borderDefault, borderRadius: radius.card },
-  supportCopy: { flex: 1, gap: space.s1 },
-  supportTitle: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.bodyLg, color: colors.textPrimary },
-  supportChevron: { fontSize: 24, color: colors.textMuted },
+  addonIcons: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   exitRow: { alignItems: 'center', gap: space.s1, paddingVertical: space.s4 },
   exitRowLabel: {
     fontFamily: fontFamily.bodyMedium,

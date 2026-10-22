@@ -45,32 +45,37 @@ export function NotificationRow({
       ])}
       accessibilityHint={opens ?? undefined}
       onPress={onPress}
-      style={({ pressed }) => [pressed && styles.pressed]}
+      // Only a row that opens something looks pressable; the rest are just marked read.
+      style={({ pressed }) => [pressed && opens && styles.pressed]}
     >
-      <Card style={unread ? styles.card : { ...styles.card, ...styles.read }}>
-        <View style={styles.top}>
-          <Text
-            variant="bodyValue"
-            style={[styles.title, unread && styles.titleUnread]}
-            numberOfLines={2}
-          >
-            {notification.title}
+      <Card style={unread ? styles.row : { ...styles.row, ...styles.read }}>
+        <View style={styles.body}>
+          <View style={styles.top}>
+            <Text
+              variant="bodyValue"
+              style={[styles.title, unread && styles.titleUnread]}
+              numberOfLines={2}
+            >
+              {notification.title}
+            </Text>
+            {unread ? <View style={styles.dot} testID="notification-unread-dot" /> : null}
+          </View>
+          <Text variant="bodyMuted" color={unread ? colors.textPrimary : undefined}>
+            {notification.body}
           </Text>
-          {unread ? <View style={styles.dot} testID="notification-unread-dot" /> : null}
+          {when ? <Text variant="metaSm">{when}</Text> : null}
         </View>
-        <Text variant="bodyMuted" color={unread ? colors.textPrimary : undefined}>
-          {notification.body}
-        </Text>
-        {when ? <Text variant="metaSm">{when}</Text> : null}
+        {opens ? (
+          <Text style={styles.chevron} testID="notification-opens-chevron">
+            ›
+          </Text>
+        ) : null}
       </Card>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    gap: space.s2,
-  },
   read: {
     backgroundColor: colors.bgPage,
   },
@@ -92,6 +97,23 @@ const styles = StyleSheet.create({
     marginTop: 6,
     borderRadius: 4,
     backgroundColor: colors.accentGold,
+  },
+  // A row that opens something says so with a chevron, as list rows do (owner's call, 2026-10-22).
+  chevron: {
+    alignSelf: 'center',
+    fontSize: 24,
+    lineHeight: 24,
+    color: colors.textMuted,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s3,
+  },
+  body: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.s2,
   },
   pressed: {
     opacity: 0.75,
