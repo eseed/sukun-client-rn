@@ -75,7 +75,8 @@
         "android.permission.READ_CONTACTS"
       ],
       "blockedPermissions": [
-        "android.permission.WRITE_CONTACTS"
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.WRITE_SETTINGS"
       ],
       "versionCode": 18
     },
