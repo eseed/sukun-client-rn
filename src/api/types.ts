@@ -808,6 +808,13 @@ export interface EntryPass {
   issuedAt: string;
   expiresAt: string;
   refreshAfterSeconds: number;
+  /**
+   * When the server issues the next code. Sent by newer backends, whose `expiresAt` is then
+   * when to stop showing this code: a few seconds later, inside the gate's grace.
+   */
+  nextCodeAt?: string;
+  /** The server's clock when it answered, to place its times on this phone's clock. */
+  serverTime?: string;
 }
 
 /* -------------------------------------------------------------- payments */

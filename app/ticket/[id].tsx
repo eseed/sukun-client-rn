@@ -27,7 +27,11 @@ import {
 import { AddonRow, admittedWithYou, ChildrenList } from '../../src/components/tickets/TicketExtras';
 import { track } from '../../src/lib/analytics';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
-import { getEntryPassOpensAt, getEntryPassRefreshAt } from '../../src/lib/entry-pass';
+import {
+  getEntryPassOpensAt,
+  getEntryPassRefreshAt,
+  getEntryPassShowUntil,
+} from '../../src/lib/entry-pass';
 import { api } from '../../src/api';
 import {
   getAuthSessionGeneration,
@@ -69,8 +73,10 @@ export default function EntryPassScreen() {
     enabled: Boolean(ticketId) && ticketQuery.data?.usageStatus === 'usable' && entryPassWindowOpen,
   });
   const entryPassData = passQuery.data;
-  const passExpiresAt = entryPassData ? Date.parse(entryPassData.expiresAt) : Number.NaN;
   const entryPassDataUpdatedAt = passQuery.dataUpdatedAt;
+  const passShowUntil = entryPassData
+    ? getEntryPassShowUntil(entryPassData, entryPassDataUpdatedAt)
+    : Number.NaN;
   const entryPassError = passQuery.error;
   const entryPassIsFetching = passQuery.isFetching;
   const refetchEntryPass = passQuery.refetch;
@@ -103,8 +109,8 @@ export default function EntryPassScreen() {
     const deadlines: number[] = [];
     if (entryPassOpensAt !== null && entryPassOpensAt > currentTime)
       deadlines.push(entryPassOpensAt);
-    if (Number.isFinite(passExpiresAt) && passExpiresAt > currentTime)
-      deadlines.push(passExpiresAt);
+    if (Number.isFinite(passShowUntil) && passShowUntil > currentTime)
+      deadlines.push(passShowUntil);
     if (deadlines.length === 0) return;
 
     const timeout = setTimeout(
@@ -112,7 +118,7 @@ export default function EntryPassScreen() {
       Math.max(0, Math.min(...deadlines) - Date.now() + 1),
     );
     return () => clearTimeout(timeout);
-  }, [isFocused, isScreenClockCurrent, entryPassOpensAt, passExpiresAt, currentTime]);
+  }, [isFocused, isScreenClockCurrent, entryPassOpensAt, passShowUntil, currentTime]);
 
   useEffect(() => {
     if (
@@ -286,8 +292,8 @@ export default function EntryPassScreen() {
     passErrorCode === 'TICKET_NOT_FOUND' || passErrorCode === 'TICKET_NOT_ACTIVE';
   const hasPass = Boolean(
     pass?.payload &&
-    Number.isFinite(passExpiresAt) &&
-    passExpiresAt > currentTime &&
+    Number.isFinite(passShowUntil) &&
+    passShowUntil > currentTime &&
     isScreenClockCurrent &&
     !ticketRefusedPass,
   );
@@ -633,7 +639,7 @@ function EntryPassRefreshTimer({
     };
   }, []);
 
-  const secondsLeft = Math.max(0, Math.ceil((nextRefreshAt - now) / 1000));
+  const secondsLeft = Math.max(0, Math.round((nextRefreshAt - now) / 1000));
   const refreshWindowMs = Math.max(1, nextRefreshAt - dataUpdatedAt);
   const progress = Math.max(0, Math.min(1, (secondsLeft * 1000) / refreshWindowMs));
 

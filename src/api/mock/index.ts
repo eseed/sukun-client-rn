@@ -2281,7 +2281,8 @@ export const mockApi: SukunApi = {
       if (ticket.usageStatus !== 'usable') {
         throw new MockApiError('TICKET_NOT_USABLE', 'This ticket cannot be used for entry.', 403);
       }
-      const rotation = 30;
+      // One code per fixed clock window, as the backend issues them.
+      const rotation = 120;
       const window = Math.floor(mockConfig.now() / (rotation * 1000));
       return delay(
         {
@@ -2289,9 +2290,12 @@ export const mockApi: SukunApi = {
           payload: `SKN1.${ticket.ticketNumber}.${window}.${Math.abs(
             hash(`${ticket.id}:${window}`),
           ).toString(36)}`,
-          issuedAt: iso(),
-          expiresAt: iso(rotation * 1000),
-          refreshAfterSeconds: rotation,
+          issuedAt: new Date(window * rotation * 1000).toISOString(),
+          expiresAt: new Date((window + 1) * rotation * 1000 + 4_000).toISOString(),
+          nextCodeAt: new Date((window + 1) * rotation * 1000).toISOString(),
+          refreshAfterSeconds:
+            Math.ceil(((window + 1) * rotation * 1000 - mockConfig.now()) / 1000) + 1,
+          serverTime: iso(),
         },
         0.5,
       );
