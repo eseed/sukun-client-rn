@@ -85,6 +85,8 @@ export const colors = {
    */
   tabCurrentTicket: palette.gold500,
   tabLive: palette.sage300,
+  /** The Live tab's label: sage500, the readable green on the creme bar. */
+  tabLiveLabel: palette.sage500,
 
   focusRing: palette.sky500,
   overlayScrim: 'rgba(29,29,29,0.45)',

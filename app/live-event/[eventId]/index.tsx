@@ -9,21 +9,22 @@ import {
   CalendarIcon,
   CloseIcon,
   HomeIcon,
-  InfoIcon,
   MealIcon,
   PinIcon,
   QrIcon,
   ResourceState,
   Screen,
+  ShirtIcon,
   Text,
 } from '../../../src/components/ui';
 import { NotificationBell } from '../../../src/components/notifications/NotificationBell';
 import { EntryPassSheet } from '../../../src/components/live-event/entry-pass-sheet';
-import { useEvent, useMySchedule, usePublicEventSchedule } from '../../../src/hooks/queries';
+import { useEvent, useMySchedule, usePublicEventSchedule, useTicketAddonContext } from '../../../src/hooks/queries';
+import { addonKindsInOrder, addonsOnSaleForTicket } from '../../../src/lib/addons';
 import { useLiveEventContext } from '../../../src/hooks/useLiveEventContext';
 import { useLiveModeStore } from '../../../src/stores/liveMode';
 import { happeningNow } from '../../../src/lib/live-event';
-import type { ScheduleBlock } from '../../../src/api/types';
+import type { AddonType, ScheduleBlock } from '../../../src/api/types';
 import { formatDateRange, formatScheduleTime } from '../../../src/lib/format';
 import { track } from '../../../src/lib/analytics';
 import { colors, fontFamily, fontSize, radius, shadow, space, tracking } from '../../../src/theme/tokens';
@@ -102,6 +103,29 @@ export default function LiveEventHomeScreen() {
 
   const [passTicketId, setPassTicketId] = useState<string | null>(null);
 
+  // The add-ons tile (owner's call, 2026-10-22): what this ticket has booked, else what is on sale
+  // for it, with icons and names to match; with neither, no tile at all.
+  const addonContext = useTicketAddonContext(ticket?.id);
+  const addonsCell = useMemo(() => {
+    const data = addonContext.data;
+    if (!data) return null;
+    const booked = data.existing.addons.filter((addon) => addon.activeQuantity > 0);
+    if (booked.length > 0) {
+      return {
+        label: 'My Add-ons',
+        kinds: addonKindsInOrder(booked),
+        detail: uniqueNames(booked.map((addon) => addon.addonName ?? addon.label)),
+      };
+    }
+    const onSale = addonsOnSaleForTicket(data);
+    if (onSale.length === 0) return null;
+    return {
+      label: 'Buy Add-ons',
+      kinds: addonKindsInOrder(onSale),
+      detail: uniqueNames(onSale.map((addon) => addon.name)),
+    };
+  }, [addonContext.data]);
+
   const openPass = () => {
     track('live_entry_pass_tapped', { event_id: eventId, ...(ticket ? { ticket_id: ticket.id } : {}) });
     const usableTickets = context?.activeTicketsForEvent.filter((item) => item.usageStatus === 'usable') ?? [];
@@ -126,12 +150,6 @@ export default function LiveEventHomeScreen() {
   const goMySchedule = () => {
     if (!eventId) return;
     router.push(`/live-event/${eventId}/my-schedule`);
-  };
-
-  const openEventInfo = () => {
-    if (!event) return;
-    track('live_event_info_opened', { event_id: eventId });
-    router.push(`/event/${event.slug}`);
   };
 
   const openNotifications = () => {
@@ -263,8 +281,8 @@ export default function LiveEventHomeScreen() {
           <Text variant="bodyMuted">Save a session to build your personal itinerary.</Text>
         )}
 
-        {/* Screen 02 action grid: schedules, add-ons and event info. The entry pass is the button
-            at the top only, so it is not offered twice (owner's call, 2026-10-22). */}
+        {/* Screen 02 action grid: the schedules, and add-ons when there are any. The entry pass is
+            the button at the top only, and Event Info is gone (owner's calls, 2026-10-22). */}
         <View style={styles.actionGrid}>
           <ActionCell
             icon={<CalendarIcon size={30} color={colors.textPrimary} />}
@@ -278,29 +296,21 @@ export default function LiveEventHomeScreen() {
             detail="Explore all sessions"
             onPress={goSchedule}
           />
-          <ActionCell
-            icon={
-              <View style={styles.addonIcons}>
-                <HomeIcon size={26} color={colors.textPrimary} />
-                <MealIcon size={26} color={colors.textPrimary} />
-                <BusIcon size={26} color={colors.textPrimary} />
-              </View>
-            }
-            label="My Add-ons"
-            detail="Stay, dinner, bus"
-            onPress={() => {
-              track('live_extras_opened', { event_id: eventId, ...(ticket ? { ticket_id: ticket.id } : {}) });
-              if (ticket) router.push(`/ticket/${ticket.id}/extras`);
-              else router.push('/(tabs)/tickets');
-            }}
-          />
-          <ActionCell
-            icon={<InfoIcon size={30} color={colors.textPrimary} />}
-            label="Event Info"
-            detail="FAQs, guidelines, contacts"
-            disabled={!event}
-            onPress={openEventInfo}
-          />
+          {addonsCell ? (
+            <ActionCell
+              icon={
+                <View style={styles.addonIcons}>
+                  {addonsCell.kinds.map((kind) => <AddonKindIcon key={kind} kind={kind} />)}
+                </View>
+              }
+              label={addonsCell.label}
+              detail={addonsCell.detail}
+              onPress={() => {
+                track('live_extras_opened', { event_id: eventId, ...(ticket ? { ticket_id: ticket.id } : {}) });
+                if (ticket) router.push(`/ticket/${ticket.id}/extras`);
+              }}
+            />
+          ) : null}
         </View>
 
         <Pressable
@@ -373,6 +383,17 @@ function SessionCard({ block, now, onPress }: { block: ScheduleBlock; now: numbe
       </View>
     </Pressable>
   );
+}
+
+/** Names once each, in the order given: "Desert Lodge Room, Dinner voucher". */
+function uniqueNames(names: string[]): string {
+  return [...new Set(names)].join(', ');
+}
+
+/** One add-on kind's mark on the tile: a house for a stay, cutlery for meals, a bus, a tee. */
+function AddonKindIcon({ kind }: { kind: AddonType }) {
+  const Icon = kind === 'accommodation' ? HomeIcon : kind === 'meal' ? MealIcon : kind === 'transport' ? BusIcon : ShirtIcon;
+  return <Icon size={26} color={colors.textPrimary} />;
 }
 
 /**

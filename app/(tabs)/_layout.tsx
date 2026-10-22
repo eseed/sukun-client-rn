@@ -109,7 +109,7 @@ export default function TabsLayout() {
           options={{
             title: 'Live',
             href: liveModeOn ? undefined : null,
-            tabBarLabel: tabLabel('Live', colors.textPrimary, true),
+            tabBarLabel: tabLabel('Live', colors.tabLiveLabel, true),
             tabBarAccessibilityLabel: 'Live, back to the event',
             tabBarIcon: () => <LiveTabIcon />,
           }}
@@ -137,7 +137,11 @@ export default function TabsLayout() {
               ? 'Tickets, an invitation is waiting for you'
               : 'Tickets',
             tabBarIcon: ({ color }) => (
-              <TicketsTabIcon color={ticketTint ?? color} waiting={invitationWaiting} />
+              <TicketsTabIcon
+                color={ticketTint ?? color}
+                waiting={invitationWaiting}
+                highlight={ticketTint !== undefined}
+              />
             ),
           }}
           listeners={{

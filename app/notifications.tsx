@@ -12,7 +12,7 @@ import {
   useNotificationUnreadCount,
 } from '../src/hooks/queries';
 import { useNow } from '../src/hooks/useNow';
-import { landingAction, landingFromLinks, landingHint } from '../src/services/notifications/deep-link';
+import { landingFromLinks, landingHint } from '../src/services/notifications/deep-link';
 import { openNotificationLanding } from '../src/services/notifications/open-landing';
 import { useAuthStore } from '../src/stores/auth';
 import { colors, space } from '../src/theme/tokens';
@@ -143,7 +143,6 @@ export default function NotificationsScreen() {
               notification={item}
               now={now}
               opens={landingHint(landingFromLinks(item.landingLink, item.deepLink))}
-              action={landingAction(landingFromLinks(item.landingLink, item.deepLink))}
               onPress={() => open(item)}
             />
           ))}

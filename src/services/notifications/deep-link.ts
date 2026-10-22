@@ -120,30 +120,6 @@ export function landingHint(landing: NotificationLanding | null): string | null 
   }
 }
 
-/**
- * The words on a row that leads somewhere, so the inbox shows which rows can be tapped and what
- * each one opens (owner's call, 2026-10-22). Null for a notification that leads nowhere.
- */
-export function landingAction(landing: NotificationLanding | null): string | null {
-  if (!landing) return null;
-  switch (landing.kind) {
-    case 'tickets':
-      return 'View your tickets';
-    case 'schedule':
-      return 'View the schedule';
-    case 'stay':
-      return 'Book your stay';
-    case 'extras':
-      return 'Buy add-ons';
-    case 'addon':
-      return 'View the add-on';
-    case 'accommodation':
-      return 'Open room documents';
-    default:
-      return 'View the event';
-  }
-}
-
 function validSlug(slug: string | undefined): slug is string {
   return typeof slug === 'string' && slug.length <= MAX_SLUG_LENGTH;
 }

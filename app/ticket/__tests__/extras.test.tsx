@@ -203,9 +203,9 @@ describe('22 Add extras to this ticket', () => {
     expect(screen.getByText('340.00 EGP')).toBeTruthy();
     expect(screen.getByText('600.00 EGP')).toBeTruthy();
 
-    // The camp tent is genuinely sold out in the fixtures, which is an explicit 0 rather than a
-    // withheld count.
-    expect(screen.getByText('Sold out')).toBeTruthy();
+    // The camp tent is genuinely sold out in the fixtures, and sold out add-ons are not shown.
+    expect(screen.queryByText('Sold out')).toBeNull();
+    expect(screen.queryByText('Shared tent · 2 nights')).toBeNull();
 
     // Nothing is chosen, so there is no footer summary. Buy add-on says what to do rather than
     // doing nothing.
@@ -309,7 +309,7 @@ describe('22 Add extras to this ticket', () => {
    * A price the server will not quote is said in words. A dash beside a figure reads as "free",
    * and the app may never put a number of its own there (CLAUDE.md rule 7).
    */
-  it('says so in words when the server has no price for an option', async () => {
+  it('shows nothing for sale, and no buy button, when the server prices nothing', async () => {
     mockParams.id = SEEDED_TICKET_ID;
     await signInAndComplete();
     // Past every price window in the catalogue, so nothing has a current price.
@@ -317,8 +317,9 @@ describe('22 Add extras to this ticket', () => {
 
     renderWithProviders(<TicketExtrasScreen />);
 
-    await waitFor(() => expect(screen.getAllByText('Not priced yet').length).toBeGreaterThan(0));
-    expect(screen.queryByText('—')).toBeNull();
+    await waitFor(() => expect(screen.getByText('No add-ons are on sale right now.')).toBeTruthy());
+    expect(screen.queryByText('Dinner voucher')).toBeNull();
+    expect(screen.queryByText('Buy add-on')).toBeNull();
   });
 
   /**
