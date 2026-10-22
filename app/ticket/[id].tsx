@@ -28,6 +28,7 @@ import { useScanReadyScreen } from '../../src/hooks/useScanReadyScreen';
 import { AddonRow, admittedWithYou, ChildrenList } from '../../src/components/tickets/TicketExtras';
 import { track } from '../../src/lib/analytics';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../src/lib/errors';
+import { useEntryPassRetry } from '../../src/hooks/useEntryPassRetry';
 import {
   getEntryPassOpensAt,
   getEntryPassRefreshAt,
@@ -84,6 +85,13 @@ export default function EntryPassScreen() {
   const entryPassError = passQuery.error;
   const entryPassIsFetching = passQuery.isFetching;
   const refetchEntryPass = passQuery.refetch;
+  useEntryPassRetry({
+    enabled: isFocused && Boolean(ticketId) && ticketQuery.data?.usageStatus === 'usable' && entryPassWindowOpen,
+    error: entryPassError,
+    hasPayload: Boolean(entryPassData?.payload),
+    isFetching: entryPassIsFetching,
+    refetch: refetchEntryPass,
+  });
   const claimTicket = useClaimTicket();
   const declineTicket = useDeclineTicket();
   const resumedClaim = useRef(false);
