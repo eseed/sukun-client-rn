@@ -53,6 +53,15 @@ export default function RootLayout() {
     void restore();
   }, [restore]);
 
+  // A launch that could not reach the server keeps the tokens but reads as signed out. Coming
+  // back to the app tries again, so a holder is not left looking signed out by one bad moment.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && useAuthStore.getState().sessionUnconfirmed) void restore();
+    });
+    return () => subscription.remove();
+  }, [restore]);
+
   useEffect(() => {
     void useLiveModeStore.getState().load();
   }, []);

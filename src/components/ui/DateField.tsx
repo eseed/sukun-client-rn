@@ -10,7 +10,8 @@ import { Text } from './Text';
  * A date field backed by the platform's own picker — the iOS wheel inside our sheet, the
  * Android dialog as the OS draws it.
  *
- * With nothing chosen yet the picker opens on today rather than on some arbitrary birth year.
+ * With nothing chosen yet the picker opens `START_YEARS_AGO` years back, near a typical guest's
+ * birth year, rather than on today, which left every reader spinning the year wheel decades.
  * `maximumDate` only rules out the future; the age rule lives in the form schema so an
  * under-age date is answered with a sentence rather than a wheel that refuses to turn.
  *
@@ -41,7 +42,8 @@ export function DateField({
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const today = new Date();
-  const selected = toDate(value) ?? today;
+  const start = yearsBefore(today, START_YEARS_AGO);
+  const selected = toDate(value) ?? start;
   /** What the iOS wheel is showing. Only "Done" promotes it to the form. */
   const [draft, setDraft] = useState<Date>(selected);
 
@@ -50,7 +52,7 @@ export function DateField({
   }
 
   function openSheet() {
-    setDraft(toDate(value) ?? today);
+    setDraft(toDate(value) ?? start);
     setOpen(true);
   }
 
@@ -120,6 +122,14 @@ export function DateField({
       ) : null}
     </>
   );
+}
+
+/** Where an empty field's picker opens, in years before today. */
+const START_YEARS_AGO = 25;
+
+/** The same day `years` earlier; 29 February lands on 1 March in a non-leap year. */
+function yearsBefore(date: Date, years: number): Date {
+  return new Date(date.getFullYear() - years, date.getMonth(), date.getDate());
 }
 
 /** `"1994-03-12"` → a local `Date`, or `null` when unset or malformed. */

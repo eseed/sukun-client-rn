@@ -119,6 +119,14 @@ interface AuthState {
    * `pendingCheckoutEventId`.
    */
   pendingAccommodationEventId: string | null;
+  /**
+   * Tokens are stored but the launch could not confirm them: `me()` failed on something other
+   * than a refused session (offline, a timeout, a 5xx), so `status` reads signed out while the
+   * holder is still signed in. `app/_layout.tsx` restores again when the app returns to the
+   * foreground while this is set. A refused session never sets it: the transport deletes the
+   * tokens and signs out (`setAuthFailureHandler` below), which leaves nothing to retry.
+   */
+  sessionUnconfirmed: boolean;
 
   restore: () => Promise<void>;
   setPendingPhone: (phone: string | null) => void;
@@ -147,6 +155,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   pendingCheckoutEventId: null,
   pendingClaimTicketId: null,
   pendingAccommodationEventId: null,
+  sessionUnconfirmed: false,
   user: null,
   pendingPhone: null,
 
@@ -166,7 +175,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const setupDeferred = deferred === 'true';
     const guestBrowsing = guest === 'true';
     if (!accessToken && !refreshToken) {
-      set({ status: 'signed-out', user: null, setupDeferred: false, guestBrowsing });
+      set({
+        status: 'signed-out',
+        user: null,
+        setupDeferred: false,
+        guestBrowsing,
+        sessionUnconfirmed: false,
+      });
       return;
     }
     try {
@@ -177,10 +192,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user,
         setupDeferred: setupDeferred && !user.profileComplete,
         guestBrowsing,
+        sessionUnconfirmed: false,
       });
       identify(user.id);
     } catch {
       // Keep credentials for a later restore if this was a transient network/API failure.
+      if (generation !== sessionGeneration) return;
+      // A refused session has had its tokens deleted by now; check, so only a session that
+      // could still be good is retried.
+      const tokensKept = await hasStoredTokens();
       if (generation !== sessionGeneration) return;
       const currentUser = useAuthStore.getState().user;
       set({
@@ -188,6 +208,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user: currentUser,
         setupDeferred,
         guestBrowsing,
+        sessionUnconfirmed: !currentUser && tokensKept,
       });
     }
   },
@@ -248,6 +269,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   async signIn(tokens, user) {
     const generation = ++sessionGeneration;
+    // Synchronously, so a foreground retry cannot start a restore that races this sign-in.
+    set({ sessionUnconfirmed: false });
     await queueSecureTransition(async () => {
       await setSecureItem(SECURE_KEYS.accessToken, tokens.accessToken);
       await setSecureItem(SECURE_KEYS.refreshToken, tokens.refreshToken);
@@ -285,6 +308,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user: null,
       pendingPhone: null,
       setupDeferred: false,
+      sessionUnconfirmed: false,
       pendingCheckoutEventId: null,
       pendingClaimTicketId: null,
       pendingAccommodationEventId: null,
@@ -328,6 +352,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (generation !== sessionGeneration) return;
   },
 }));
+
+async function hasStoredTokens(): Promise<boolean> {
+  const [accessToken, refreshToken] = await Promise.all([
+    getSecureItem(SECURE_KEYS.accessToken),
+    getSecureItem(SECURE_KEYS.refreshToken),
+  ]);
+  return Boolean(accessToken || refreshToken);
+}
 
 // Token recovery lives in the transport layer; auth owns the local relogin transition.
 setAuthFailureHandler(() => {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Keyboard, Pressable, StyleSheet } from 'react-native';
 import type { CountryCode } from 'libphonenumber-js/mobile';
 import { colors } from '../../theme/tokens';
 import {
@@ -13,7 +13,10 @@ import { CountrySheet } from './CountrySheet';
 import { TextField } from './Field';
 import { Text } from './Text';
 
-/** The `🇪🇬 +20` prefix inside a phone input. Tapping it opens the country picker. */
+/**
+ * The `🇪🇬 +20` prefix inside a phone input. Tapping it opens the country picker, and puts away
+ * the number's keyboard first so it does not sit over the sheet.
+ */
 export function CountryPrefix({
   country,
   onPress,
@@ -30,7 +33,10 @@ export function CountryPrefix({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Country: +${dialCodeFor(country)}. Change`}
-      onPress={onPress}
+      onPress={() => {
+        Keyboard.dismiss();
+        onPress();
+      }}
       style={({ pressed }) => [styles.prefix, style, pressed && styles.pressed]}
     >
       <Text

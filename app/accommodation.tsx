@@ -242,6 +242,10 @@ function UploadForm({
       Alert.alert(
         'Camera access needed',
         'Sukun needs the camera to photograph your document. You can turn it on in Settings, or choose a photo or a file instead.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+        ],
       );
       return;
     }
