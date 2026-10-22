@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import type { ScheduleBlock } from '../../../src/api/types';
 import { ScheduleAgenda } from '../../../src/components/live-event/schedule-agenda';
-import { ScheduleNotice, ScheduleSaveSheet } from '../../../src/components/live-event/schedule-notice';
+import { ScheduleSaveSheet } from '../../../src/components/live-event/schedule-notice';
 import { LiveEventBadge } from '../../../src/components/live-event/live-event-shell';
 import { liveScheduleContent } from '../../../src/components/live-event/schedule-screen-layout';
 import { Screen, Text } from '../../../src/components/ui';
@@ -45,7 +45,6 @@ export default function LiveScheduleScreen() {
           <LiveEventBadge />
         </View>
       ) : null}
-      {saving.notice ? <ScheduleNotice message={saving.notice.message} onDismiss={saving.dismissNotice} /> : null}
       {saving.saveSheet ? <ScheduleSaveSheet
         title={saving.saveSheet.title}
         conflicts={saving.saveSheet.conflicts}

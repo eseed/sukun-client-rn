@@ -35,7 +35,10 @@ export default function Index() {
   const pendingAccommodationEventId = useAuthStore((s) => s.pendingAccommodationEventId);
   const liveModeStatus = useLiveModeStore((s) => s.status);
   const liveModeChoice = useLiveModeStore((s) => s.choice);
-  const liveEvent = useLiveEventContext(status === 'signed-in');
+  // Only someone who switched live mode on waits for the live check at launch: everyone else
+  // goes straight on, rather than sitting on a spinner for a ticket lookup they do not need.
+  const liveModeSaved = Boolean(user && liveModeChoice?.userId === user.id);
+  const liveEvent = useLiveEventContext(status === 'signed-in' && liveModeSaved);
 
   if (status === 'loading') {
     return (
@@ -65,8 +68,7 @@ export default function Index() {
     }
     // Live mode is the holder's choice: launch opens it only when they switched it on and
     // their event is still happening. An unfinished profile still owes its onboarding step
-    // first (plan section 7). The resolver is awaited either way so an incomplete account does
-    // not race past the ticket check into onboarding.
+    // first (plan section 7).
     if (liveModeStatus === 'loading') {
       return (
         <View style={styles.splash}>
@@ -82,7 +84,7 @@ export default function Index() {
     ) {
       return <Redirect href={`/live-event/${liveEvent.context.eventId}`} />;
     }
-    if (liveEvent.status === 'loading') {
+    if (user.profileComplete && liveModeSaved && liveEvent.status === 'loading') {
       return (
         <View style={styles.splash}>
           <ActivityIndicator color={colors.textPrimary} />
