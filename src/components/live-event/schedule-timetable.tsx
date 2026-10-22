@@ -197,8 +197,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   heads: { flexDirection: 'row', alignItems: 'flex-end' },
-  // Above the sessions it slides over, on the page colour so they do not show through.
-  pinnedHeads: { zIndex: 2, elevation: 2, backgroundColor: colors.bgPage, borderBottomWidth: 1, borderBottomColor: colors.borderDefault },
+  // Above the sessions it slides over, on the page colour so they do not show through, with room
+  // above the tags so, pinned, they do not sit hard against the status bar.
+  pinnedHeads: { zIndex: 2, elevation: 2, paddingTop: space.s2, backgroundColor: colors.bgPage, borderBottomWidth: 1, borderBottomColor: colors.borderDefault },
   pinnedCorner: { zIndex: 2, elevation: 2, backgroundColor: colors.bgPage },
   head: { justifyContent: 'flex-end', paddingHorizontal: space.s1, paddingBottom: space.s3 },
   body: { flexDirection: 'row' },

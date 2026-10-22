@@ -21,7 +21,19 @@ const PULSE_MS = 1200;
  * Gold is the tone the app already spends on "this ticket needs you" (the Ready to claim badge).
  * With reduce motion on, the halo stays lit rather than pulsing, so it still says so.
  */
-export function TicketsTabIcon({ color, waiting }: { color: ColorValue; waiting: boolean }) {
+export function TicketsTabIcon({
+  color,
+  waiting,
+  highlight = false,
+}: {
+  color: ColorValue;
+  waiting: boolean;
+  /**
+   * A ticket for an event ahead or under way (owner's call, 2026-10-22): the mark sits white on a
+   * solid orange pill, like live mode's tab, so it stands out from the plain tabs beside it.
+   */
+  highlight?: boolean;
+}) {
   const [pulse] = useState(() => new Animated.Value(0));
   const [reduceMotion, setReduceMotion] = useState(false);
 
@@ -73,13 +85,30 @@ export function TicketsTabIcon({ color, waiting }: { color: ColorValue; waiting:
           ]}
         />
       ) : null}
-      <TicketsIcon color={color} />
+      {highlight ? (
+        <View style={styles.pill}>
+          <TicketsIcon color={colors.white} />
+        </View>
+      ) : (
+        <TicketsIcon color={color} />
+      )}
       {waiting ? <View style={styles.dot} /> : null}
     </View>
   );
 }
 
+const PILL_WIDTH = 46;
+const PILL_HEIGHT = 28;
+
 const styles = StyleSheet.create({
+  pill: {
+    width: PILL_WIDTH,
+    height: PILL_HEIGHT,
+    borderRadius: PILL_HEIGHT / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.tabCurrentTicket,
+  },
   wrap: {
     alignItems: 'center',
     justifyContent: 'center',

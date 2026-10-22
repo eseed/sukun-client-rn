@@ -85,8 +85,7 @@ export function BottomNav({
       {destinations.map(({ label, href, Icon }) => {
         const active = label === activeLabel;
         const isTickets = Icon === TicketsIcon;
-        const color =
-          isTickets && ticketTint ? ticketTint : active ? activeTint : tint;
+        const color = isTickets && ticketTint ? ticketTint : active ? activeTint : tint;
         const medium = active || Icon === LiveTabIcon || (isTickets && ticketTint !== undefined);
         return (
           <Pressable
@@ -110,7 +109,11 @@ export function BottomNav({
             style={({ pressed }) => [styles.item, pressed && styles.pressed]}
           >
             {isTickets ? (
-              <TicketsTabIcon color={color} waiting={invitationWaiting} />
+              <TicketsTabIcon
+                color={color}
+                waiting={invitationWaiting}
+                highlight={ticketTint !== undefined}
+              />
             ) : Icon === LiveTabIcon ? (
               <LiveTabIcon />
             ) : (
@@ -120,7 +123,10 @@ export function BottomNav({
               style={[
                 styles.label,
                 medium && styles.labelActive,
-                { color: Icon === LiveTabIcon ? activeTint : color },
+                {
+                  color:
+                    Icon === LiveTabIcon ? (inverse ? colors.tabLive : colors.tabLiveLabel) : color,
+                },
               ]}
             >
               {label}

@@ -22,7 +22,6 @@ export function NotificationRow({
   notification,
   now,
   opens,
-  action,
   onPress,
 }: {
   notification: AppNotification;
@@ -30,8 +29,6 @@ export function NotificationRow({
   now: number;
   /** Where the tap leads besides marking it read (`landingHint`), or null for nowhere. */
   opens: string | null;
-  /** What the tap opens, drawn as a link under the body (`landingAction`), or null for nowhere. */
-  action?: string | null;
   onPress: () => void;
 }) {
   const unread = notification.readAt === null;
@@ -48,31 +45,30 @@ export function NotificationRow({
       ])}
       accessibilityHint={opens ?? undefined}
       onPress={onPress}
-      style={({ pressed }) => [pressed && styles.pressed]}
+      // Only a row that opens something looks pressable; the rest are just marked read.
+      style={({ pressed }) => [pressed && opens && styles.pressed]}
     >
-      <Card style={unread ? styles.card : { ...styles.card, ...styles.read }}>
-        <View style={styles.top}>
-          <Text
-            variant="bodyValue"
-            style={[styles.title, unread && styles.titleUnread]}
-            numberOfLines={2}
-          >
-            {notification.title}
-          </Text>
-          {unread ? <View style={styles.dot} testID="notification-unread-dot" /> : null}
-        </View>
-        <Text variant="bodyMuted" color={unread ? colors.textPrimary : undefined}>
-          {notification.body}
-        </Text>
-        {when || action ? (
-          <View style={styles.foot}>
-            {when ? <Text variant="metaSm">{when}</Text> : <View />}
-            {action ? (
-              <Text variant="buttonLabel" color={colors.accentSky} style={styles.action}>
-                {action} ›
-              </Text>
-            ) : null}
+      <Card style={unread ? styles.row : { ...styles.row, ...styles.read }}>
+        <View style={styles.body}>
+          <View style={styles.top}>
+            <Text
+              variant="bodyValue"
+              style={[styles.title, unread && styles.titleUnread]}
+              numberOfLines={2}
+            >
+              {notification.title}
+            </Text>
+            {unread ? <View style={styles.dot} testID="notification-unread-dot" /> : null}
           </View>
+          <Text variant="bodyMuted" color={unread ? colors.textPrimary : undefined}>
+            {notification.body}
+          </Text>
+          {when ? <Text variant="metaSm">{when}</Text> : null}
+        </View>
+        {opens ? (
+          <Text style={styles.chevron} testID="notification-opens-chevron">
+            ›
+          </Text>
         ) : null}
       </Card>
     </Pressable>
@@ -80,9 +76,6 @@ export function NotificationRow({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    gap: space.s2,
-  },
   read: {
     backgroundColor: colors.bgPage,
   },
@@ -105,15 +98,22 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.accentGold,
   },
-  foot: {
+  // A row that opens something says so with a chevron, as list rows do (owner's call, 2026-10-22).
+  chevron: {
+    alignSelf: 'center',
+    fontSize: 24,
+    lineHeight: 24,
+    color: colors.textMuted,
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: space.s3,
   },
-  action: {
-    flexShrink: 1,
-    textAlign: 'right',
+  body: {
+    flex: 1,
+    minWidth: 0,
+    gap: space.s2,
   },
   pressed: {
     opacity: 0.75,

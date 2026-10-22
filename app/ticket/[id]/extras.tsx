@@ -28,9 +28,11 @@ import {
 import { PricesIncludeVat } from '../../../src/components/checkout/VatNotes';
 import { useOpenExtrasCart } from '../../../src/hooks/useTicketExtrasCart';
 import {
+  addonsOnSaleForTicket,
   describeOption,
   describePriceWindow,
   isAccommodation,
+  isOnSale,
   ticketRoom,
 } from '../../../src/lib/addons';
 import { messageForError } from '../../../src/lib/errors';
@@ -264,29 +266,30 @@ export default function TicketExtrasScreen() {
       (ownedQuantity.get(addon.addonOptionId) ?? 0) + addon.quantity,
     );
   }
+  // Sold out options are not shown at all (owner's call, 2026-10-22), except a trip this ticket
+  // already holds, which stays as its "Yours" card. An add-on with nothing left to show drops out.
+  const shownOptions = (addon: AddonDetail) =>
+    addon.options.filter(
+      (option) =>
+        isOnSale(option) || (addon.type === 'transport' && (ownedQuantity.get(option.id) ?? 0) > 0),
+    );
   const catalogOptionIds = new Set(
-    context.catalog.flatMap((addon) => addon.options.map((option) => option.id)),
+    context.catalog.flatMap((addon) => shownOptions(addon).map((option) => option.id)),
   );
   // What the catalogue rows below already show as yours stays off the summary card.
   // The extra asked for on the event page leads the list; the rest keep their order.
-  const catalog = [...context.catalog].sort(
-    (a, b) => Number(b.id === preselectedAddonId) - Number(a.id === preselectedAddonId),
-  );
+  const catalog = [...context.catalog]
+    .filter(
+      (addon) =>
+        (hasAccommodation && addon.id === roomGroupId) ||
+        (!(hasAccommodation && addon.type === 'accommodation') && shownOptions(addon).length > 0),
+    )
+    .sort((a, b) => Number(b.id === preselectedAddonId) - Number(a.id === preselectedAddonId));
   /**
-   * Whether anything here can be bought at all: an option on sale, priced, and not one this
-   * ticket already holds (its room, or a seat on a trip it is booked on). Without one, the buy
-   * button is left out rather than drawn as a button that does nothing (owner's call, 2026-10-22).
+   * Whether anything here can be bought at all. Without it, the buy button is left out rather
+   * than drawn as a button that does nothing (owner's call, 2026-10-22).
    */
-  const anyOnSale = context.catalog.some(
-    (addon) =>
-      !(hasAccommodation && addon.type === 'accommodation') &&
-      addon.options.some(
-        (option) =>
-          option.availability !== 'unavailable' &&
-          option.priceEgpNow !== null &&
-          !(addon.type === 'transport' && (ownedQuantity.get(option.id) ?? 0) > 0),
-      ),
-  );
+  const anyOnSale = addonsOnSaleForTicket(context).length > 0;
   const listedElsewhere = context.existing.addons.filter(
     (addon) =>
       !(addon.room ? roomGroupId !== undefined : catalogOptionIds.has(addon.addonOptionId)),
@@ -380,22 +383,19 @@ export default function TicketExtrasScreen() {
               {addon.name}
             </Text>
 
-            {addon.options.map((option) => {
+            {shownOptions(addon).map((option) => {
               const room = isAccommodation(option);
               const owned = ownedQuantity.get(option.id) ?? 0;
               // A seat already held is not bought twice: the trip shows as yours instead.
               if (owned > 0 && addon.type === 'transport') {
                 return <OwnedCard key={option.id} title={option.label} />;
               }
-              const unavailable =
-                option.availability === 'unavailable' || option.priceEgpNow === null;
               const quantity = chosen[option.id] ?? 0;
 
               return (
                 <View key={option.id}>
                   <SelectableCard
                     selected={quantity > 0}
-                    disabled={unavailable}
                     onPress={() => {
                       setAskedToPick(false);
                       setChosen((current) => ({
@@ -409,7 +409,7 @@ export default function TicketExtrasScreen() {
                       <View style={styles.optionTop}>
                         <Text style={styles.optionName}>{option.label}</Text>
                         <Text style={styles.optionPrice}>
-                          {option.priceEgpNow ? formatEgp(option.priceEgpNow) : 'Not priced yet'}
+                          {option.priceEgpNow ? formatEgp(option.priceEgpNow) : null}
                         </Text>
                       </View>
                       {describeOption(option) ? (
@@ -423,9 +423,6 @@ export default function TicketExtrasScreen() {
                         </Text>
                       ) : null}
                       {owned > 0 ? <Badge label={`You have ${owned}`} tone="sage" /> : null}
-                      {option.availability === 'unavailable' ? (
-                        <Badge label="Sold out" tone="rose" />
-                      ) : null}
                     </View>
                   </SelectableCard>
 

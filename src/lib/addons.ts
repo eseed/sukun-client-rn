@@ -4,7 +4,9 @@ import type {
   AddonSummary,
   AddonType,
   OrderAddon,
+  AddonDetail,
   TicketAddon,
+  TicketAddonContext,
   TransportAddonOption,
   TransportStop,
 } from '../api/types';
@@ -291,4 +293,37 @@ export function describeTransportStop(value: TransportStop): string {
         : 'Place';
   if (value.pickupPoint) return `${label}: ${value.pickupPoint}`;
   return value.transportStopType ? label : '';
+}
+
+/** Whether an option can be bought now: on sale and priced by the server. */
+export function isOnSale(option: AddonOption): boolean {
+  return option.availability !== 'unavailable' && option.priceEgpNow !== null;
+}
+
+/**
+ * What a ticket holder can still buy for this ticket, each add-on with only the options on sale
+ * (sold out ones left out entirely, owner's call 2026-10-22). Never a second room (one per person)
+ * nor a seat on a trip the ticket is already booked on. Add-ons with nothing left drop out.
+ */
+export function addonsOnSaleForTicket(context: TicketAddonContext): AddonDetail[] {
+  const owned = new Set(
+    context.existing.addons
+      .filter((addon) => addon.activeQuantity > 0)
+      .map((addon) => addon.addonOptionId),
+  );
+  return context.catalog
+    .filter((addon) => !(context.existing.hasAccommodation && addon.type === 'accommodation'))
+    .map((addon) => ({
+      ...addon,
+      options: addon.options.filter(
+        (option) => isOnSale(option) && !(addon.type === 'transport' && owned.has(option.id)),
+      ),
+    }))
+    .filter((addon) => addon.options.length > 0);
+}
+
+/** The kinds present, in the order the app lists them: stay, meals, transport, the rest. */
+export function addonKindsInOrder(addons: readonly { type: AddonType }[]): AddonType[] {
+  const present = new Set(addons.map((addon) => addon.type));
+  return ADDON_KIND_TEASER_ORDER.filter((kind) => present.has(kind));
 }
