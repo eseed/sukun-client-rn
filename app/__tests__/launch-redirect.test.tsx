@@ -98,7 +98,7 @@ describe('Launch redirect', () => {
     expect(hrefs).toEqual(['/(tabs)/discover']);
   });
 
-  it('checks for a LIVE ticket before sending a finished account to Discover', async () => {
+  it('sends a finished account with live mode off to Discover', async () => {
     useAuthStore.setState({ status: 'signed-in', user: user() });
     renderWithProviders(<Index />);
     await waitFor(() => expect(hrefs).toEqual(['/(tabs)/discover']));
@@ -266,24 +266,15 @@ describe('Launch redirect', () => {
     }
   });
 
-  it('waits for the ticket check before routing an incomplete signed-in account', async () => {
-    let resolveTicketPage!: (page: CursorPage<Ticket>) => void;
-    const pending = new Promise<CursorPage<Ticket>>((resolve) => {
-      resolveTicketPage = resolve;
-    });
-    const emptyPage = <T,>(data: T[]): CursorPage<T> => ({
-      data,
-      meta: { limit: 100, hasNextPage: false, nextCursor: null },
-    });
-    jest.spyOn(api.tickets, 'list').mockReturnValue(pending);
-    jest.spyOn(api.events, 'list').mockResolvedValue(emptyPage([]));
+  it('routes an incomplete signed-in account without waiting on a ticket check', async () => {
+    const listTickets = jest.spyOn(api.tickets, 'list');
 
     useAuthStore.setState({ status: 'signed-in', user: owesProfile() });
     renderWithProviders(<Index />);
 
-    expect(hrefs).toEqual([]);
-    resolveTicketPage(emptyPage([]));
     await waitFor(() => expect(hrefs).toEqual(['/(onboarding)/profile']));
+    // Live mode is off, so launch has no reason to look the holder's tickets up.
+    expect(listTickets).not.toHaveBeenCalled();
   });
 
   /**

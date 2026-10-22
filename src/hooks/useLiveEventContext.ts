@@ -40,6 +40,13 @@ function ticketEventDistance(tickets: Ticket[], now: number): number {
   return nearest;
 }
 
+/** The server answered and refused (404, 403, …), as opposed to no answer at all. */
+function isServerRefusal(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === 'number' && status >= 400 && status < 500;
+}
+
 function asEventListItem(event: EventDetail): EventListItem {
   const tiers = event.tiers ?? [];
   return {
@@ -101,10 +108,13 @@ async function loadHappeningTicketedEvents(
           ticket: groupActiveTickets(group, detail.id)[0] ?? first,
           detail,
         };
-      } catch {
-        // An old ticket can point to an event detail that is no longer public. Other
-        // candidates still get checked.
-        return null;
+      } catch (error) {
+        // An old ticket can point to an event detail that is no longer public: the server's
+        // refusal rules that one out and other candidates still get checked. A failed or timed
+        // out request says nothing about the event, so it fails the whole resolve instead. Read
+        // as "not happening", a weak signal at the venue would throw the holder out of live mode.
+        if (isServerRefusal(error)) return null;
+        throw error;
       }
     }),
   );

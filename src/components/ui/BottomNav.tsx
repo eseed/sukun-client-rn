@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../theme/tokens';
+import { colors, fontFamily } from '../../theme/tokens';
 import { text } from '../../theme/typography';
 import { TicketsTabIcon } from '../tickets/TicketsTabIcon';
 import { useHasWaitingInvitation } from '../../hooks/useClaimableTickets';
@@ -30,18 +30,22 @@ const DESTINATIONS: Destination[] = [
  * after paying, the only way on was to open the ticket. This gives the same three destinations
  * without moving the screens into the tab group, which would cost checkout its own stack.
  *
- * Nothing is ever marked active: none of these screens *is* a tab, and highlighting one would
- * claim otherwise. Navigation replaces rather than pushes, so a buyer cannot swipe back into a
- * finished checkout or a stale QR code.
+ * Nothing is marked active unless the screen says which destination it is (`activeLabel`):
+ * confirmation, receipt and the entry pass are not tabs, and highlighting one would claim
+ * otherwise. Live mode's screens are Home. Navigation replaces rather than pushes, so a buyer
+ * cannot swipe back into a finished checkout or a stale QR code.
  */
 export function BottomNav({
   tone = 'page',
   style,
+  activeLabel,
   onNavigate,
 }: {
   tone?: 'page' | 'inverse';
   /** For screens that lay themselves out absolutely and must pin the bar to the bottom. */
   style?: ViewStyle;
+  /** The destination this screen belongs to, drawn as the selected tab. */
+  activeLabel?: 'Home';
   onNavigate?: (href: Destination['href']) => void;
 }) {
   const router = useRouter();
@@ -53,12 +57,17 @@ export function BottomNav({
 
   // While the holder has live mode on, the bar grows a Home tab that always opens Event Home.
   // Everywhere else it stays the three global destinations.
-  const destinations: Destination[] = live.status === 'ready' && liveModeOn
-    ? [{ label: 'Home', href: `/live-event/${live.context.eventId}`, Icon: HomeIcon }, ...DESTINATIONS]
-    : DESTINATIONS;
+  const destinations: Destination[] =
+    live.status === 'ready' && liveModeOn
+      ? [
+          { label: 'Home', href: `/live-event/${live.context.eventId}`, Icon: HomeIcon },
+          ...DESTINATIONS,
+        ]
+      : DESTINATIONS;
 
   const inverse = tone === 'inverse';
   const tint = inverse ? colors.creme : colors.textMuted;
+  const activeTint = inverse ? colors.creme : colors.textPrimary;
 
   return (
     <View
@@ -69,29 +78,34 @@ export function BottomNav({
         style,
       ]}
     >
-      {destinations.map(({ label, href, Icon }) => (
-        <Pressable
-          key={label}
-          accessibilityRole="button"
-          accessibilityLabel={
-            Icon === TicketsIcon && invitationWaiting
-              ? `${label}, an invitation is waiting for you`
-              : label
-          }
-          onPress={() => {
-            onNavigate?.(href);
-            router.replace(href);
-          }}
-          style={({ pressed }) => [styles.item, pressed && styles.pressed]}
-        >
-          {Icon === TicketsIcon ? (
-            <TicketsTabIcon color={tint} waiting={invitationWaiting} />
-          ) : (
-            <Icon color={tint} />
-          )}
-          <Text style={[styles.label, { color: tint }]}>{label}</Text>
-        </Pressable>
-      ))}
+      {destinations.map(({ label, href, Icon }) => {
+        const active = label === activeLabel;
+        const color = active ? activeTint : tint;
+        return (
+          <Pressable
+            key={label}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={
+              Icon === TicketsIcon && invitationWaiting
+                ? `${label}, an invitation is waiting for you`
+                : label
+            }
+            onPress={() => {
+              onNavigate?.(href);
+              router.replace(href);
+            }}
+            style={({ pressed }) => [styles.item, pressed && styles.pressed]}
+          >
+            {Icon === TicketsIcon ? (
+              <TicketsTabIcon color={color} waiting={invitationWaiting} />
+            ) : (
+              <Icon color={color} />
+            )}
+            <Text style={[styles.label, active && styles.labelActive, { color }]}>{label}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -117,6 +131,9 @@ const styles = StyleSheet.create({
   label: {
     ...text.tabLabel,
     marginTop: 4,
+  },
+  labelActive: {
+    fontFamily: fontFamily.bodyMedium,
   },
   pressed: {
     opacity: 0.6,

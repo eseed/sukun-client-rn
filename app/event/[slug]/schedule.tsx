@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { BackIcon, Screen, Text } from '../../../src/components/ui';
 import { ScheduleAgenda } from '../../../src/components/live-event/schedule-agenda';
-import { ScheduleNotice, ScheduleSaveSheet } from '../../../src/components/live-event/schedule-notice';
+import { ScheduleSaveSheet } from '../../../src/components/live-event/schedule-notice';
 import { scheduleScreenContent } from '../../../src/components/live-event/schedule-screen-layout';
 import { useEvent, usePublicEventSchedule } from '../../../src/hooks/queries';
 import { useScheduleSaving } from '../../../src/hooks/useScheduleSaving';
@@ -56,7 +56,6 @@ export default function PublicEventScheduleScreen() {
           </Pressable>
         ) : null}
       </View>
-      {saving.notice ? <ScheduleNotice message={saving.notice.message} onDismiss={saving.dismissNotice} /> : null}
       {saving.saveSheet ? <ScheduleSaveSheet
         title={saving.saveSheet.title}
         conflicts={saving.saveSheet.conflicts}

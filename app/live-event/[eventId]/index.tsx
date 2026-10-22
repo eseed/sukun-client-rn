@@ -187,13 +187,12 @@ export default function LiveEventHomeScreen() {
             <View style={styles.liveBadge} accessibilityLabel="Event is LIVE">
               <Text style={styles.liveBadgeLabel}>LIVE</Text>
             </View>
-            <View style={styles.placePill}>
-              <PinIcon size={14} color={colors.creme} />
-              <Text style={styles.placeLabel}>{(event?.title ?? 'Tulua').toUpperCase()}</Text>
-            </View>
-          </View>
-          <View style={styles.heroBell}>
-            <NotificationBell onPress={openNotifications} color={colors.creme} />
+            {event?.venue?.name ? (
+              <View style={styles.placePill}>
+                <PinIcon size={14} color={colors.creme} />
+                <Text numberOfLines={1} style={styles.placeLabel}>{event.venue.name.toUpperCase()}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
         <View style={styles.heroCopy}>
@@ -202,9 +201,6 @@ export default function LiveEventHomeScreen() {
             <Text variant="bodyLead" style={styles.heroLine}>
               {formatDateRange(event.startDate, event.endDate)}
             </Text>
-          ) : null}
-          {event?.venue?.name ? (
-            <Text variant="bodyLead" style={styles.heroLine}>{event.venue.name}</Text>
           ) : null}
         </View>
       </View>
@@ -231,7 +227,7 @@ export default function LiveEventHomeScreen() {
           errorMessage="We couldn't load the schedule. Your Entry Pass is still available above."
           onRetry={() => { void refetchEvent(); void refetchSchedule(); }}
         >
-          {happeningBlocks.length ? (
+          {now === null ? null : happeningBlocks.length ? (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -243,7 +239,9 @@ export default function LiveEventHomeScreen() {
               ))}
             </ScrollView>
           ) : (
-            <Text variant="bodyMuted">Today&apos;s sessions have finished.</Text>
+            <Text variant="bodyMuted">
+              {blocks.length ? 'Today\u2019s sessions have finished.' : 'No sessions published yet.'}
+            </Text>
           )}
         </ResourceState>
 
@@ -454,7 +452,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.s4,
     paddingTop: space.s4,
   },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
+  badgeRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   liveBadge: { borderRadius: radius.pill, backgroundColor: colors.overlayScrim, paddingHorizontal: space.s3, paddingVertical: 7 },
   liveBadgeLabel: {
     color: colors.creme,
@@ -463,6 +461,7 @@ const styles = StyleSheet.create({
     letterSpacing: tracking.wide(fontSize.label),
   },
   placePill: {
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s2,
@@ -472,12 +471,12 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   placeLabel: {
+    flexShrink: 1,
     color: colors.creme,
     fontFamily: fontFamily.bodyMedium,
     fontSize: fontSize.label,
     letterSpacing: tracking.wide(fontSize.label),
   },
-  heroBell: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   heroCopy: {
     position: 'absolute',
     left: 0,
