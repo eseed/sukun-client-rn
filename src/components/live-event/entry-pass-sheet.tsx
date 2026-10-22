@@ -16,6 +16,7 @@ import QRCode from 'react-native-qrcode-svg';
 import Svg, { Circle } from 'react-native-svg';
 import { api } from '../../api';
 import { queryKeys, useEntryPass, useTicket } from '../../hooks/queries';
+import { useEntryPassRetry } from '../../hooks/useEntryPassRetry';
 import { useScanReadyScreen } from '../../hooks/useScanReadyScreen';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../lib/errors';
 import {
@@ -66,6 +67,13 @@ export function EntryPassSheet({ ticketId, event, onClose }: {
   const refreshAt = pass ? getEntryPassRefreshAt(pass, passDataUpdatedAt) : null;
   const refetchPass = passQuery.refetch;
   const passIsFetching = passQuery.isFetching;
+  useEntryPassRetry({
+    enabled: ticket?.usageStatus === 'usable' && windowOpen,
+    error: passQuery.error,
+    hasPayload: Boolean(pass?.payload),
+    isFetching: passIsFetching,
+    refetch: refetchPass,
+  });
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
