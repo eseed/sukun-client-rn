@@ -1,13 +1,22 @@
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { AppState, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  AppState,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import QRCode from 'react-native-qrcode-svg';
 import Svg, { Circle } from 'react-native-svg';
 import { api } from '../../api';
 import { queryKeys, useEntryPass, useTicket } from '../../hooks/queries';
+import { useScanReadyScreen } from '../../hooks/useScanReadyScreen';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../lib/errors';
 import {
   getEntryPassOpensAt,
@@ -21,6 +30,9 @@ import { colors, fontFamily, fontSize, radius, space } from '../../theme/tokens'
 import { Button, ResourceState, Text, TicketsIcon } from '../ui';
 
 const QR_SIZE = 220;
+/** Bigger squares read faster at the gate; the sheet and card padding take 80pt of width. */
+const QR_MAX_SIZE = 280;
+const QR_SIDE_PADDING = 80;
 
 /**
  * The entry pass as a pop-up (reference pack screen 07): the same short-lived QR, refresh
@@ -105,6 +117,9 @@ export function EntryPassSheet({ ticketId, event, onClose }: {
     passShowUntil > now &&
     !ticketRefusedPass,
   );
+  useScanReadyScreen(hasPass && ticket?.usageStatus === 'usable');
+  const { width: windowWidth } = useWindowDimensions();
+  const qrSize = Math.max(QR_SIZE, Math.min(QR_MAX_SIZE, windowWidth - QR_SIDE_PADDING));
   const passNotIssued =
     (passQuery.error ? isEntryPassNotIssued(passQuery.error) : false) ||
     (pass !== undefined && !pass.payload);
@@ -173,7 +188,9 @@ export function EntryPassSheet({ ticketId, event, onClose }: {
               <View style={styles.card}>
                 <QRCode
                   value={pass?.payload ?? ''}
-                  size={QR_SIZE}
+                  size={qrSize}
+                  // Low error correction is safe on a screen and makes each square bigger.
+                  ecl="L"
                   color={colors.black}
                   backgroundColor={colors.white}
                 />
