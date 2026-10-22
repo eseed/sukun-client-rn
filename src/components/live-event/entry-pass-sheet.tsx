@@ -9,7 +9,11 @@ import Svg, { Circle } from 'react-native-svg';
 import { api } from '../../api';
 import { queryKeys, useEntryPass, useTicket } from '../../hooks/queries';
 import { codeForError, isEntryPassNotIssued, messageForError } from '../../lib/errors';
-import { getEntryPassOpensAt, getEntryPassRefreshAt } from '../../lib/entry-pass';
+import {
+  getEntryPassOpensAt,
+  getEntryPassRefreshAt,
+  getEntryPassShowUntil,
+} from '../../lib/entry-pass';
 import { formatDateRange, initials } from '../../lib/format';
 import { formatPhoneForDisplay } from '../../lib/phone';
 import { getAuthSessionGeneration, isCurrentSignedInSession, useAuthStore } from '../../stores/auth';
@@ -44,32 +48,35 @@ export function EntryPassSheet({ ticketId, event, onClose }: {
     enabled: ticket?.usageStatus === 'usable' && windowOpen,
   });
   const pass = passQuery.data;
-  const passExpiresAt = pass ? Date.parse(pass.expiresAt) : Number.NaN;
+  const passDataUpdatedAt = passQuery.dataUpdatedAt;
+  const passShowUntil = pass ? getEntryPassShowUntil(pass, passDataUpdatedAt) : Number.NaN;
   const passErrorCode = codeForError(passQuery.error);
-  const refreshAt = pass ? getEntryPassRefreshAt(pass, passQuery.dataUpdatedAt) : null;
+  const refreshAt = pass ? getEntryPassRefreshAt(pass, passDataUpdatedAt) : null;
+  const refetchPass = passQuery.refetch;
+  const passIsFetching = passQuery.isFetching;
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         setNow(Date.now());
-        if (refreshAt !== null && Date.now() >= refreshAt) void passQuery.refetch();
+        if (refreshAt !== null && Date.now() >= refreshAt) void refetchPass();
       }
     });
     return () => {
       clearInterval(interval);
       appState.remove();
     };
-  }, [ticketId, refreshAt, passQuery]);
+  }, [ticketId, refreshAt, refetchPass]);
 
+  // One timer per response, set for the moment the server has the next code.
   useEffect(() => {
-    if (!pass) return;
-    const refreshAt = getEntryPassRefreshAt(pass, passQuery.dataUpdatedAt);
+    if (refreshAt === null || passIsFetching) return;
     const timeout = setTimeout(() => {
-      void passQuery.refetch();
+      void refetchPass();
     }, Math.max(0, refreshAt - Date.now()));
     return () => clearTimeout(timeout);
-  }, [pass, passQuery]);
+  }, [refreshAt, passIsFetching, refetchPass]);
 
   useEffect(() => {
     if (passErrorCode !== 'TICKET_NOT_FOUND' && passErrorCode !== 'TICKET_NOT_ACTIVE') return;
@@ -94,8 +101,8 @@ export function EntryPassSheet({ ticketId, event, onClose }: {
     passErrorCode === 'TICKET_NOT_FOUND' || passErrorCode === 'TICKET_NOT_ACTIVE';
   const hasPass = Boolean(
     pass?.payload &&
-    Number.isFinite(passExpiresAt) &&
-    passExpiresAt > now &&
+    Number.isFinite(passShowUntil) &&
+    passShowUntil > now &&
     !ticketRefusedPass,
   );
   const passNotIssued =
@@ -228,7 +235,7 @@ function PassRefreshFooter({ nextRefreshAt, dataUpdatedAt, isRefreshing, now }: 
   isRefreshing: boolean;
   now: number;
 }) {
-  const secondsLeft = Math.max(0, Math.ceil((nextRefreshAt - now) / 1000));
+  const secondsLeft = Math.max(0, Math.round((nextRefreshAt - now) / 1000));
   const refreshWindowMs = Math.max(1, nextRefreshAt - dataUpdatedAt);
   const progress = Math.max(0, Math.min(1, (secondsLeft * 1000) / refreshWindowMs));
   const size = 28;

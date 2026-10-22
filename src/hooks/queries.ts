@@ -800,7 +800,13 @@ export function useEntryPass(
     gcTime: ENTRY_QR_REFRESH_INTERVAL_MS,
     refetchOnMount: false,
     refetchInterval: false,
-    retry: false,
+    // One quick retry for a dropped connection or a server hiccup, while the old code is still
+    // on screen; a refusal (4xx) is an answer and is never retried.
+    retry: (failureCount, error) => {
+      const status = (error as { status?: unknown }).status;
+      return failureCount < 1 && !(typeof status === 'number' && status < 500);
+    },
+    retryDelay: 300,
   });
 }
 
