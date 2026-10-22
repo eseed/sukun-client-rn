@@ -36,7 +36,7 @@ export default function LiveScheduleScreen() {
         : 'ready';
 
   return (
-    <Screen scroll edges={{ bottom: false }} contentStyle={liveScheduleContent}>
+    <Screen scroll trackScroll edges={{ bottom: false }} contentStyle={liveScheduleContent}>
       {/* Screen 03 identity row: event title with its LIVE pill, ahead of the schedule. */}
       <View style={styles.stack}>
       {eventQuery.data ? (

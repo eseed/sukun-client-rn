@@ -109,7 +109,7 @@ describe('a holder\'s ticket extras, opened from a logistics "Add"', () => {
 
     renderWithProviders(<TicketExtrasScreen />);
 
-    await waitFor(() => expect(screen.getByText('1 extra')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('1 add-on')).toBeTruthy());
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue' })).not.toBeDisabled(),
     );
@@ -127,7 +127,8 @@ describe('a holder\'s ticket extras, opened from a logistics "Add"', () => {
     renderWithProviders(<TicketExtrasScreen />);
 
     await waitFor(() => expect(screen.getAllByText('Dinner voucher').length).toBeGreaterThan(0));
-    expect(screen.getByRole('button', { name: 'Choose an extra' })).toBeDisabled();
-    expect(screen.queryByText('1 extra')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Buy add-on' })).toBeTruthy();
+    expect(screen.queryByText('Continue')).toBeNull();
+    expect(screen.queryByText('1 add-on')).toBeNull();
   });
 });

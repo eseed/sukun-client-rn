@@ -5,17 +5,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily } from '../../theme/tokens';
 import { text } from '../../theme/typography';
 import { TicketsTabIcon } from '../tickets/TicketsTabIcon';
+import { LiveTabIcon } from '../live-event/LiveTabIcon';
 import { useHasWaitingInvitation } from '../../hooks/useClaimableTickets';
+import { useCurrentTickets } from '../../hooks/useCurrentTickets';
 import { useLiveEventContext } from '../../hooks/useLiveEventContext';
 import { useAuthStore } from '../../stores/auth';
 import { useLiveModeOn } from '../../stores/liveMode';
-import { DiscoverIcon, HomeIcon, ProfileIcon, TicketsIcon } from './icons';
+import { DiscoverIcon, ProfileIcon, TicketsIcon } from './icons';
 import { Text } from './Text';
 
 type Destination = {
   label: string;
   href: Href;
-  Icon: typeof DiscoverIcon;
+  Icon: typeof DiscoverIcon | typeof LiveTabIcon;
 };
 
 const DESTINATIONS: Destination[] = [
@@ -32,7 +34,7 @@ const DESTINATIONS: Destination[] = [
  *
  * Nothing is marked active unless the screen says which destination it is (`activeLabel`):
  * confirmation, receipt and the entry pass are not tabs, and highlighting one would claim
- * otherwise. Live mode's screens are Home. Navigation replaces rather than pushes, so a buyer
+ * otherwise. Live mode's screens are Live. Navigation replaces rather than pushes, so a buyer
  * cannot swipe back into a finished checkout or a stale QR code.
  */
 export function BottomNav({
@@ -45,7 +47,7 @@ export function BottomNav({
   /** For screens that lay themselves out absolutely and must pin the bar to the bottom. */
   style?: ViewStyle;
   /** The destination this screen belongs to, drawn as the selected tab. */
-  activeLabel?: 'Home';
+  activeLabel?: 'Live';
   onNavigate?: (href: Destination['href']) => void;
 }) {
   const router = useRouter();
@@ -54,13 +56,15 @@ export function BottomNav({
   const live = useLiveEventContext();
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const liveModeOn = useLiveModeOn(userId, live.status === 'ready' ? live.context.eventId : null);
+  const current = useCurrentTickets();
+  const ticketTint = current.tickets.length > 0 ? colors.tabCurrentTicket : undefined;
 
-  // While the holder has live mode on, the bar grows a Home tab that always opens Event Home.
+  // While the holder has live mode on, the bar grows a Live tab that always opens Event Home.
   // Everywhere else it stays the three global destinations.
   const destinations: Destination[] =
     live.status === 'ready' && liveModeOn
       ? [
-          { label: 'Home', href: `/live-event/${live.context.eventId}`, Icon: HomeIcon },
+          { label: 'Live', href: `/live-event/${live.context.eventId}`, Icon: LiveTabIcon },
           ...DESTINATIONS,
         ]
       : DESTINATIONS;
@@ -80,7 +84,10 @@ export function BottomNav({
     >
       {destinations.map(({ label, href, Icon }) => {
         const active = label === activeLabel;
-        const color = active ? activeTint : tint;
+        const isTickets = Icon === TicketsIcon;
+        const color =
+          isTickets && ticketTint ? ticketTint : active ? activeTint : tint;
+        const medium = active || Icon === LiveTabIcon || (isTickets && ticketTint !== undefined);
         return (
           <Pressable
             key={label}
@@ -94,15 +101,30 @@ export function BottomNav({
             onPress={() => {
               onNavigate?.(href);
               router.replace(href);
+              // One ticket for an event ahead or under way opens at once, over the list, as the
+              // tab bar's Tickets does. A waiting invitation keeps the list, where it is claimed.
+              if (isTickets && current.onlyTicketId && !invitationWaiting) {
+                router.push(`/ticket/${current.onlyTicketId}`);
+              }
             }}
             style={({ pressed }) => [styles.item, pressed && styles.pressed]}
           >
-            {Icon === TicketsIcon ? (
+            {isTickets ? (
               <TicketsTabIcon color={color} waiting={invitationWaiting} />
+            ) : Icon === LiveTabIcon ? (
+              <LiveTabIcon />
             ) : (
               <Icon color={color} />
             )}
-            <Text style={[styles.label, active && styles.labelActive, { color }]}>{label}</Text>
+            <Text
+              style={[
+                styles.label,
+                medium && styles.labelActive,
+                { color: Icon === LiveTabIcon ? activeTint : color },
+              ]}
+            >
+              {label}
+            </Text>
           </Pressable>
         );
       })}

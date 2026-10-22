@@ -78,6 +78,14 @@ export const colors = {
   accentSky: palette.sky500,
   accentSage: palette.sage300,
 
+  /*
+   * Tab bar (owner's call, 2026-10-22): Tickets turns orange (gold500) while the account holds a
+   * ticket for an event ahead or under way, and live mode's tab glows green (sage300, the LIVE
+   * dot's colour) so it reads as the way back in.
+   */
+  tabCurrentTicket: palette.gold500,
+  tabLive: palette.sage300,
+
   focusRing: palette.sky500,
   overlayScrim: 'rgba(29,29,29,0.45)',
 } as const;

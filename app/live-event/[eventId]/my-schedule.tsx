@@ -16,7 +16,7 @@ export default function MyScheduleScreen() {
   useEffect(() => { track('live_my_schedule_opened', { event_id: eventId }); }, [eventId]);
 
   return (
-    <Screen scroll edges={{ bottom: false }} contentStyle={liveScheduleContent}>
+    <Screen scroll trackScroll edges={{ bottom: false }} contentStyle={liveScheduleContent}>
       {/* Same Screen gap quirk as LIVE home: sections stack here. */}
       <View style={styles.stack}>
       <Text variant="titleMd" accessibilityRole="header">My Schedule</Text>

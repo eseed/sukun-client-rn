@@ -189,7 +189,7 @@ describe('22 Add extras to this ticket', () => {
     await signInAndComplete();
     await renderBrowse();
 
-    expect(screen.getByText('Add extras')).toBeTruthy();
+    expect(screen.getByText('Add-ons')).toBeTruthy();
     expect(screen.getByText('Adding to an existing ticket')).toBeTruthy();
 
     // The ticket, exactly as the artboard identifies it.
@@ -207,9 +207,11 @@ describe('22 Add extras to this ticket', () => {
     // withheld count.
     expect(screen.getByText('Sold out')).toBeTruthy();
 
-    // Nothing is chosen, so there is no footer summary and nothing to continue to.
-    expect(screen.getByText('Choose an extra')).toBeTruthy();
+    // Nothing is chosen, so there is no footer summary. Buy add-on says what to do rather than
+    // doing nothing.
     expect(screen.queryByText('Assigned to you')).toBeNull();
+    fireEvent.press(screen.getByText('Buy add-on'));
+    expect(screen.getByText('Tap an add-on above to choose it, then Continue.')).toBeTruthy();
   });
 
   /**
@@ -222,7 +224,7 @@ describe('22 Add extras to this ticket', () => {
     await renderBrowse();
     chooseExtra('Dinner voucher');
 
-    await waitFor(() => expect(screen.getByText('1 extra')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('1 add-on')).toBeTruthy());
 
     expect(screen.queryByText('Review & pay')).toBeNull();
     expect(screen.queryByText('Extras only · pay once')).toBeNull();
@@ -246,7 +248,7 @@ describe('22 Add extras to this ticket', () => {
     await renderBrowse();
     chooseExtra('Dinner voucher');
 
-    await waitFor(() => expect(screen.getByText('1 extra')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('1 add-on')).toBeTruthy());
     expect(screen.getByText('Assigned to you')).toBeTruthy();
 
     // The option's own price and the footer's, which is why there are two of them.
@@ -269,10 +271,10 @@ describe('22 Add extras to this ticket', () => {
     await renderBrowse();
     chooseExtra('Round trip');
 
-    await waitFor(() => expect(screen.getByText('1 extra')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('1 add-on')).toBeTruthy());
     fireEvent.press(screen.getByLabelText('Add one ticket'));
 
-    await waitFor(() => expect(screen.getByText('2 extras')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('2 add-ons')).toBeTruthy());
     await waitFor(() => expect(screen.getByText('1,200.00 EGP')).toBeTruthy());
 
     const pricing = await serverPricing();
@@ -289,8 +291,8 @@ describe('22 Add extras to this ticket', () => {
 
     renderWithProviders(<TicketExtrasScreen />);
 
-    await waitFor(() => expect(screen.getByText("Extras aren't available")).toBeTruthy());
-    expect(screen.queryByText('Loading extras...')).toBeNull();
+    await waitFor(() => expect(screen.getByText("Add-ons aren't available")).toBeTruthy());
+    expect(screen.queryByText('Loading add-ons...')).toBeNull();
   });
 
   /** Same hang, reached the other way: a route opened without a usable ticket id. */
@@ -299,8 +301,8 @@ describe('22 Add extras to this ticket', () => {
 
     renderWithProviders(<TicketExtrasScreen />);
 
-    await waitFor(() => expect(screen.getByText("Extras aren't available")).toBeTruthy());
-    expect(screen.queryByText('Loading extras...')).toBeNull();
+    await waitFor(() => expect(screen.getByText("Add-ons aren't available")).toBeTruthy());
+    expect(screen.queryByText('Loading add-ons...')).toBeNull();
   });
 
   /**
@@ -340,7 +342,7 @@ describe('22 Add extras to this ticket', () => {
 
     // The count comes off the selection and lands at once; the money is the server's, so waiting
     // for it is what proves both picks actually reached a cart.
-    await waitFor(() => expect(screen.getByText('2 extras')).toBeTruthy(), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByText('2 add-ons')).toBeTruthy(), { timeout: 5000 });
     await waitFor(() => expect(screen.getByText('950.00 EGP')).toBeTruthy(), { timeout: 5000 });
     expect(create).toHaveBeenCalledTimes(1);
 
@@ -538,7 +540,7 @@ describe('23 Extras checkout', () => {
     expect(screen.getByText('Pay 387.60 EGP')).toBeTruthy();
 
     // The catalogue is nowhere on this screen. Choosing happened on the screen before.
-    expect(screen.queryByText('Add extras')).toBeNull();
+    expect(screen.queryByText('Add-ons')).toBeNull();
     expect(screen.queryByText('Desert Lodge Room')).toBeNull();
   });
 

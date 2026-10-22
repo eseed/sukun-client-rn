@@ -39,7 +39,7 @@ export default function PublicEventScheduleScreen() {
         : 'ready';
 
   return (
-    <Screen scroll contentStyle={scheduleScreenContent}>
+    <Screen scroll trackScroll contentStyle={scheduleScreenContent}>
       {/* Screen does not space its children (the LIVE home's quirk), so the sections stack here. */}
       <View style={styles.stack}>
       <Pressable accessibilityRole="button" accessibilityLabel="Back to event" onPress={() => router.back()} style={({ pressed }) => [styles.backLink, pressed && styles.backPressed]}>

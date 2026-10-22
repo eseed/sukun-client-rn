@@ -1,23 +1,23 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import {
+  BusIcon,
   Button,
   CalendarIcon,
   CloseIcon,
-  HelpIcon,
+  HomeIcon,
   InfoIcon,
+  MealIcon,
   PinIcon,
   QrIcon,
   ResourceState,
   Screen,
-  ShirtIcon,
   Text,
 } from '../../../src/components/ui';
 import { NotificationBell } from '../../../src/components/notifications/NotificationBell';
-import { LiveEventSubnav } from '../../../src/components/live-event/live-event-shell';
 import { EntryPassSheet } from '../../../src/components/live-event/entry-pass-sheet';
 import { useEvent, useMySchedule, usePublicEventSchedule } from '../../../src/hooks/queries';
 import { useLiveEventContext } from '../../../src/hooks/useLiveEventContext';
@@ -138,11 +138,6 @@ export default function LiveEventHomeScreen() {
     router.push('/notifications');
   };
 
-  const openSupport = () => {
-    track('live_support_opened', { event_id: eventId });
-    void Linking.openURL('https://sukunwellness.co/support').catch(() => undefined);
-  };
-
   return (
     <Screen scroll padded={false} edges={{ bottom: false }} contentStyle={styles.content}>
       {/* Screen 01 app bar: exit live mode, centred wordmark, notifications (Profile stays in
@@ -213,7 +208,6 @@ export default function LiveEventHomeScreen() {
           onPress={openPass}
           style={styles.passButton}
         />
-        {eventId ? <LiveEventSubnav eventId={eventId} /> : null}
 
         <View style={styles.sectionHeading}>
           <Text style={styles.sectionTitle}>{happeningTitle}</Text>
@@ -245,12 +239,9 @@ export default function LiveEventHomeScreen() {
           )}
         </ResourceState>
 
-        <View style={styles.sectionHeading}>
-          <Text style={styles.sectionTitle}>Your next session</Text>
-          <Pressable accessibilityRole="button" onPress={goMySchedule}>
-            <Text style={styles.link}>My Schedule →</Text>
-          </Pressable>
-        </View>
+        {/* No link here: the My Schedule tile below already opens it (owner's call, 2026-10-22,
+            too many things led to the same place). */}
+        <Text style={styles.sectionTitle}>Your next session</Text>
         {savedQuery.isLoading ? (
           <Text variant="bodyMuted">Loading your saved sessions...</Text>
         ) : savedQuery.isError ? (
@@ -272,14 +263,9 @@ export default function LiveEventHomeScreen() {
           <Text variant="bodyMuted">Save a session to build your personal itinerary.</Text>
         )}
 
-        {/* Screen 02 action grid: entry pass, schedules, venue, extras and event info. */}
+        {/* Screen 02 action grid: schedules, add-ons and event info. The entry pass is the button
+            at the top only, so it is not offered twice (owner's call, 2026-10-22). */}
         <View style={styles.actionGrid}>
-          <ActionCell
-            icon={<QrIcon size={30} color={colors.textPrimary} />}
-            label="Show Entry Pass"
-            detail="Quick access to your ticket"
-            onPress={openPass}
-          />
           <ActionCell
             icon={<CalendarIcon size={30} color={colors.textPrimary} />}
             label="My Schedule"
@@ -293,9 +279,15 @@ export default function LiveEventHomeScreen() {
             onPress={goSchedule}
           />
           <ActionCell
-            icon={<ShirtIcon size={30} color={colors.textPrimary} />}
-            label="My Extras"
-            detail="Accommodation, meals, transport"
+            icon={
+              <View style={styles.addonIcons}>
+                <HomeIcon size={26} color={colors.textPrimary} />
+                <MealIcon size={26} color={colors.textPrimary} />
+                <BusIcon size={26} color={colors.textPrimary} />
+              </View>
+            }
+            label="My Add-ons"
+            detail="Stay, dinner, bus"
             onPress={() => {
               track('live_extras_opened', { event_id: eventId, ...(ticket ? { ticket_id: ticket.id } : {}) });
               if (ticket) router.push(`/ticket/${ticket.id}/extras`);
@@ -310,20 +302,6 @@ export default function LiveEventHomeScreen() {
             onPress={openEventInfo}
           />
         </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Need help? Get support from our team"
-          onPress={openSupport}
-          style={styles.supportRow}
-        >
-          <HelpIcon size={30} color={colors.textPrimary} />
-          <View style={styles.supportCopy}>
-            <Text style={styles.supportTitle}>Need help?</Text>
-            <Text variant="bodyMuted">Get support from our team</Text>
-          </View>
-          <Text style={styles.supportChevron}>›</Text>
-        </Pressable>
 
         <Pressable
           accessibilityRole="button"
@@ -549,10 +527,7 @@ const styles = StyleSheet.create({
   actionCell: { width: '48%', minHeight: 168, gap: space.s1, padding: space.s4, backgroundColor: colors.bgSurface, borderWidth: 1, borderColor: colors.borderDefault, borderRadius: radius.card },
   actionIcon: { alignItems: 'flex-start', marginBottom: space.s2 },
   actionLabel: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.bodyLg, color: colors.textPrimary },
-  supportRow: { flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s4, backgroundColor: colors.bgSurface, borderWidth: 1, borderColor: colors.borderDefault, borderRadius: radius.card },
-  supportCopy: { flex: 1, gap: space.s1 },
-  supportTitle: { fontFamily: fontFamily.bodyMedium, fontSize: fontSize.bodyLg, color: colors.textPrimary },
-  supportChevron: { fontSize: 24, color: colors.textMuted },
+  addonIcons: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   exitRow: { alignItems: 'center', gap: space.s1, paddingVertical: space.s4 },
   exitRowLabel: {
     fontFamily: fontFamily.bodyMedium,

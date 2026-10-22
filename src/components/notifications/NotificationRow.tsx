@@ -22,6 +22,7 @@ export function NotificationRow({
   notification,
   now,
   opens,
+  action,
   onPress,
 }: {
   notification: AppNotification;
@@ -29,6 +30,8 @@ export function NotificationRow({
   now: number;
   /** Where the tap leads besides marking it read (`landingHint`), or null for nowhere. */
   opens: string | null;
+  /** What the tap opens, drawn as a link under the body (`landingAction`), or null for nowhere. */
+  action?: string | null;
   onPress: () => void;
 }) {
   const unread = notification.readAt === null;
@@ -61,7 +64,16 @@ export function NotificationRow({
         <Text variant="bodyMuted" color={unread ? colors.textPrimary : undefined}>
           {notification.body}
         </Text>
-        {when ? <Text variant="metaSm">{when}</Text> : null}
+        {when || action ? (
+          <View style={styles.foot}>
+            {when ? <Text variant="metaSm">{when}</Text> : <View />}
+            {action ? (
+              <Text variant="buttonLabel" color={colors.accentSky} style={styles.action}>
+                {action} ›
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </Card>
     </Pressable>
   );
@@ -92,6 +104,16 @@ const styles = StyleSheet.create({
     marginTop: 6,
     borderRadius: 4,
     backgroundColor: colors.accentGold,
+  },
+  foot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.s3,
+  },
+  action: {
+    flexShrink: 1,
+    textAlign: 'right',
   },
   pressed: {
     opacity: 0.75,
