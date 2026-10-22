@@ -1754,8 +1754,9 @@ describe('14 Entry pass', () => {
       expect(screen.getByText('Venue')).toBeTruthy();
       // The pass shows the ticket's full venue string, as the design draws it.
       expect(screen.getByText('El Gouna, Egypt')).toBeTruthy();
-      // The mock's pass lives 30s and is refetched 3s before it expires; the clock is frozen.
-      await waitFor(() => expect(screen.getByText('Refreshes in 27s')).toBeTruthy());
+      // The mock's codes rotate on 120s clock windows and the frozen clock sits at the start of
+      // one, so the next code is asked for as that window ends.
+      await waitFor(() => expect(screen.getByText('Refreshes in 120s')).toBeTruthy());
       expect(screen.queryByText('QR Code will show here.')).toBeNull();
     } finally {
       now.mockRestore();

@@ -567,9 +567,15 @@ describe('entry pass', () => {
     const ticket = data[0]!;
 
     const first = await mockApi.tickets.entryPass(ticket.id);
-    expect(first.refreshAfterSeconds).toBe(30);
+    const untilNext = Date.parse(first.nextCodeAt!) - Date.parse(first.serverTime!);
+    expect(untilNext).toBeGreaterThan(0);
+    expect(untilNext).toBeLessThanOrEqual(120_000);
+    expect(first.refreshAfterSeconds).toBe(Math.ceil(untilNext / 1000) + 1);
 
-    advance(31_000);
+    const same = await mockApi.tickets.entryPass(ticket.id);
+    expect(same.payload).toBe(first.payload);
+
+    advance(untilNext);
     const second = await mockApi.tickets.entryPass(ticket.id);
     expect(second.payload).not.toBe(first.payload);
   });
