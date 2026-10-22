@@ -145,7 +145,15 @@ export function TicketCard({
         onPress={onPress}
         style={({ pressed }) => [pressed && styles.pressed]}
       >
-        <ImageSlot source={designAsset('eventHero')} height={130} tint={colors.sage100}>
+        <ImageSlot
+          source={
+            ticket.event.coverImageUrl
+              ? { uri: ticket.event.coverImageUrl }
+              : designAsset('eventHero')
+          }
+          height={130}
+          tint={colors.sage100}
+        >
           <View style={styles.badge}>
             <Badge label={badge.label} tone={badge.tone} />
           </View>

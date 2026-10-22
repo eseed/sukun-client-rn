@@ -96,6 +96,8 @@ export default function PublicScheduleSessionScreen() {
 
   return (
     <Screen scroll contentStyle={styles.screenContent}>
+      {/* The session's own hero carries its back button; until it shows, the page needs one. */}
+      {status === 'success' ? null : <BackButton onPress={goBack} style={styles.stateBack} />}
       <ResourceState
         status={status}
         loadingLabel="Loading session details..."
@@ -119,6 +121,14 @@ export default function PublicScheduleSessionScreen() {
           onToggleSaved={() => { void toggleSaved(); }}
         /> : null}
       </ResourceState>
+      {status === 'empty' && slug !== undefined ? (
+        <Button
+          label="Open full schedule"
+          variant="secondary"
+          onPress={() => router.replace(`/event/${slug}/schedule?view=${view}`)}
+          style={styles.stateAction}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -204,6 +214,8 @@ const styles = StyleSheet.create({
   hero: { height: 300, marginHorizontal: -space.s5, position: 'relative', overflow: 'hidden', backgroundColor: colors.sage100 },
   heroBack: { position: 'absolute', top: space.s3, left: space.s4 },
   back: { alignSelf: 'flex-start', marginLeft: -space.s3 },
+  stateBack: { alignSelf: 'flex-start', marginLeft: -space.s3, marginTop: space.s3 },
+  stateAction: { marginTop: space.s4 },
   header: { gap: space.s3, alignItems: 'flex-start' },
   tags: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.s2 },
   // The website's clamp(34px, 8vw, 46px) at a phone's width; the italic leans past its box.

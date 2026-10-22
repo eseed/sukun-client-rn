@@ -1,15 +1,20 @@
-import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Ticket, TicketAddon, TicketChild, TicketStatus } from '../../src/api/types';
-import { StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import { BulletHeading, ResourceState, Screen } from '../../src/components/ui';
 import { SignInPrompt } from '../../src/components/SignInPrompt';
 import { TicketCard } from '../../src/components/tickets/TicketCard';
-import { useAddons, useEventRooms, useTickets } from '../../src/hooks/queries';
+import { queryKeys, useAddons, useEventRooms, useTickets } from '../../src/hooks/queries';
 import { availableStays, stayPhotos, ticketRoom } from '../../src/lib/addons';
 import { track } from '../../src/lib/analytics';
 import { useAuthStore } from '../../src/stores/auth';
 import { LiveEventReturnBanner } from '../../src/components/live-event/live-event-return-banner';
+import { colors } from '../../src/theme/tokens';
+
+/** A tab switch back within this long reuses what is on screen rather than asking again. */
+const FOCUS_REFETCH_AFTER_MS = 30_000;
 
 /**
  * Design screen 20 · My tickets.
@@ -25,6 +30,37 @@ export default function TicketsScreen() {
   // `isLoading`, not `isPending`: the query is disabled while signed out, and a disabled query
   // stays `isPending` forever — which would render the spinner with nothing ever fetching.
   const { data, isLoading, isError, refetch } = ticketsQuery;
+  const client = useQueryClient();
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // The app does not refetch on focus (QueryProvider), so a ticket a friend sent, or one a
+  // purchase on another screen added, shows up when the tab is opened again. Throttled, so
+  // flicking between tabs does not ask every time.
+  const lastFocusFetch = useRef(0);
+  useFocusEffect(
+    useCallback(() => {
+      if (!signedIn) return;
+      const now = Date.now();
+      if (now - lastFocusFetch.current < FOCUS_REFETCH_AFTER_MS) return;
+      lastFocusFetch.current = now;
+      void refetch();
+    }, [refetch, signedIn]),
+  );
+
+  const refresh = async () => {
+    setRefreshing(true);
+    lastFocusFetch.current = Date.now();
+    try {
+      await Promise.all([
+        refetch(),
+        client.invalidateQueries({ queryKey: queryKeys.liveEventContextRoot(userId) }),
+        client.invalidateQueries({ queryKey: queryKeys.roomsRoot }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const groups = useMemo(() => {
     const tickets = data?.data ?? [];
@@ -64,7 +100,21 @@ export default function TicketsScreen() {
   }, [data]);
 
   return (
-    <Screen scroll edges={{ bottom: false }} contentStyle={styles.content}>
+    <Screen
+      scroll
+      edges={{ bottom: false }}
+      contentStyle={styles.content}
+      refreshControl={
+        signedIn ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void refresh()}
+            tintColor={colors.accentGold}
+            colors={[colors.accentGold]}
+          />
+        ) : undefined
+      }
+    >
       <LiveEventReturnBanner />
       <View style={styles.heading}>
         <BulletHeading title="My tickets" size="md" />

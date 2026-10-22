@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -7,6 +8,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -26,6 +28,7 @@ import {
   YoutubeEmbed,
 } from '../../src/components/ui';
 import {
+  queryKeys,
   useAddons,
   useEvent,
   useMySchedule,
@@ -193,9 +196,40 @@ export default function EventDetailScreen() {
     [event?.descriptionHtml],
   );
 
+  const client = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  /**
+   * Pull to refresh: the event itself, then everything the page reads beside it. Invalidated
+   * rather than refetched, so a query that is switched off (a signed-out viewer's tickets, a
+   * schedule for someone without a ticket) stays off.
+   */
+  async function onRefresh() {
+    if (!eventSlug) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refetch(),
+        client.invalidateQueries({ queryKey: queryKeys.addons(eventSlug) }),
+        client.invalidateQueries({ queryKey: queryKeys.publicSchedule(eventSlug) }),
+        client.invalidateQueries({ queryKey: queryKeys.myScheduleRoot }),
+        client.invalidateQueries({ queryKey: queryKeys.ticketsRoot }),
+        client.invalidateQueries({ queryKey: queryKeys.roomsRoot }),
+        client.invalidateQueries({ queryKey: queryKeys.liveEventContextRoot(viewerId) }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   if (isPending || !event) {
     return (
       <View style={styles.loading}>
+        {/* The page has no header until it loads, so a failed or slow event still has a way out. */}
+        <BackButton
+          tone="floating"
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/discover'))}
+          style={{ ...styles.heroBack, top: insets.top + 12 }}
+        />
         <ResourceState
           status={isError || !eventSlug ? 'error' : 'loading'}
           loadingLabel="Loading event..."
@@ -379,6 +413,15 @@ export default function EventDetailScreen() {
         onScroll={onScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.accentGold}
+            colors={[colors.accentGold]}
+            progressViewOffset={insets.top}
+          />
+        }
       >
         <View style={styles.hero}>
           <ImageSlot
@@ -461,7 +504,12 @@ export default function EventDetailScreen() {
               </Text>
               <View style={styles.videos}>
                 {videoIds.map((videoId) => (
-                  <YoutubeEmbed key={videoId} videoId={videoId} title={event.title} />
+                  <YoutubeEmbed
+                    key={videoId}
+                    videoId={videoId}
+                    title={event.title}
+                    active={isFocused}
+                  />
                 ))}
               </View>
             </View>
@@ -500,8 +548,16 @@ export default function EventDetailScreen() {
               label={`${event.days.length} ${event.days.length === 1 ? 'day' : 'days'}`}
               tone="sky"
             />
+            {/* "Early bird" only on a tier named so: the DTO has no other sign of one. */}
             {firstPurchasableTier && firstPurchasableTier.available < 100 ? (
-              <Badge label="Early bird selling fast" tone="gold" />
+              <Badge
+                label={
+                  /early[\s-]?bird/i.test(firstPurchasableTier.name)
+                    ? 'Early bird selling fast'
+                    : 'Selling fast'
+                }
+                tone="gold"
+              />
             ) : null}
           </View>
 
@@ -658,14 +714,13 @@ export default function EventDetailScreen() {
           />
         ) : null}
         <View style={styles.barRow}>
-          {/* A holder with an invitation waiting is not buying, so no price is shown to them. */}
-          {invitation ? null : (
+          {/* A holder with an invitation waiting is not buying, so no price is shown to them. An
+              event with no price yet shows none either, rather than a placeholder. */}
+          {invitation || !event.priceFromEgp ? null : (
             <View style={styles.barPriceBlock}>
               <Text style={styles.barLabel}>From</Text>
-              <Text style={styles.barPrice}>
-                {event.priceFromEgp ? formatEgp(event.priceFromEgp) : '—'}
-              </Text>
-              {event.priceFromEgp ? <PricesIncludeVat event={event} /> : null}
+              <Text style={styles.barPrice}>{formatEgp(event.priceFromEgp)}</Text>
+              <PricesIncludeVat event={event} />
             </View>
           )}
           <Button
@@ -674,7 +729,7 @@ export default function EventDetailScreen() {
             }
             variant="accent"
             size="inline"
-            style={invitation ? styles.flex : undefined}
+            style={invitation || !event.priceFromEgp ? styles.flex : undefined}
             onPress={onGetTickets}
             disabled={!invitation && !firstPurchasableTier}
           />
