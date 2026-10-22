@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Alert, Image, StyleSheet, useWindowDimensions, View } from 'react-native';
 import {
   BackButton,
   BulletHeading,
@@ -18,6 +18,7 @@ import {
   useRetryPayment,
 } from '../../src/hooks/queries';
 import { HoldTimer } from '../../src/components/checkout/HoldTimer';
+import { useHardwareBack } from '../../src/components/checkout/checkoutNavigation';
 import {
   failedPaymentMessage,
   isOrderCancellable,
@@ -103,6 +104,25 @@ export default function PaymentScreen() {
    * confirming" state, not an error, and it lasts until the attempt settles or the hold runs out.
    */
   const [refusedOver, setRefusedOver] = useState<string | null>(null);
+  /*
+   * The card artwork is cropped from a larger picture drawn for the design's 342pt-wide column.
+   * It is scaled to the column this phone actually has, or a 375pt screen cut the card's edge
+   * off. Starts from the window so the first frame is already close.
+   */
+  const { width: windowWidth } = useWindowDimensions();
+  const [cardWidth, setCardWidth] = useState(windowWidth - CONTENT_GUTTER * 2);
+  const cardScale = cardWidth / CARD_DESIGN_WIDTH;
+
+  /*
+   * The order is placed, so the checkout steps behind this screen can no longer be edited: back
+   * into one only failed on Continue and bounced here again. Back leaves for the event instead,
+   * on the button and Android's hardware back alike; the iOS swipe is off in the layout.
+   */
+  const leave = () => {
+    const eventId = order?.eventId;
+    router.replace(eventId ? `/event/${eventId}` : '/(tabs)/discover');
+  };
+  useHardwareBack(leave);
 
   // Polls from mount and stops on its own at a terminal state. Gating this on a sheet *this*
   // screen had opened meant arriving here after a PENDING verdict — the one route in — began no
@@ -282,6 +302,17 @@ export default function PaymentScreen() {
    * Releases the order and its hold, then clears the checkout: the converted cart cannot be
    * edited again, so the buyer restarts from the event (Discover if it cannot be resolved).
    */
+  function confirmCancel() {
+    Alert.alert(
+      'Cancel this order?',
+      'Your tickets and extras will be released. This cannot be undone.',
+      [
+        { text: 'Keep order', style: 'cancel' },
+        { text: 'Cancel order', style: 'destructive', onPress: () => void onCancel() },
+      ],
+    );
+  }
+
   async function onCancel() {
     if (!validOrderId) return;
     setError(null);
@@ -365,7 +396,7 @@ export default function PaymentScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <BackButton onPress={() => router.back()} style={styles.back} />
+      <BackButton onPress={leave} style={styles.back} />
 
       <StepLabel>Payment</StepLabel>
       <View style={styles.heading}>
@@ -376,8 +407,22 @@ export default function PaymentScreen() {
         Secured by Paymob · charged in EGP
       </Text>
 
-      <View style={styles.cardArt}>
-        <Image source={card} style={styles.cardImage} />
+      <View
+        style={[styles.cardArt, { height: CARD_CROP.height * cardScale }]}
+        onLayout={(e) => setCardWidth(e.nativeEvent.layout.width)}
+      >
+        <Image
+          source={card}
+          style={[
+            styles.cardImage,
+            {
+              width: CARD_CROP.imageWidth * cardScale,
+              height: CARD_CROP.imageHeight * cardScale,
+              left: CARD_CROP.left * cardScale,
+              top: CARD_CROP.top * cardScale,
+            },
+          ]}
+        />
       </View>
 
       <Text variant="metaSm" style={styles.note}>
@@ -452,7 +497,7 @@ export default function PaymentScreen() {
         <Button
           label="Cancel this order"
           variant="secondary"
-          onPress={() => void onCancel()}
+          onPress={confirmCancel}
           loading={cancel.isPending}
           disabled={cancel.isPending}
           style={styles.retryButton}
@@ -474,9 +519,14 @@ function errorCodeOf(error: unknown): string {
   return typeof code === 'string' ? code : 'UNKNOWN';
 }
 
+const CONTENT_GUTTER = 24;
+/** The column the card crop was drawn for, and the crop itself, in that column's points. */
+const CARD_DESIGN_WIDTH = 342;
+const CARD_CROP = { imageWidth: 394, imageHeight: 858, left: -20, top: -172, height: 192 };
+
 const styles = StyleSheet.create({
   content: {
-    paddingHorizontal: 24,
+    paddingHorizontal: CONTENT_GUTTER,
     flexGrow: 1,
   },
   back: {
@@ -491,16 +541,11 @@ const styles = StyleSheet.create({
   },
   cardArt: {
     width: '100%',
-    height: 192,
     overflow: 'hidden',
     marginBottom: 24,
   },
   cardImage: {
     position: 'absolute',
-    width: 394,
-    height: 858,
-    left: -20,
-    top: -172,
   },
   note: {
     marginBottom: 8,

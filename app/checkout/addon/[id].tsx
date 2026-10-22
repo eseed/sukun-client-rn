@@ -26,6 +26,7 @@ import type {
   AccommodationAddonOption,
   AddonOption,
   AddonType,
+  CartAddonAssignmentInput,
   TransportAddonOption,
 } from '../../../src/api/types';
 import { describeOption, describePriceWindow, isAccommodation } from '../../../src/lib/addons';
@@ -144,12 +145,24 @@ export default function AddonDetailScreen() {
   );
   const pickedRoom = pickedOption && isAccommodation(pickedOption) ? pickedOption : undefined;
 
-  const selectedRoomType = roomType ?? pickedRoom?.roomType ?? roomGrid[0]?.type ?? null;
-  const selectedNights = nights ?? pickedRoom?.nights ?? nightChoices[0] ?? null;
+  // The first room still on sale opens selected, so a sold-out first row never greets the buyer
+  // with a dead "Sold out" button while others are free.
+  const firstOpenRoom = roomGrid
+    .flatMap((room) => [...room.options].sort((a, b) => a.nights - b.nights))
+    .find((option) => option.availability === 'available');
+  const selectedRoomType =
+    roomType ?? pickedRoom?.roomType ?? firstOpenRoom?.roomType ?? roomGrid[0]?.type ?? null;
+  const selectedNights =
+    nights ?? pickedRoom?.nights ?? firstOpenRoom?.nights ?? nightChoices[0] ?? null;
 
   // With one option there is nothing to choose, and with several the design draws the first one
-  // already selected, so the list opens on a selection rather than on an inert "Add to cart".
-  const selectedOptionId = optionId ?? addon?.options[0]?.id ?? null;
+  // already selected, so the list opens on a selection rather than on an inert "Add to cart". The
+  // first one on sale, when the first is sold out.
+  const selectedOptionId =
+    optionId ??
+    addon?.options.find((option) => option.availability === 'available')?.id ??
+    addon?.options[0]?.id ??
+    null;
 
   const resolvedOption: AddonOption | undefined = accommodation
     ? roomGrid
@@ -231,6 +244,9 @@ export default function AddonDetailScreen() {
     // Re-picking a different option of the same extra edits that line rather than adding a second
     // one: the store keys lines by option, so the superseded line has to go before the new lands.
     if (picked && picked.optionId !== resolvedOption.id) removeAddon(picked.optionId);
+    // The same option keeps who it was given to, as far as the new quantity still covers them; a
+    // different option starts over, since its recipients are chosen on the next step.
+    const kept = picked?.optionId === resolvedOption.id ? picked : undefined;
     upsertAddon({
       addonId: addon.id,
       addonName: addon.name,
@@ -242,10 +258,10 @@ export default function AddonDetailScreen() {
       // Recipients are chosen on the next step; nothing can be ordered until they are.
       ...(addon.type === 'accommodation'
         ? {
-            rooms: [],
+            rooms: (kept?.rooms ?? []).slice(0, quantity),
             occupancy: isAccommodation(resolvedOption) ? resolvedOption.occupancy : null,
           }
-        : { assignments: [] }),
+        : { assignments: keepAssignments(kept?.assignments ?? [], quantity) }),
     });
     // Saving the extra exactly as it was adds nothing to the basket.
     if (picked?.optionId !== resolvedOption.id || picked.quantity !== quantity) {
@@ -450,6 +466,22 @@ export default function AddonDetailScreen() {
       <Button label={addToCartLabel} disabled={!canAdd} onPress={onAdd} />
     </Screen>
   );
+}
+
+/** The assignments that still fit in `units`, in the order they were made. */
+function keepAssignments(
+  assignments: CartAddonAssignmentInput[],
+  units: number,
+): CartAddonAssignmentInput[] {
+  let left = units;
+  const kept: CartAddonAssignmentInput[] = [];
+  for (const assignment of assignments) {
+    if (left <= 0) break;
+    const quantity = Math.min(assignment.quantity ?? 1, left);
+    kept.push({ ...assignment, quantity });
+    left -= quantity;
+  }
+  return kept;
 }
 
 const styles = StyleSheet.create({
