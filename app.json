@@ -2,14 +2,14 @@
   "expo": {
     "name": "Sukun",
     "slug": "sukun-client-rn",
-    "version": "2.3.5",
+    "version": "2.3.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "sukun",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "buildNumber": "47",
+      "buildNumber": "48",
       "bundleIdentifier": "co.sukunwellness",
       "associatedDomains": [
         "applinks:book.sukunwellness.co",
