@@ -29,6 +29,17 @@ beforeEach(() => {
 });
 
 describe('YoutubeEmbed', () => {
+  it('stops the video, back to its poster, once its page is no longer showing', () => {
+    const view = render(<YoutubeEmbed videoId={ID} title="Tulua Festival" />);
+    fireEvent.press(screen.getByLabelText('Play Tulua Festival'));
+    expect(screen.getByTestId('youtube-player')).toBeTruthy();
+
+    view.rerender(<YoutubeEmbed videoId={ID} title="Tulua Festival" active={false} />);
+
+    expect(screen.queryByTestId('youtube-player')).toBeNull();
+    expect(screen.getByLabelText('Play Tulua Festival')).toBeTruthy();
+  });
+
   it('shows a poster frame and no browser until the video is tapped', () => {
     render(<YoutubeEmbed videoId={ID} title="Tulua Festival" />);
 

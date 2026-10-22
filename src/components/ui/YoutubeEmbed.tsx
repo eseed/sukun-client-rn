@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Image,
   Linking,
   Pressable,
@@ -37,13 +38,47 @@ const READY_TIMEOUT_MS = 20000;
  * black rectangle. The player reports `ready` and `error` over `postMessage`, and a player
  * that says neither in `READY_TIMEOUT_MS` counts as failed, so every dead end becomes the
  * "watch on YouTube" link rather than a black box.
+ *
+ * `active` is whether the page holding it is the one showing. A page can stay mounted under the
+ * next one (the event page under checkout), and a player left running there carries on playing
+ * out of sight, so leaving the page, or the app going to the background, puts the poster back.
  */
-export function YoutubeEmbed({ videoId, title }: { videoId: string; title?: string | null }) {
+export function YoutubeEmbed({
+  videoId,
+  title,
+  active = true,
+}: {
+  videoId: string;
+  title?: string | null;
+  active?: boolean;
+}) {
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const label = title?.trim() ? title.trim() : 'the event video';
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Unmounting the `WebView` is the one stop both platforms honour. Reset while rendering, when
+  // `active` turns false, rather than in an effect a frame later.
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (!active) {
+      setPlaying(false);
+      setReady(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!playing) return;
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background') {
+        setPlaying(false);
+        setReady(false);
+      }
+    });
+    return () => subscription.remove();
+  }, [playing]);
 
   useEffect(() => {
     if (!playing || ready || failed) return;

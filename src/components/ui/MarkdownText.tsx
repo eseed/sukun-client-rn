@@ -67,8 +67,9 @@ function htmlToMarkdown(value: string): string {
     .replace(/<[^>]+>/g, '');
 }
 
+/** Web links, plus an email address or phone number to reach; any other scheme stays text. */
 function isSafeUrl(value: string): boolean {
-  return /^https?:\/\/[^\s]+$/i.test(value.trim());
+  return /^(?:https?:\/\/|mailto:|tel:)[^\s]+$/i.test(value.trim());
 }
 
 function parseBlocks(markdown: string): MarkdownBlock[] {

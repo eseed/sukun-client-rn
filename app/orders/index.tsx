@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { Card, PageHeader, ResourceState, Screen, Text } from '../../src/components/ui';
 import { useOrders } from '../../src/hooks/queries';
 import { formatDate, formatEgp } from '../../src/lib/format';
@@ -13,9 +14,30 @@ export default function OrdersScreen() {
   const router = useRouter();
   const orders = useOrders({ limit: 20 });
   const items = orders.data?.pages.flatMap((page) => page.data) ?? [];
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await orders.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
-    <Screen scroll contentStyle={styles.content}>
+    <Screen
+      scroll
+      contentStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void refresh()}
+          tintColor={colors.accentGold}
+          colors={[colors.accentGold]}
+        />
+      }
+    >
       <PageHeader
         title="Order history"
         subtitle="Your purchases, all in one place."
