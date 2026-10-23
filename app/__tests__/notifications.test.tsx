@@ -5,6 +5,7 @@ import {
   resetMockState,
   setMockNotifications,
 } from '../../src/api/mock';
+import { Linking } from 'react-native';
 import type { AppNotification } from '../../src/api/types';
 import { useAuthStore } from '../../src/stores/auth';
 import { useFlagsStore } from '../../src/stores/flags';
@@ -219,16 +220,34 @@ describe('Notification inbox', () => {
     await signIn();
     setMockNotifications([
       notification('a', { title: 'Odd link', deepLink: 'sukun://events/../account/delete' }),
-      notification('b', { title: 'Wrong host', deepLink: 'https://example.com/events/tulua' }),
+      notification('b', { title: 'Not https', deepLink: 'http://example.com/events/tulua' }),
     ]);
     renderWithProviders(<NotificationsScreen />);
 
     fireEvent.press(await screen.findByLabelText(/^Unread\. Odd link\./));
-    fireEvent.press(screen.getByLabelText(/^Unread\. Wrong host\./));
+    fireEvent.press(screen.getByLabelText(/^Unread\. Not https\./));
 
     expect(await screen.findByLabelText(/^Odd link\./)).toBeTruthy();
-    expect(await screen.findByLabelText(/^Wrong host\./)).toBeTruthy();
+    expect(await screen.findByLabelText(/^Not https\./)).toBeTruthy();
     expect(mockRouter.push).not.toHaveBeenCalled();
+  });
+
+  it('hands a custom link, such as a Google Maps pin, to the phone', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    await signIn();
+    setMockNotifications([
+      notification('a', {
+        title: 'Find us',
+        deepLink: 'https://maps.app.goo.gl/xLr9yQh7aVb2Kc3d8',
+      }),
+    ]);
+    renderWithProviders(<NotificationsScreen />);
+
+    fireEvent.press(await screen.findByLabelText(/^Unread\. Find us\./));
+
+    expect(openURL).toHaveBeenCalledWith('https://maps.app.goo.gl/xLr9yQh7aVb2Kc3d8');
+    expect(mockRouter.push).not.toHaveBeenCalled();
+    openURL.mockRestore();
   });
 
   it('marks everything read, then disables the action', async () => {

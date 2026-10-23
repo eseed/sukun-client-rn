@@ -50,7 +50,6 @@ describe('parseNotificationLink', () => {
     { deepLink: 'sukun://events/tulua' },
     '',
     'tulua',
-    'https://book.sukunwellness.co/events/tulua',
     'sukun://tickets/abc',
     'sukun://tickets/',
     'sukun://tickets?x=1',
@@ -112,7 +111,7 @@ describe('landingFromLinks', () => {
 
   it('is null when neither link can be followed', () => {
     expect(landingFromLinks(null, null)).toBeNull();
-    expect(landingFromLinks('sukun://events/tulua/rooms', 'https://example.com')).toBeNull();
+    expect(landingFromLinks('sukun://events/tulua/rooms', 'http://example.com')).toBeNull();
   });
 });
 
@@ -150,18 +149,24 @@ describe('website links', () => {
     ).toEqual({ kind: 'accommodation', eventId: EVENT });
   });
 
-  it('leaves any other website page alone', () => {
-    expect(parseNotificationLink('https://book.sukunwellness.co/events/tulua')).toBeNull();
+  it('opens any other website page as a link', () => {
+    for (const link of [
+      'https://book.sukunwellness.co/events/tulua',
+      `https://evil.example.com/accommodation?eventId=${EVENT}`,
+      'https://book.sukunwellness.co/accommodation?eventId=not-a-uuid',
+    ]) {
+      expect(parseNotificationLink(link)).toEqual({ kind: 'link', url: link });
+    }
   });
 
-  it('follows nothing off the website, over http, with credentials, or without an event', () => {
+  it('follows nothing over http, with credentials, or without a real host', () => {
     for (const link of [
-      `https://evil.example.com/accommodation?eventId=${EVENT}`,
       `http://book.sukunwellness.co/accommodation?eventId=${EVENT}`,
       `https://user:pass@book.sukunwellness.co/accommodation?eventId=${EVENT}`,
-      'https://book.sukunwellness.co/',
-      'https://book.sukunwellness.co/accommodation',
-      'https://book.sukunwellness.co/accommodation?eventId=not-a-uuid',
+      'https://localhost/x',
+      'javascript:alert(1)',
+      'geo:29.6,32.3',
+      'maps.app.goo.gl/xLr9yQh7aVb2Kc3d8',
     ]) {
       expect(parseNotificationLink(link)).toBeNull();
     }
@@ -171,5 +176,14 @@ describe('website links', () => {
     expect(landingHint({ kind: 'accommodation', eventId: EVENT })).toBe(
       'Opens your room documents',
     );
+  });
+});
+
+describe('custom links', () => {
+  const MAPS = 'https://maps.app.goo.gl/xLr9yQh7aVb2Kc3d8';
+
+  it('opens a Google Maps pin the backend sends as the bare deepLink', () => {
+    expect(landingFromLinks(undefined, MAPS)).toEqual({ kind: 'link', url: MAPS });
+    expect(landingHint({ kind: 'link', url: MAPS })).toBe('Opens a link');
   });
 });

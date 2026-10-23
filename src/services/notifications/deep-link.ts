@@ -8,14 +8,16 @@
  * - `addon`: the event page, then what "Add" on that add-on does (`.../addons/<addonId>`)
  * - `tickets`: the My tickets tab (`sukun://tickets`)
  * - `accommodation`: a room's documents (the website's `/accommodation?eventId=<uuid>`, which the
- *   backend sends as a plain web link; the app has the same screen). Any other website page is
- *   inert here, as before: the app has its own event pages and checkout.
+ *   backend sends as a plain web link; the app has the same screen).
+ * - `link`: any other `https` link the admin pasted, such as a Google Maps pin, handed to the phone
+ *   to open (Maps, the browser).
  */
 export type NotificationLanding =
   | { kind: 'event' | 'schedule' | 'stay' | 'extras'; slug: string }
   | { kind: 'addon'; slug: string; addonId: string }
   | { kind: 'tickets' }
-  | { kind: 'accommodation'; eventId: string };
+  | { kind: 'accommodation'; eventId: string }
+  | { kind: 'link'; url: string };
 
 /** The landings the event page itself carries out once its data has loaded (`?landing=`). */
 export type EventPageLanding = 'stay' | 'extras' | 'addon';
@@ -67,7 +69,8 @@ export function parseNotificationLink(link: unknown): NotificationLanding | null
 
 /**
  * The website's room documents page (`https`, one of its hosts, no credentials, an event id),
- * which has its own screen in the app. Any other web link is null.
+ * which has its own screen in the app; else any other `https` link with a real host name and no
+ * credentials, opened outside the app. Anything else is null.
  */
 function parseWebLink(link: string): NotificationLanding | null {
   let url: URL;
@@ -78,19 +81,21 @@ function parseWebLink(link: string): NotificationLanding | null {
   }
   if (
     url.protocol !== 'https:' ||
-    !WEB_HOSTS.has(url.hostname.toLowerCase()) ||
-    url.port !== '' ||
+    !url.hostname.includes('.') ||
     url.username !== '' ||
-    url.password !== '' ||
-    url.pathname.length <= 1
+    url.password !== ''
   ) {
     return null;
   }
-  if (url.pathname.replace(/\/$/, '') === '/accommodation') {
+  if (
+    WEB_HOSTS.has(url.hostname.toLowerCase()) &&
+    url.port === '' &&
+    url.pathname.replace(/\/$/, '') === '/accommodation'
+  ) {
     const eventId = url.searchParams.get('eventId')?.toLowerCase() ?? '';
-    return UUID_ONLY.test(eventId) ? { kind: 'accommodation', eventId } : null;
+    if (UUID_ONLY.test(eventId)) return { kind: 'accommodation', eventId };
   }
-  return null;
+  return { kind: 'link', url: link };
 }
 
 /**
@@ -115,6 +120,8 @@ export function landingHint(landing: NotificationLanding | null): string | null 
       return 'Opens the event schedule';
     case 'accommodation':
       return 'Opens your room documents';
+    case 'link':
+      return 'Opens a link';
     default:
       return 'Opens the event';
   }
