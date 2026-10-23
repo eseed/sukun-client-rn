@@ -1,5 +1,6 @@
 import { render, waitFor } from '@testing-library/react-native';
 import type { NotificationResponse } from 'expo-notifications';
+import { Linking } from 'react-native';
 import { NotificationResponseRouter } from '../NotificationResponseRouter';
 import { openNotificationLanding } from '../open-landing';
 
@@ -91,6 +92,15 @@ describe('push taps', () => {
       pathname: '/event/[slug]',
       params: { slug: 'tulua' },
     });
+  });
+
+  it('hands a custom link, such as a Google Maps pin, to the phone', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    render(<NotificationResponseRouter />);
+    await deliver(tap({ deepLink: 'https://maps.app.goo.gl/xLr9yQh7aVb2Kc3d8' }));
+    expect(openURL).toHaveBeenCalledWith('https://maps.app.goo.gl/xLr9yQh7aVb2Kc3d8');
+    expect(mockRouter.push).not.toHaveBeenCalled();
+    openURL.mockRestore();
   });
 
   it('follows the tap that opened the app from cold', async () => {
