@@ -4,6 +4,7 @@
   },
   "build": {
     "development": {
+      "node": "22.23.4",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
@@ -23,6 +24,7 @@
       }
     },
     "staging": {
+      "node": "22.23.4",
       "autoIncrement": true,
       "android": {
         "buildType": "apk",
@@ -44,6 +46,7 @@
       }
     },
     "production": {
+      "node": "22.23.4",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_MODE": "live",
