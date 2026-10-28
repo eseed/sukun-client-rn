@@ -21,7 +21,7 @@ if (Platform.OS === 'ios' || Platform.OS === 'android') {
 
 /**
  * Where a tapped push lands: `data.landingLink` when the admin chose more than the event page,
- * else the bare event link in `data.deepLink` (`sukun://tickets` comes as `landingLink` alone).
+ * else the bare event link in `data.deepLink` (`sukunclient://tickets` comes as `landingLink` alone).
  */
 export function landingFromResponse(
   response: Notifications.NotificationResponse,
