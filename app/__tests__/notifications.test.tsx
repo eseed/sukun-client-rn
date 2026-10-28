@@ -157,7 +157,7 @@ describe('Notification inbox', () => {
   it('marks a tapped row read at once and opens its event', async () => {
     await signIn();
     setMockNotifications([
-      notification('a', { title: 'Gates open', deepLink: 'sukun://events/tulua' }),
+      notification('a', { title: 'Gates open', deepLink: 'sukunclient://events/tulua' }),
       notification('b'),
     ]);
     renderWithProviders(<NotificationsScreen />);
@@ -179,10 +179,10 @@ describe('Notification inbox', () => {
     setMockNotifications([
       notification('a', {
         title: 'Rooms are open',
-        deepLink: 'sukun://events/tulua',
-        landingLink: 'sukun://events/tulua/stay',
+        deepLink: 'sukunclient://events/tulua',
+        landingLink: 'sukunclient://events/tulua/stay',
       }),
-      notification('b', { title: 'Your tickets', landingLink: 'sukun://tickets' }),
+      notification('b', { title: 'Your tickets', landingLink: 'sukunclient://tickets' }),
     ]);
     renderWithProviders(<NotificationsScreen />);
 
@@ -203,8 +203,8 @@ describe('Notification inbox', () => {
     setMockNotifications([
       notification('a', {
         title: 'Newer landing',
-        deepLink: 'sukun://events/tulua',
-        landingLink: 'sukun://events/tulua/rooms',
+        deepLink: 'sukunclient://events/tulua',
+        landingLink: 'sukunclient://events/tulua/rooms',
       }),
     ]);
     renderWithProviders(<NotificationsScreen />);
@@ -219,7 +219,7 @@ describe('Notification inbox', () => {
   it('does nothing with a malformed link but mark the row read', async () => {
     await signIn();
     setMockNotifications([
-      notification('a', { title: 'Odd link', deepLink: 'sukun://events/../account/delete' }),
+      notification('a', { title: 'Odd link', deepLink: 'sukunclient://events/../account/delete' }),
       notification('b', { title: 'Not https', deepLink: 'http://example.com/events/tulua' }),
     ]);
     renderWithProviders(<NotificationsScreen />);

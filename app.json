@@ -5,7 +5,7 @@
     "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "sukun",
+    "scheme": "sukunclient",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
@@ -54,10 +54,7 @@
               "path": "/accommodation"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ],
       "googleServicesFile": "./google-services.json",
@@ -68,10 +65,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_CONTACTS"
-      ],
+      "permissions": ["android.permission.CAMERA", "android.permission.READ_CONTACTS"],
       "blockedPermissions": [
         "android.permission.WRITE_CONTACTS",
         "android.permission.WRITE_SETTINGS"
@@ -133,10 +127,7 @@
             "enableSceneSupport": true
           },
           "android": {
-            "buildArchs": [
-              "arm64-v8a",
-              "armeabi-v7a"
-            ],
+            "buildArchs": ["arm64-v8a", "armeabi-v7a"],
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
             "extraProguardRules": "# Paymob: the RN bridge and the native checkout SDK. The SDK inflates its\n# sheet through data binding and resolves classes reflectively, and it ships\n# from JitPack without consumer rules, so it has to be kept by hand.\n-keep class com.paymobreactnative.** { *; }\n-keep class com.paymob.** { *; }\n-dontwarn com.paymob.**\n\n# Analytics SDKs look classes up by name at runtime.\n-keep class com.mixpanel.** { *; }\n-dontwarn com.mixpanel.**\n-keep class com.microsoft.clarity.** { *; }\n-dontwarn com.microsoft.clarity.**\n\n# Kochava is deliberately absent: com.kochava.core:core, measurement:base and\n# measurement:google each ship consumer rules inside their AAR, covering the SDK entry\n# points, the install referrer and the App Set ID, and R8 applies those on its own.\n# Keeping a library by hand here is for the ones that ship none, as the Paymob note says.\n\n# Expo resolves modules through a reflective registry.\n-keep class expo.modules.** { *; }\n-keep class * extends expo.modules.core.interfaces.Package { *; }\n-keep class * extends expo.modules.kotlin.modules.Module { *; }\n\n# React Native bridge surfaces reached from JS or JNI.\n-keep class com.facebook.react.** { *; }\n-keep class com.facebook.hermes.** { *; }\n-keep class com.facebook.jni.** { *; }\n-keepclassmembers class * { @com.facebook.react.bridge.ReactMethod <methods>; }\n-keepclassmembers class * { @com.facebook.react.uimanager.annotations.ReactProp <methods>; }\n-keepclasseswithmembernames class * { native <methods>; }\n\n# Kotlin metadata is read reflectively by the Expo and Paymob Kotlin modules.\n-keep class kotlin.Metadata { *; }\n-dontwarn kotlinx.**\n\n-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod\n"

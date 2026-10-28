@@ -1424,18 +1424,18 @@ export interface RoomAttachmentUpload {
  * `MobileNotificationItemDto`: one push an admin sent this account, as the in-app inbox keeps it
  * (`GET mobile/notifications`, newest first, kept for 12 months).
  *
- * `deepLink` is the backend's own event link (`sukun://events/<slug>`) or null. It is validated
+ * `deepLink` is the backend's own event link (`sukunclient://events/<slug>`) or null. It is validated
  * before it is followed, exactly as a push tap's is, so a malformed one does nothing.
  */
 export interface AppNotification {
   id: string;
   title: string;
   body: string;
-  /** The bare event link (`sukun://events/<slug>`), or null. */
+  /** The bare event link (`sukunclient://events/<slug>`), or null. */
   deepLink: string | null;
   /**
    * Where the admin chose a tap to land when it says more than the event page
-   * (`sukun://events/<slug>/schedule`, `/stay`, `/extras`, `/addons/<id>`, `sukun://tickets`).
+   * (`sukunclient://events/<slug>/schedule`, `/stay`, `/extras`, `/addons/<id>`, `sukunclient://tickets`).
    * Absent from backends before landings; the app then follows `deepLink`.
    */
   landingLink?: string | null;
