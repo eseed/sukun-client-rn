@@ -39,7 +39,7 @@ function notification(id: string, read = false): AppNotification {
     id,
     title: `Title ${id}`,
     body: `Body ${id}`,
-    deepLink: 'sukun://events/tulua',
+    deepLink: 'sukunclient://events/tulua',
     readAt: read ? '2026-10-16T10:00:00.000Z' : null,
     createdAt: '2026-10-16T09:00:00.000Z',
   };

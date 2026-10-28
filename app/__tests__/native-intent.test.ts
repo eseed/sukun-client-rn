@@ -37,8 +37,8 @@ describe('the website claim link, opened in the app', () => {
 
   it('passes every other link through untouched', () => {
     useAuthStore.setState({ status: 'signed-in' });
-    expect(redirectSystemPath({ path: 'sukun://event/tulua', initial: true })).toBe(
-      'sukun://event/tulua',
+    expect(redirectSystemPath({ path: 'sukunclient://event/tulua', initial: true })).toBe(
+      'sukunclient://event/tulua',
     );
   });
 
