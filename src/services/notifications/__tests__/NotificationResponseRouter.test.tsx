@@ -59,7 +59,10 @@ describe('push taps', () => {
   it('lands where the landing link says, over the event link', async () => {
     render(<NotificationResponseRouter />);
     await deliver(
-      tap({ deepLink: 'sukun://events/tulua', landingLink: 'sukun://events/tulua/stay' }),
+      tap({
+        deepLink: 'sukunclient://events/tulua',
+        landingLink: 'sukunclient://events/tulua/stay',
+      }),
     );
     expect(mockRouter.push).toHaveBeenCalledTimes(1);
     expect(mockRouter.push).toHaveBeenCalledWith({
@@ -70,7 +73,7 @@ describe('push taps', () => {
 
   it('opens the event page from the event link alone, as before landings', async () => {
     render(<NotificationResponseRouter />);
-    await deliver(tap({ deepLink: 'sukun://events/tulua' }));
+    await deliver(tap({ deepLink: 'sukunclient://events/tulua' }));
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/event/[slug]',
       params: { slug: 'tulua' },
@@ -79,14 +82,17 @@ describe('push taps', () => {
 
   it('opens My tickets from a landing link with no event link', async () => {
     render(<NotificationResponseRouter />);
-    await deliver(tap({ landingLink: 'sukun://tickets' }));
+    await deliver(tap({ landingLink: 'sukunclient://tickets' }));
     expect(mockRouter.push).toHaveBeenCalledWith('/(tabs)/tickets');
   });
 
   it('falls back to the event page when the landing is one this build does not know', async () => {
     render(<NotificationResponseRouter />);
     await deliver(
-      tap({ deepLink: 'sukun://events/tulua', landingLink: 'sukun://events/tulua/rooms' }),
+      tap({
+        deepLink: 'sukunclient://events/tulua',
+        landingLink: 'sukunclient://events/tulua/rooms',
+      }),
     );
     expect(mockRouter.push).toHaveBeenCalledWith({
       pathname: '/event/[slug]',
@@ -105,8 +111,8 @@ describe('push taps', () => {
 
   it('follows the tap that opened the app from cold', async () => {
     mockLastResponse = tap({
-      deepLink: 'sukun://events/tulua',
-      landingLink: 'sukun://events/tulua/schedule',
+      deepLink: 'sukunclient://events/tulua',
+      landingLink: 'sukunclient://events/tulua/schedule',
     });
     render(<NotificationResponseRouter />);
     await waitFor(() =>
@@ -118,9 +124,9 @@ describe('push taps', () => {
   });
 
   it.each([
-    ['a malformed link', { deepLink: 'sukun://events/../profile' }],
+    ['a malformed link', { deepLink: 'sukunclient://events/../profile' }],
     ['no data', null],
-    ['data that is not an object', ['sukun://events/tulua']],
+    ['data that is not an object', ['sukunclient://events/tulua']],
   ])('does nothing with %s', async (_, data) => {
     render(<NotificationResponseRouter />);
     await deliver(tap(data));
@@ -129,7 +135,7 @@ describe('push taps', () => {
 
   it('ignores an action button other than the tap itself', async () => {
     render(<NotificationResponseRouter />);
-    await deliver(tap({ landingLink: 'sukun://tickets' }, 'dismiss'));
+    await deliver(tap({ landingLink: 'sukunclient://tickets' }, 'dismiss'));
     expect(mockRouter.push).not.toHaveBeenCalled();
   });
 });

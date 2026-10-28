@@ -1,12 +1,12 @@
 /**
  * Where tapping a notification lands, chosen by the admin who sent it.
  *
- * - `event`: the event page (`sukun://events/<slug>`)
- * - `schedule`: the event's schedule (`sukun://events/<slug>/schedule`)
- * - `stay`: the event page, then what "Book your stay" does (`sukun://events/<slug>/stay`)
+ * - `event`: the event page (`sukunclient://events/<slug>`)
+ * - `schedule`: the event's schedule (`sukunclient://events/<slug>/schedule`)
+ * - `stay`: the event page, then what "Book your stay" does (`sukunclient://events/<slug>/stay`)
  * - `extras`: the event page, then a holder's extras, or a ticket first (`.../extras`)
  * - `addon`: the event page, then what "Add" on that add-on does (`.../addons/<addonId>`)
- * - `tickets`: the My tickets tab (`sukun://tickets`)
+ * - `tickets`: the My tickets tab (`sukunclient://tickets`)
  * - `accommodation`: a room's documents (the website's `/accommodation?eventId=<uuid>`, which the
  *   backend sends as a plain web link; the app has the same screen).
  * - `link`: any other `https` link the admin pasted, such as a Google Maps pin, handed to the phone
@@ -28,11 +28,14 @@ export function isEventPageLanding(value: unknown): value is EventPageLanding {
 
 const SLUG = '[a-z0-9]+(?:-[a-z0-9]+)*';
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+// The app's scheme is `sukunclient`; the old `sukun` links (inbox rows already stored, and what
+// the backend sends while builds that only know `sukun` are still installed) still parse.
+const SCHEME = 'sukun(?:client)?://';
 // The bare event link keeps the trailing slash the old event-only parser allowed.
-const EVENT_LINK = new RegExp(`^sukun://events/(${SLUG})/?$`);
-const EVENT_SUBPAGE_LINK = new RegExp(`^sukun://events/(${SLUG})/(schedule|stay|extras)$`);
-const ADDON_LINK = new RegExp(`^sukun://events/(${SLUG})/addons/(${UUID})$`);
-const TICKETS_LINK = 'sukun://tickets';
+const EVENT_LINK = new RegExp(`^${SCHEME}events/(${SLUG})/?$`);
+const EVENT_SUBPAGE_LINK = new RegExp(`^${SCHEME}events/(${SLUG})/(schedule|stay|extras)$`);
+const ADDON_LINK = new RegExp(`^${SCHEME}events/(${SLUG})/addons/(${UUID})$`);
+const TICKETS_LINK = new RegExp(`^${SCHEME}tickets$`);
 const MAX_DEEP_LINK_LENGTH = 256;
 /** The website's hosts (production, staging). */
 const WEB_HOSTS = new Set(['book.sukunwellness.co', 'clientstaging.sukunwellness.co']);
@@ -48,7 +51,7 @@ const MAX_SLUG_LENGTH = 160;
  */
 export function parseNotificationLink(link: unknown): NotificationLanding | null {
   if (typeof link !== 'string' || link.length > MAX_DEEP_LINK_LENGTH) return null;
-  if (link === TICKETS_LINK) return { kind: 'tickets' };
+  if (TICKETS_LINK.test(link)) return { kind: 'tickets' };
 
   const event = EVENT_LINK.exec(link);
   if (event) return validSlug(event[1]) ? { kind: 'event', slug: event[1]! } : null;

@@ -12,7 +12,7 @@ interface SeedNotification {
   slug: string | null;
   /**
    * Where the tap lands when that is more than the event page, as the backend sends it in
-   * `landingLink` (`/schedule`, `/stay`, `/extras`, or `sukun://tickets`, which has no event).
+   * `landingLink` (`/schedule`, `/stay`, `/extras`, or `sukunclient://tickets`, which has no event).
    */
   landing?: string;
   read: boolean;
@@ -36,7 +36,7 @@ const SEED: SeedNotification[] = [
     title: 'Your schedule is live',
     body: 'Sessions for Tulua are now on the schedule. Save the ones you want.',
     slug: 'tulua',
-    landing: 'sukun://events/tulua/schedule',
+    landing: 'sukunclient://events/tulua/schedule',
     read: false,
   },
   {
@@ -58,7 +58,7 @@ const SEED: SeedNotification[] = [
     title: 'Buses to Sokhna',
     body: 'Return buses from Cairo are now available as an extra on your ticket.',
     slug: 'tulua',
-    landing: 'sukun://events/tulua/extras',
+    landing: 'sukunclient://events/tulua/extras',
     read: true,
   },
   {
@@ -66,7 +66,7 @@ const SEED: SeedNotification[] = [
     title: 'Thank you for joining us',
     body: 'We hope you left lighter. Photos from the weekend are coming soon.',
     slug: null,
-    landing: 'sukun://tickets',
+    landing: 'sukunclient://tickets',
     read: true,
   },
   {
@@ -120,7 +120,7 @@ export function seedNotifications(nowMs: number): AppNotification[] {
       id: mockId(index),
       title: seed.title,
       body: seed.body,
-      deepLink: seed.slug ? `sukun://events/${seed.slug}` : null,
+      deepLink: seed.slug ? `sukunclient://events/${seed.slug}` : null,
       landingLink: seed.landing ?? null,
       readAt: seed.read ? new Date(nowMs - seed.ageMs + 30 * MINUTE).toISOString() : null,
       createdAt,
