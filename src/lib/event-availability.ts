@@ -9,7 +9,10 @@ import type { EventDetail } from '../api/types';
  * their own before the "not on sale yet" fallback, which would otherwise promise tickets to an
  * event that is over.
  */
-export function eventAvailabilityMessage(event: Pick<EventDetail, 'tiers' | 'state'>): string {
+export function eventAvailabilityMessage(
+  event: Pick<EventDetail, 'tiers' | 'state' | 'invitationOnly'>,
+): string {
+  if (event.invitationOnly === true) return 'This event is by invitation only.';
   if (event.tiers.length === 0) return 'Tickets are not available for this event.';
   if (event.tiers.some((tier) => tier.isPurchasable)) return 'Tickets are available now.';
   if (

@@ -346,6 +346,11 @@ export interface EventDetail {
    * the VAT shown is the part of the total that is tax. Only meaningful with `vatEnabled`.
    */
   vatInclusive: boolean;
+  /**
+   * Only invitations fill this event: nothing is sold (tiers is empty) and it is not listed.
+   * Missing (an older backend) means a regular event.
+   */
+  invitationOnly?: boolean;
   /** The event's VAT rate as a PERCENT string, e.g. `"14.00"`. Not the cart's `"0.1400"`. */
   vatRate: string;
   /**
