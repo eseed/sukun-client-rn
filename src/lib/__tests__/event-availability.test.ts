@@ -53,3 +53,11 @@ describe('eventAvailabilityMessage', () => {
     expect(eventAvailabilityMessage(event('published'))).toBe('Tickets are not on sale yet.');
   });
 });
+
+describe('eventAvailabilityMessage (invitation only)', () => {
+  it('says the event is by invitation, whatever its state', () => {
+    expect(eventAvailabilityMessage({ tiers: [], state: 'on_sale', invitationOnly: true })).toBe(
+      'This event is by invitation only.',
+    );
+  });
+});

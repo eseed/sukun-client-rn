@@ -126,10 +126,11 @@ export default function EventDetailScreen() {
 
   const { data: event, isPending, isError, error, refetch } = useEvent(eventSlug);
   const liveContext = useLiveEventContext();
-  const eventHappeningForHolder = Boolean(event) && (
-    (liveContext.status === 'ready' && liveContext.context.eventId === event?.id) ||
-    (liveContext.status === 'choose' && liveContext.choices.some((choice) => choice.event.id === event?.id))
-  );
+  const eventHappeningForHolder =
+    Boolean(event) &&
+    ((liveContext.status === 'ready' && liveContext.context.eventId === event?.id) ||
+      (liveContext.status === 'choose' &&
+        liveContext.choices.some((choice) => choice.event.id === event?.id)));
   const viewerId = useAuthStore((state) => state.user?.id ?? null);
   const liveModeOn = useLiveModeOn(viewerId, event?.id);
   const enterLiveMode = useEnterLiveMode();
@@ -725,7 +726,13 @@ export default function EventDetailScreen() {
           )}
           <Button
             label={
-              invitation ? 'Claim ticket' : firstPurchasableTier ? 'Get tickets' : 'Not available'
+              invitation
+                ? 'Claim ticket'
+                : firstPurchasableTier
+                  ? 'Get tickets'
+                  : event.invitationOnly === true
+                    ? 'By invitation'
+                    : 'Not available'
             }
             variant="accent"
             size="inline"
