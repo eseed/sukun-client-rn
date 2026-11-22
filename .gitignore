@@ -58,3 +58,7 @@ coverage/
 
 # Local git worktrees
 .worktrees/
+
+# Claude instructions live on the owner's computer only
+CLAUDE.md
+.claude/
