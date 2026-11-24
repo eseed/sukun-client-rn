@@ -10,6 +10,8 @@ import {
 } from '../../src/components/ui';
 import { SignInPrompt } from '../../src/components/SignInPrompt';
 import { useAvatarUri, useTickets } from '../../src/hooks/queries';
+import { useStudioSummary } from '../../src/hooks/studio';
+import { formatEgp } from '../../src/lib/format';
 import { APP_VERSION_LINE, IS_STAGING_BUILD } from '../../src/lib/build-info';
 import { formatPhoneForDisplay } from '../../src/lib/phone';
 import { missingProfileFields, ONBOARDING_RESUME_ROUTE, useAuthStore } from '../../src/stores/auth';
@@ -29,6 +31,7 @@ export default function ProfileScreen() {
   const tickets = data?.data ?? [];
   const eventCount = new Set(tickets.map((t) => t.event.id)).size;
   const missingFields = missingProfileFields(user);
+  const studioSummary = useStudioSummary().data;
   const dots = designAsset('bgProfileDots');
 
   return (
@@ -97,16 +100,49 @@ export default function ProfileScreen() {
               onRetry={() => void refetch()}
             >
               <View style={styles.stats}>
+                {/* P4 (BKG-18): the studio summary joins the event stats. */}
+                {studioSummary ? (
+                  <>
+                    <View style={styles.stat}>
+                      <Text style={styles.statValue}>{studioSummary.classesAttended}</Text>
+                      <Text style={styles.statLabel}>Classes attended</Text>
+                    </View>
+                    {studioSummary.sessionsOwed > 0 ? (
+                      <View style={styles.stat}>
+                        <Text style={styles.statValue}>{studioSummary.sessionsOwed}</Text>
+                        <Text style={styles.statLabel}>Sessions owed</Text>
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
                 <View style={styles.stat}>
                   <Text style={styles.statValue}>{tickets.length}</Text>
                   <Text style={styles.statLabel}>Tickets</Text>
                 </View>
-                <View style={styles.stat}>
-                  <Text style={styles.statValue}>{eventCount}</Text>
-                  <Text style={styles.statLabel}>Events</Text>
-                </View>
+                {!studioSummary ? (
+                  <View style={styles.stat}>
+                    <Text style={styles.statValue}>{eventCount}</Text>
+                    <Text style={styles.statLabel}>Events</Text>
+                  </View>
+                ) : null}
               </View>
             </ResourceState>
+
+            {/*
+              A balance owed from a desk sale (or a late-cancel fee). It is paid through the link
+              the studio sends (ss-8-4); the app has no endpoint to pay it, so it says where.
+            */}
+            {studioSummary && Number(studioSummary.outstandingBalanceEgp) > 0 ? (
+              <View style={styles.balance}>
+                <Text variant="meta">Balance owed</Text>
+                <Text style={styles.balanceValue}>
+                  {formatEgp(studioSummary.outstandingBalanceEgp)}
+                </Text>
+                <Text variant="meta">
+                  Pay it with the link the studio sends you, or at the front desk.
+                </Text>
+              </View>
+            ) : null}
 
             <Text variant="eyebrow" style={styles.sectionLabel}>
               Account
@@ -133,6 +169,10 @@ export default function ProfileScreen() {
                   />
                 </Pressable>
               ) : null}
+
+              <Pressable onPress={() => router.push('/studio/packages')} accessibilityRole="button">
+                <ListRow label="My packages" />
+              </Pressable>
 
               <Pressable onPress={() => router.push('/account/profile')} accessibilityRole="button">
                 <ListRow label="Edit profile" />
@@ -202,6 +242,17 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  balance: {
+    marginTop: -8,
+    marginBottom: 24,
+    padding: 14,
+    gap: 4,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: colors.gold500,
+    backgroundColor: colors.bgSurface,
+  },
+  balanceValue: { fontSize: 18, fontFamily: fontFamily.bodyMedium },
   root: {
     flex: 1,
     backgroundColor: colors.bgPage,

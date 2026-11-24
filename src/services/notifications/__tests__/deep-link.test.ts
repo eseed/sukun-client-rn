@@ -151,7 +151,7 @@ describe('isEventPageLanding', () => {
 
 describe('landingHint', () => {
   it('says where a tap leads, or nothing for a link that leads nowhere', () => {
-    expect(landingHint({ kind: 'tickets' })).toBe('Opens your tickets');
+    expect(landingHint({ kind: 'tickets' })).toBe('Opens your bookings');
     expect(landingHint({ kind: 'schedule', slug: 'tulua' })).toBe('Opens the event schedule');
     expect(landingHint({ kind: 'stay', slug: 'tulua' })).toBe('Opens the event');
     expect(landingHint(null)).toBeNull();

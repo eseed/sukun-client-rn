@@ -1,3 +1,4 @@
+import { studioLinkPath } from '../../lib/studio';
 /**
  * Where tapping a notification lands, chosen by the admin who sent it.
  *
@@ -17,6 +18,8 @@ export type NotificationLanding =
   | { kind: 'addon'; slug: string; addonId: string }
   | { kind: 'tickets' }
   | { kind: 'accommodation'; eventId: string }
+  /** A Studio screen: a friend's class invitation (the invite push) or a class link. */
+  | { kind: 'studio'; path: string }
   | { kind: 'link'; url: string };
 
 /** The landings the event page itself carries out once its data has loaded (`?landing=`). */
@@ -52,6 +55,9 @@ const MAX_SLUG_LENGTH = 160;
 export function parseNotificationLink(link: unknown): NotificationLanding | null {
   if (typeof link !== 'string' || link.length > MAX_DEEP_LINK_LENGTH) return null;
   if (TICKETS_LINK.test(link)) return { kind: 'tickets' };
+
+  const studio = studioLinkPath(link);
+  if (studio) return { kind: 'studio', path: studio };
 
   const event = EVENT_LINK.exec(link);
   if (event) return validSlug(event[1]) ? { kind: 'event', slug: event[1]! } : null;
@@ -118,13 +124,17 @@ export function landingHint(landing: NotificationLanding | null): string | null 
   if (!landing) return null;
   switch (landing.kind) {
     case 'tickets':
-      return 'Opens your tickets';
+      return 'Opens your bookings';
     case 'schedule':
       return 'Opens the event schedule';
     case 'accommodation':
       return 'Opens your room documents';
     case 'link':
       return 'Opens a link';
+    case 'studio':
+      return landing.path.startsWith('/classes/invites/')
+        ? 'Opens your invitation'
+        : 'Opens the class';
     default:
       return 'Opens the event';
   }

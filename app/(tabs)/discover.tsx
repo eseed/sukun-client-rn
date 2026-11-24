@@ -14,6 +14,8 @@ import { trackMetaSearch } from '../../src/lib/meta-events';
 import { useAuthStore } from '../../src/stores/auth';
 import { colors, fontFamily } from '../../src/theme/tokens';
 import { LiveEventReturnBanner } from '../../src/components/live-event/live-event-return-banner';
+import { StudiosCard } from '../../src/components/studio/StudiosCard';
+import { useStudioHome } from '../../src/hooks/studio';
 
 /** How long the search text must stay put to count as a search, for Meta. */
 const SEARCH_SETTLED_MS = 1000;
@@ -30,6 +32,10 @@ export default function DiscoverScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const [tag, setTag] = useState<string | null>(null);
+  // P4 (INT-01, INT-04): All · Studios · Events. Studios shows the Sukun Studios card alone.
+  const [kind, setKind] = useState<'all' | 'studios' | 'events'>('all');
+  const studioHome = useStudioHome().data;
+  const showStudios = Boolean(studioHome?.discoverStudiosVisible) && kind !== 'events';
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 250);
   // A search the person paused on, not every keystroke the list follows (Meta's Search).
@@ -82,6 +88,11 @@ export default function DiscoverScreen() {
   }, [debouncedSearch, events.length, fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const [featured, ...rest] = events;
+  // Before the Nth event card (1 = first), or after the last when there are fewer.
+  const studiosAt = Math.min(
+    Math.max(0, (studioHome?.discoverStudiosPosition ?? 1) - 1),
+    events.length,
+  );
 
   // Every listing (the chip vocabulary and the filtered one), the bell's count and the live
   // banner, so a pull shows what changed since the tab was first opened.
@@ -143,7 +154,23 @@ export default function DiscoverScreen() {
         />
       </View>
 
-      {tags.length > 0 ? (
+      {studioHome?.discoverStudiosVisible ? (
+        <View style={styles.filters}>
+          <Tag label="All" selected={kind === 'all'} onPress={() => setKind('all')} />
+          <Tag label="Studios" selected={kind === 'studios'} onPress={() => setKind('studios')} />
+          <Tag label="Events" selected={kind === 'events'} onPress={() => setKind('events')} />
+        </View>
+      ) : null}
+
+      {kind === 'studios' && studioHome ? (
+        <StudiosCard
+          branches={studioHome.branches}
+          onPress={() => router.navigate('/(tabs)/studio')}
+        />
+      ) : null}
+
+      {/* Event tags narrow the Events side; without the Studios card they are the only chips. */}
+      {(kind === 'events' || !studioHome?.discoverStudiosVisible) && tags.length > 0 ? (
         <View style={styles.filters}>
           <Tag label="All" selected={tag === null} onPress={() => setTag(null)} />
           {tags.map((item) => (
@@ -159,43 +186,58 @@ export default function DiscoverScreen() {
         </View>
       ) : null}
 
-      <ResourceState
-        status={
-          isPending ? 'loading' : isError ? 'error' : events.length === 0 ? 'empty' : 'success'
-        }
-        loadingLabel="Loading gatherings..."
-        emptyMessage="Nothing here yet. Try another filter."
-        errorMessage={messageForError(error)}
-        onRetry={() => void refetch()}
-      >
-        <>
-          {featured ? (
-            <View style={styles.featuredWrap}>
-              <FeaturedEventCard
-                event={featured}
-                onPress={() => router.push(`/event/${featured.slug}`)}
+      {kind === 'studios' ? null : (
+        <ResourceState
+          status={
+            isPending ? 'loading' : isError ? 'error' : events.length === 0 ? 'empty' : 'success'
+          }
+          loadingLabel="Loading gatherings..."
+          emptyMessage="Nothing here yet. Try another filter."
+          errorMessage={messageForError(error)}
+          onRetry={() => void refetch()}
+        >
+          <>
+            {showStudios && studiosAt === 0 && studioHome ? (
+              <StudiosCard
+                branches={studioHome.branches}
+                onPress={() => router.navigate('/(tabs)/studio')}
               />
-            </View>
-          ) : null}
-
-          {rest.length > 0 ? (
-            <>
-              <Text variant="eyebrow" style={styles.sectionLabel}>
-                More gatherings
-              </Text>
-              {rest.map((event, index) => (
-                <EventListRow
-                  key={event.id}
-                  event={event}
-                  imageKey={THUMBS[index % THUMBS.length]}
-                  onPress={() => router.push(`/event/${event.slug}`)}
+            ) : null}
+            {featured ? (
+              <View style={styles.featuredWrap}>
+                <FeaturedEventCard
+                  event={featured}
+                  onPress={() => router.push(`/event/${featured.slug}`)}
                 />
-              ))}
-            </>
-          ) : null}
-        </>
-      </ResourceState>
-      {isFetchingNextPage ? (
+              </View>
+            ) : null}
+
+            {rest.length > 0 ? (
+              <>
+                <Text variant="eyebrow" style={styles.sectionLabel}>
+                  More gatherings
+                </Text>
+                {rest.map((event, index) => (
+                  <View key={event.id}>
+                    {showStudios && studiosAt === index + 1 && studioHome ? (
+                      <StudiosCard
+                        branches={studioHome.branches}
+                        onPress={() => router.navigate('/(tabs)/studio')}
+                      />
+                    ) : null}
+                    <EventListRow
+                      event={event}
+                      imageKey={THUMBS[index % THUMBS.length]}
+                      onPress={() => router.push(`/event/${event.slug}`)}
+                    />
+                  </View>
+                ))}
+              </>
+            ) : null}
+          </>
+        </ResourceState>
+      )}
+      {isFetchingNextPage && kind !== 'studios' ? (
         <Text variant="meta" style={styles.loadingMore}>
           Loading more gatherings...
         </Text>

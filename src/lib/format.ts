@@ -199,7 +199,8 @@ export function parseDateOfBirth(input: string): string | null {
 }
 
 /** The server enforces the same floor in `validateDateOfBirth`; both must agree. */
-export const MINIMUM_AGE = 18;
+/** Own accounts from 16 (owner, 24 Nov 2026; backend ac-2-3). Under 16, a parent books (P7). */
+export const MINIMUM_AGE = 16;
 
 /** Whole years between an ISO `YYYY-MM-DD` birth date and `today`, in local time. */
 export function ageOn(isoDate: string, today: Date): number {
