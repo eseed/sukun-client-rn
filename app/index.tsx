@@ -33,6 +33,7 @@ export default function Index() {
   const setupDeferred = useAuthStore((s) => s.setupDeferred);
   const guestBrowsing = useAuthStore((s) => s.guestBrowsing);
   const pendingAccommodationEventId = useAuthStore((s) => s.pendingAccommodationEventId);
+  const pendingStudioPath = useAuthStore((s) => s.pendingStudioPath);
   const liveModeStatus = useLiveModeStore((s) => s.status);
   const liveModeChoice = useLiveModeStore((s) => s.choice);
   // Only someone who switched live mode on waits for the live check at launch: everyone else
@@ -63,6 +64,12 @@ export default function Index() {
   if (status === 'signed-in' && user) {
     // A room documents link opened the app (`app/+native-intent.tsx`): it goes first, once the
     // profile is done. The screen clears the pending event when it opens.
+    // A Studio link that opened the app before sign-in (`app/+native-intent.tsx`).
+    if (pendingStudioPath) {
+      // Cleared after this render, not during it: the store must not change mid-render.
+      setTimeout(() => useAuthStore.getState().setPendingStudioPath(null), 0);
+      return <Redirect href={pendingStudioPath as never} />;
+    }
     if (user.profileComplete && pendingAccommodationEventId) {
       return <Redirect href={`/accommodation?eventId=${pendingAccommodationEventId}`} />;
     }

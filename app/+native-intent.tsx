@@ -1,5 +1,6 @@
 import { parseNotificationLink } from '../src/services/notifications/deep-link';
 import { useAuthStore } from '../src/stores/auth';
+import { studioLinkPath } from '../src/lib/studio';
 
 /**
  * The website's claim link, opened in the app. The WhatsApp invitation links to the web claim
@@ -21,6 +22,9 @@ import { useAuthStore } from '../src/stores/auth';
  * with the app already running, it opens straight away; anyone else starts at the entry gate,
  * which opens it once they are signed in (`pendingAccommodationEventId`).
  *
+ * Studio links (P4) are handed over the same way: the room check-in poster, a class shared from
+ * the app or the website, and a friend's class invitation (`studioLinkPath`).
+ *
  * Every other link passes through untouched.
  */
 const CLAIM_LINK_HOSTS = new Set(['book.sukunwellness.co', 'clientstaging.sukunwellness.co']);
@@ -39,6 +43,14 @@ export function isClaimLink(path: string): boolean {
 export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
   const signedIn = useAuthStore.getState().status === 'signed-in';
   if (isClaimLink(path)) return signedIn ? '/claim' : '/';
+  // Studio links (room poster, class share, friend invite): signed in, straight to the screen;
+  // anyone else signs in at the entry gate first, which then opens it (`pendingStudioPath`).
+  const studio = studioLinkPath(path);
+  if (studio) {
+    if (signedIn) return studio;
+    useAuthStore.getState().setPendingStudioPath(studio);
+    return '/';
+  }
   const landing = parseNotificationLink(path);
   if (landing?.kind === 'accommodation') {
     if (signedIn) return `/accommodation?eventId=${landing.eventId}`;

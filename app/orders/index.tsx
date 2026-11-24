@@ -65,7 +65,22 @@ export default function OrdersScreen() {
             <Pressable
               key={order.id}
               accessibilityRole="button"
-              onPress={() => router.push(`/orders/${order.id}`)}
+              onPress={() =>
+                order.orderType === 'studio'
+                  ? router.push({
+                      pathname: '/studio/receipt' as never,
+                      params: {
+                        orderId: order.id,
+                        orderNumber: order.orderNumber,
+                        totalEgp: order.totalEgp,
+                        createdAt: order.createdAt,
+                        status: order.status,
+                        packages: (order.studio?.packageNames ?? []).join('\u001f'),
+                        branch: order.studio?.branchName ?? '',
+                      },
+                    })
+                  : router.push(`/orders/${order.id}`)
+              }
               style={({ pressed }) => [pressed && styles.pressed]}
             >
               <Card style={styles.card}>
@@ -75,6 +90,11 @@ export default function OrdersScreen() {
                     {statusLabel(order.status)}
                   </Text>
                 </View>
+                {order.orderType === 'studio' ? (
+                  <Text variant="bodyValue" style={styles.description}>
+                    {[...(order.studio?.packageNames ?? []), 'Studio'].join(' · ')}
+                  </Text>
+                ) : null}
                 <View style={styles.cardBottom}>
                   <Text variant="meta">{formatDate(order.createdAt)}</Text>
                   <Text variant="bodyValue" style={styles.total}>
@@ -106,6 +126,9 @@ export default function OrdersScreen() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: space.s5,
+  },
+  description: {
+    marginTop: space.s2,
   },
   list: {
     gap: space.s3,

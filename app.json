@@ -20,7 +20,7 @@
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Sukun uses your camera to take the selfie that verifies you at event entry, and to photograph the room documents you choose to upload.",
+        "NSCameraUsageDescription": "Sukun uses your camera to scan the check-in QR code in a studio room, to take the selfie that verifies you at event entry, and to photograph the room documents you choose to upload.",
         "NSPhotoLibraryUsageDescription": "Sukun needs photo access so you can choose a selfie for entry verification or a room document to upload.",
         "NSContactsUsageDescription": "Sukun uses your contacts so you can attach guests to tickets by phone number.",
         "NSCalendarsUsageDescription": "Sukun adds the event you booked to your calendar when you tap Add to calendar."
@@ -52,6 +52,26 @@
               "scheme": "https",
               "host": "clientstaging.sukunwellness.co",
               "path": "/accommodation"
+            },
+            {
+              "scheme": "https",
+              "host": "book.sukunwellness.co",
+              "pathPrefix": "/checkin/"
+            },
+            {
+              "scheme": "https",
+              "host": "clientstaging.sukunwellness.co",
+              "pathPrefix": "/checkin/"
+            },
+            {
+              "scheme": "https",
+              "host": "book.sukunwellness.co",
+              "pathPrefix": "/classes/"
+            },
+            {
+              "scheme": "https",
+              "host": "clientstaging.sukunwellness.co",
+              "pathPrefix": "/classes/"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
@@ -78,6 +98,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Sukun uses your camera to scan the check-in QR code in a studio room, to take the selfie that verifies you at event entry, and to photograph the room documents you choose to upload.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
       "expo-notifications",
       [
         "expo-secure-store",

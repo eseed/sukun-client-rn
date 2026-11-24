@@ -1,4 +1,5 @@
 import { normalizePhone, requiresLivingArea } from '../../lib/phone';
+import { mockStudioApi, resetMockStudio } from './studio';
 import { overlaps } from '../../lib/live-event';
 import type { SukunApi } from '../contract';
 import type {
@@ -314,6 +315,7 @@ function liveDetail(event: EventDetail): EventDetail {
 
 /** Test/dev seam: reset the mock between runs. */
 export function resetMockState(): void {
+  resetMockStudio();
   state.user = null;
   state.accounts.clear();
   state.pendingPhone = null;
@@ -2617,6 +2619,8 @@ export const mockApi: SukunApi = {
       return delay(undefined, 1.25);
     },
   },
+
+  studio: mockStudioApi,
 };
 
 /** Stands in for the backend's peppered phone hash: enough to file the row, not to find it. */

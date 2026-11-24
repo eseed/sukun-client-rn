@@ -33,7 +33,7 @@ describe('Phone number screen', () => {
     renderWithProviders(<PhoneScreen />);
 
     expect(screen.getByText('Step 1 of 2')).toBeTruthy();
-    expect(screen.getByText("Hello! What's your number?")).toBeTruthy();
+    expect(screen.getByText("Hello! What's your WhatsApp number?")).toBeTruthy();
     expect(screen.getByText(/🇪🇬 \+20/)).toBeTruthy();
     expect(screen.getByText('Send me a code')).toBeTruthy();
   });

@@ -1,6 +1,7 @@
 import type { FieldErrors } from 'react-hook-form';
 import { z } from 'zod';
 import { ageOn, MINIMUM_AGE } from './format';
+import { normalizePhone } from './phone';
 
 /**
  * The profile form that registration (`app/(onboarding)/profile.tsx`) and Edit profile
@@ -22,6 +23,10 @@ export const DATE_OF_BIRTH_REQUIRED_MESSAGE = 'Pick your date of birth';
 export const UNDER_AGE_MESSAGE = `You must be ${MINIMUM_AGE} or over`;
 export const GENDER_REQUIRED_MESSAGE = 'Pick your gender';
 export const AREA_REQUIRED_MESSAGE = 'Pick your living area';
+export const CALLING_NUMBER_MESSAGE =
+  'Check the number, with its country code, like +20 12 3456 7890';
+/** Shown under the date of birth: own accounts are from 16. */
+export const AGE_HELPER = `You need to be ${MINIMUM_AGE} or older.`;
 
 export function buildProfileSchema(areaRequired: boolean) {
   return z.object({
@@ -41,6 +46,15 @@ export function buildProfileSchema(areaRequired: boolean) {
     // Consent, so it is never required and never pre-ticked: Meta only accepts marketing
     // messages sent on an explicit opt-in, and a default-on box is not one.
     marketingOptIn: z.boolean(),
+    // Optional, for staff to call when it differs from the WhatsApp number (ac-2-11).
+    callingNumber: z
+      .string()
+      .trim()
+      .refine(
+        (value) => value.length === 0 || normalizePhone(value) !== null,
+        CALLING_NUMBER_MESSAGE,
+      )
+      .optional(),
   });
 }
 

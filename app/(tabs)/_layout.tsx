@@ -5,8 +5,10 @@ import { ClaimGate } from '../../src/components/tickets/ClaimGate';
 import { TicketsTabIcon } from '../../src/components/tickets/TicketsTabIcon';
 import { LiveTabIcon } from '../../src/components/live-event/LiveTabIcon';
 import { DiscoverIcon, ProfileIcon } from '../../src/components/ui';
+import { StudioIcon } from '../../src/components/studio/StudioUi';
 import { useHasWaitingInvitation } from '../../src/hooks/useClaimableTickets';
 import { useCurrentTickets } from '../../src/hooks/useCurrentTickets';
+import { useHasUpcomingClass } from '../../src/hooks/studio';
 import { useLiveEventContext } from '../../src/hooks/useLiveEventContext';
 import { useAuthStore } from '../../src/stores/auth';
 import { useLiveModeOn } from '../../src/stores/liveMode';
@@ -14,7 +16,7 @@ import { colors, fontFamily } from '../../src/theme/tokens';
 import { text } from '../../src/theme/typography';
 
 /**
- * The three-tab bar drawn on screens 06, 13 and 15: a 94%-opacity creme bar with a
+ * The tab bar (Discover · Studio · Bookings · Profile, with Live first during an event). The three-tab bar drawn on screens 06, 13 and 15: a 94%-opacity creme bar with a
  * border-default top edge, 20px icons, and 10px uppercase labels that go medium when active.
  *
  * Android is edge-to-edge from SDK 54 on, so the bar is drawn behind the system navigation and
@@ -90,7 +92,9 @@ export default function TabsLayout() {
   // Owner's call, 2026-10-22: a ticket for an event ahead or under way turns Tickets orange, and
   // when there is only one, the tab opens it rather than a list of one.
   const current = useCurrentTickets();
-  const ticketTint = current.tickets.length > 0 ? colors.tabCurrentTicket : undefined;
+  // P4: Bookings also turns orange while a class is coming up.
+  const classTint = useHasUpcomingClass();
+  const ticketTint = current.tickets.length > 0 || classTint ? colors.tabCurrentTicket : undefined;
 
   return (
     <ClaimGate>
@@ -129,13 +133,22 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
+          name="studio"
+          options={{
+            title: 'Studio',
+            tabBarLabel: tabLabel('Studio'),
+            tabBarIcon: ({ color }) => <StudioIcon name="lotus" size={20} color={color} />,
+          }}
+        />
+        <Tabs.Screen
           name="tickets"
           options={{
-            title: 'Tickets',
-            tabBarLabel: tabLabel('Tickets', ticketTint, ticketTint !== undefined),
+            // The Tickets tab became Bookings (P4 design): classes and events in one place.
+            title: 'Bookings',
+            tabBarLabel: tabLabel('Bookings', ticketTint, ticketTint !== undefined),
             tabBarAccessibilityLabel: invitationWaiting
-              ? 'Tickets, an invitation is waiting for you'
-              : 'Tickets',
+              ? 'Bookings, an invitation is waiting for you'
+              : 'Bookings',
             tabBarIcon: ({ color }) => (
               <TicketsTabIcon
                 color={ticketTint ?? color}
@@ -146,8 +159,9 @@ export default function TabsLayout() {
           }}
           listeners={{
             tabPress: (event) => {
-              // A waiting invitation keeps the list, which is where it is claimed.
-              if (!current.onlyTicketId || invitationWaiting) return;
+              // A waiting invitation keeps the list, which is where it is claimed. So does an
+              // upcoming class: the tab holds Classes too now, and one ticket must not hide them.
+              if (!current.onlyTicketId || invitationWaiting || classTint) return;
               event.preventDefault();
               router.navigate('/(tabs)/tickets');
               router.push(`/ticket/${current.onlyTicketId}`);
