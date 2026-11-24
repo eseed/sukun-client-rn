@@ -134,7 +134,11 @@ export function landingHint(landing: NotificationLanding | null): string | null 
     case 'studio':
       return landing.path.startsWith('/classes/invites/')
         ? 'Opens your invitation'
-        : 'Opens the class';
+        : landing.path.endsWith('/rate')
+          ? 'Rate the class'
+          : landing.path.startsWith('/studio/packages')
+            ? 'Opens your packages'
+            : 'Opens the class';
     default:
       return 'Opens the event';
   }

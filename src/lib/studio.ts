@@ -280,6 +280,22 @@ const TOKEN_RE = /^[A-Za-z0-9_-]{8,200}$/;
 export function studioLinkPath(link: string): string | null {
   const scheme = /^sukun(?:client)?:\/\/classes\/invites\/([^/?#]+)$/.exec(link);
   if (scheme) return TOKEN_RE.test(scheme[1]!) ? `/classes/invites/${scheme[1]}` : null;
+  // Studio push landings (backend #341): the class, the class to rate, a package, My packages.
+  const app = /^sukun(?:client)?:\/\/(.+)$/.exec(link)?.[1];
+  if (app) {
+    const [a, b, c, d] = app.split('/');
+    if (a === 'classes' && b === 'sessions' && c && UUID_RE.test(c) && d === undefined) {
+      return `/classes/sessions/${c.toLowerCase()}`;
+    }
+    if (a === 'studio' && b === 'bookings' && c && UUID_RE.test(c) && d === 'rate') {
+      return `/studio/bookings/${c.toLowerCase()}/rate`;
+    }
+    if (a === 'studio' && b === 'packages' && c === undefined) return '/studio/packages';
+    if (a === 'studio' && b === 'packages' && c && UUID_RE.test(c) && d === undefined) {
+      return `/studio/packages/${c.toLowerCase()}`;
+    }
+    return null;
+  }
   let url: URL;
   try {
     url = new URL(link);
