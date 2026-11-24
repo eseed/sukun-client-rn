@@ -45,6 +45,45 @@ import type {
   TicketStatus,
   UpdateProfileInput,
 } from './types';
+import type {
+  AcceptClassInviteRequest,
+  CancelClassBookingRequest,
+  ClassBooking,
+  ClassBookingCancelPreview,
+  ClassBookingOptions,
+  ClassInvite,
+  ClassInviteByToken,
+  ClassRating,
+  CreateClassBookingRequest,
+  CreateClassInviteRequest,
+  CreateStudioCheckoutRequest,
+  EligiblePackagesResponse,
+  MemberHomeBranchResponse,
+  MemberPackageDetail,
+  MemberPackageFreezeListResponse,
+  MemberPackageListResponse,
+  MemberPackagesTab,
+  MemberPackageUsageListResponse,
+  MemberProfileSummary,
+  MemberScheduleResponse,
+  MemberScheduleTab,
+  MobileClassSessionDetail,
+  MobileStudioHome,
+  PublicStudioHome,
+  PendingClassRatingsResponse,
+  RoomCheckInRequest,
+  RoomCheckInResponse,
+  StudioCheckoutOrder,
+  StudioCheckoutQuote,
+  StudioCheckoutQuoteRequest,
+  StudioLegalAcceptResponse,
+  StudioLegalStatus,
+  StudioPackageCatalogResponse,
+  StudioPackagesQuery,
+  StudioSchedule,
+  StudioScheduleQuery,
+  SubmitClassRatingRequest,
+} from './studio-types';
 
 /**
  * The single api surface the app talks to. `src/api/mock` and `src/api/live` both implement
@@ -251,5 +290,49 @@ export interface SukunApi {
     deletionPreview(): Promise<AccountDeletionPreview>;
     requestDeletionOtp(): Promise<void>;
     delete(code: string, reason?: string, confirmForfeit?: boolean): Promise<void>;
+  };
+
+  /**
+   * Sukun Studios (classes, P3 + P4): `mobile/studio/*`, plus the public weekly timetable, which
+   * has no mobile twin. Every write that can be repeated takes an idempotency key the screen
+   * makes once per attempt, and every two-step write sends back the fingerprint of the preview
+   * the client actually saw, so a change in between is refused rather than applied silently.
+   *
+   * Paying for a Studio order reuses `payments` (the same Paymob endpoints as events).
+   */
+  studio: {
+    home(): Promise<MobileStudioHome>;
+    /** `GET public/studio/home`: branches and categories for a guest. No auth, no bookings. */
+    publicHome(): Promise<PublicStudioHome>;
+    /** `GET public/studio/schedule`: seven Cairo days of one branch, grouped by hour. No auth. */
+    schedule(query: StudioScheduleQuery): Promise<StudioSchedule>;
+    session(sessionId: string): Promise<MobileClassSessionDetail>;
+    profileSummary(): Promise<MemberProfileSummary>;
+    setHomeBranch(branchId: string): Promise<MemberHomeBranchResponse>;
+    mySchedule(tab: MemberScheduleTab, cursor?: string | null): Promise<MemberScheduleResponse>;
+    myPackages(tab: MemberPackagesTab, cursor?: string | null): Promise<MemberPackageListResponse>;
+    myPackage(id: string): Promise<MemberPackageDetail>;
+    packageUsage(id: string): Promise<MemberPackageUsageListResponse>;
+    packageFreezes(id: string): Promise<MemberPackageFreezeListResponse>;
+    catalogue(query?: StudioPackagesQuery): Promise<StudioPackageCatalogResponse>;
+    eligiblePackages(sessionId: string): Promise<EligiblePackagesResponse>;
+    bookingOptions(sessionId: string): Promise<ClassBookingOptions>;
+    book(sessionId: string, input: CreateClassBookingRequest): Promise<ClassBooking>;
+    cancelPreview(bookingId: string): Promise<ClassBookingCancelPreview>;
+    cancel(bookingId: string, input: CancelClassBookingRequest): Promise<ClassBooking>;
+    quote(input: StudioCheckoutQuoteRequest): Promise<StudioCheckoutQuote>;
+    createCheckout(input: CreateStudioCheckoutRequest): Promise<StudioCheckoutOrder>;
+    checkout(orderId: string): Promise<StudioCheckoutOrder>;
+    invites(bookingId: string): Promise<ClassInvite[]>;
+    createInvite(bookingId: string, input: CreateClassInviteRequest): Promise<ClassInvite>;
+    removeInvite(inviteId: string): Promise<ClassInvite>;
+    inviteByToken(token: string): Promise<ClassInviteByToken>;
+    acceptInvite(token: string, input: AcceptClassInviteRequest): Promise<ClassInvite>;
+    declineInvite(token: string): Promise<ClassInvite>;
+    legal(): Promise<StudioLegalStatus>;
+    acceptLegal(documentId: string, marketingOptIn?: boolean): Promise<StudioLegalAcceptResponse>;
+    pendingRatings(): Promise<PendingClassRatingsResponse>;
+    rate(bookingId: string, input: SubmitClassRatingRequest): Promise<ClassRating>;
+    roomCheckIn(input: RoomCheckInRequest): Promise<RoomCheckInResponse>;
   };
 }

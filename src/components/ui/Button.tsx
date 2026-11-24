@@ -19,7 +19,7 @@ import { Text } from './Text';
  *   `disabled`  border-strong fill           — the inactive "Verify" state on screen 03
  *   `secondary` bordered, transparent        — destructive/secondary confirmations
  */
-export type ButtonVariant = 'primary' | 'accent' | 'secondary' | 'danger';
+export type ButtonVariant = 'primary' | 'accent' | 'secondary' | 'danger' | 'sky';
 
 export interface ButtonProps extends Omit<PressableProps, 'style' | 'children'> {
   label: string;
@@ -51,7 +51,9 @@ export function Button({
         ? 'transparent'
         : variant === 'danger'
           ? colors.rose700
-          : colors.black;
+          : variant === 'sky'
+            ? colors.sky500
+            : colors.black;
 
   const labelColor = variant === 'secondary' ? colors.textPrimary : colors.creme;
 

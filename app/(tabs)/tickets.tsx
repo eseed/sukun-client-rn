@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Ticket, TicketAddon, TicketChild, TicketStatus } from '../../src/api/types';
 import { RefreshControl, StyleSheet, View } from 'react-native';
@@ -12,6 +12,9 @@ import { track } from '../../src/lib/analytics';
 import { useAuthStore } from '../../src/stores/auth';
 import { LiveEventReturnBanner } from '../../src/components/live-event/live-event-return-banner';
 import { colors } from '../../src/theme/tokens';
+import { ClassBookings } from '../../src/components/studio/ClassBookings';
+import { SegmentedSwitch } from '../../src/components/studio/SegmentedSwitch';
+import { studioKeys } from '../../src/hooks/studio';
 
 /** A tab switch back within this long reuses what is on screen rather than asking again. */
 const FOCUS_REFETCH_AFTER_MS = 30_000;
@@ -24,6 +27,20 @@ const FOCUS_REFETCH_AFTER_MS = 30_000;
  */
 export default function TicketsScreen() {
   const router = useRouter();
+  // P4: the Tickets tab is Bookings, classes and events. `?segment=classes` from Studio.
+  const { segment: segmentParam } = useLocalSearchParams<{ segment?: string }>();
+  // The link's segment until the client picks one; a new link (a new param) wins again.
+  const [picked, setPicked] = useState<{
+    for: string | undefined;
+    value: 'classes' | 'events';
+  } | null>(null);
+  const segment: 'classes' | 'events' =
+    picked && picked.for === segmentParam
+      ? picked.value
+      : segmentParam === 'classes'
+        ? 'classes'
+        : 'events';
+  const setSegment = (value: 'classes' | 'events') => setPicked({ for: segmentParam, value });
   const signedIn = useAuthStore((s) => s.status === 'signed-in');
   const statuses: TicketStatus[] = ['active', 'pending_claim', 'voided', 'refunded'];
   const ticketsQuery = useTickets(statuses);
@@ -56,6 +73,7 @@ export default function TicketsScreen() {
         refetch(),
         client.invalidateQueries({ queryKey: queryKeys.liveEventContextRoot(userId) }),
         client.invalidateQueries({ queryKey: queryKeys.roomsRoot }),
+        client.invalidateQueries({ queryKey: studioKeys.root }),
       ]);
     } finally {
       setRefreshing(false);
@@ -117,8 +135,18 @@ export default function TicketsScreen() {
     >
       <LiveEventReturnBanner />
       <View style={styles.heading}>
-        <BulletHeading title="My tickets" size="md" />
+        <BulletHeading title="Bookings" size="md" />
       </View>
+      {signedIn ? (
+        <SegmentedSwitch
+          options={[
+            { value: 'classes', label: 'Classes' },
+            { value: 'events', label: 'Events' },
+          ]}
+          value={segment}
+          onChange={(value) => setSegment(value as 'classes' | 'events')}
+        />
+      ) : null}
 
       {/*
         A guest gets the offer, not an empty account. "No tickets yet" is the right answer for
@@ -129,11 +157,13 @@ export default function TicketsScreen() {
       */}
       {!signedIn ? (
         <SignInPrompt
-          title="Your tickets live here"
-          message="Sign in with your phone number to see the tickets you have bought and any a friend has sent you."
+          title="Your bookings live here"
+          message="Sign in with your WhatsApp number to see your classes, the tickets you have bought, and any a friend has sent you."
           actionLabel="Sign in"
           onAction={() => router.push('/(onboarding)/phone')}
         />
+      ) : segment === 'classes' ? (
+        <ClassBookings />
       ) : (
         <ResourceState
           status={

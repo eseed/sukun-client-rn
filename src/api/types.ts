@@ -111,6 +111,11 @@ export interface CurrentUser {
   selfieExpiresAt: string | null;
   /** Consent to Sukun marketing messages on WhatsApp — Meta requires an explicit opt-in. */
   marketingOptIn: boolean;
+  /**
+   * An optional number staff can call when it differs from the WhatsApp number (ac-2-11). Never
+   * used to sign in, for codes or for messages. Absent from backends before it.
+   */
+  callingPhoneNumber?: string | null;
   profileComplete: boolean;
   status: AppUserStatus;
 }
@@ -124,6 +129,8 @@ export interface UpdateProfileInput {
   areaId?: string;
   areaCode?: string;
   marketingOptIn?: boolean;
+  /** E.164, or `null` to clear it. */
+  callingPhoneNumber?: string | null;
 }
 
 /* ------------------------------------------------------------------ auth */
@@ -157,6 +164,7 @@ export interface LiveUpdateProfileInput {
   areaId?: number;
   areaCode?: string;
   marketingOptIn?: boolean;
+  callingPhoneNumber?: string | null;
 }
 
 /** `UserProjectionDto`, returned inside OTP authentication responses. */
@@ -654,12 +662,18 @@ export interface OrderDetail {
 export interface OrderSummary {
   id: string;
   orderNumber: string;
-  eventId: string;
+  /** `GET mobile/orders/history` (P4) lists Studio package sales too; absent means an Event order. */
+  orderType?: 'event' | 'studio';
+  /** Null on a Studio order. */
+  eventId: string | null;
   status: OrderStatus;
   totalEgp: string;
   currency: string;
-  holdExpiresAt: string;
+  /** Null on a Studio sale made at the desk. */
+  holdExpiresAt: string | null;
   createdAt: string;
+  /** A Studio order's package names (snapshots) and branch. */
+  studio?: { packageNames: string[]; branchName: string | null } | null;
 }
 
 /**
@@ -862,6 +876,10 @@ export interface PaymentStatus {
    * values are the backend's proposal and not final yet.
    */
   failureReason?: PaymentFailureReason | null;
+  /** Studio orders only: the package was issued (and any held class confirmed). */
+  packageIssued?: boolean;
+  /** Studio orders only: Paymob captured the money but fulfilment failed; support follows up. */
+  capturedButUnfulfilled?: boolean;
 }
 
 /** See `PaymentStatus.failureReason`. Unknown values are read as `unknown`. */
@@ -878,6 +896,15 @@ export interface AccountDeletionPreview {
   pendingPaymentOrderCount: number;
   deletionBlockedByPendingPayment: boolean;
   dataRetainedDays: number;
+  /** Studio packages still held (backend #341); absent from backends before it. */
+  activeStudioPackages?: {
+    id: string;
+    name: string;
+    passesRemaining: number | null;
+    expiresOn: string | null;
+  }[];
+  /** Class bookings ahead (backend #341); absent from backends before it. */
+  upcomingClassBookingCount?: number;
 }
 
 /** Wire DTO for `MobileTicketResponseDto`, including its optional properties. */

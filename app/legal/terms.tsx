@@ -34,11 +34,23 @@ const SECTIONS: { title: string; body: string }[] = [
   },
   {
     title: 'Your phone number',
-    body: 'Your mobile number is your Sukun identity. We use it to sign you in, to deliver tickets, and so friends can attach a ticket to you. We send a one time code to it over WhatsApp each time you sign in. We never publish it, and we never tell anyone whether a given number is registered with Sukun.',
+    body: 'Your WhatsApp number is your Sukun identity, and it is associated with your account and bookings. We use it to sign you in, to deliver tickets, and so friends can attach a ticket to you. We send a one time code to it over WhatsApp each time you sign in. You may also give a different number for the studio to call you on; it is never used to sign in or to message you. We never publish either, and we never tell anyone whether a given number is registered with Sukun.',
   },
   {
     title: 'What else we ask for',
     body: 'Before your first purchase we ask for your full name, email address, date of birth, and gender, and for a living area if your number is Egyptian. Name and email appear on your receipts. Date of birth and gender let us meet age limits and plan events. Your email is never required to be verified in order to use the app.',
+  },
+  {
+    title: 'Class bookings and packages',
+    body: 'When you book a class or buy a package at Sukun Studios we keep your home studio, your bookings, the packages you hold and what used them, whether you came, and any rating you choose to give. Studio staff see these to run classes, and to help you at the front desk. Packages bought at the studio or before the app, under the same WhatsApp number, appear here too.',
+  },
+  {
+    title: 'Studio terms and check-in',
+    body: 'Before your first class we record that you accepted the studio terms: which version, when, and whether you also asked for news and offers. To check in you scan the QR code on the room wall with the camera; we record the check-in, not the picture, and the camera is used only while the scanner is open.',
+  },
+  {
+    title: 'Inviting friends',
+    body: "When you invite a friend to a class you give us their WhatsApp number, and their name if you pick them from your contacts. We use it only for that invitation. Sukun does not message them: you send the invitation link yourself, from your phone. If they don't have an account, one is made on that number when they accept.",
   },
   {
     title: 'Your selfie',
@@ -122,15 +134,15 @@ const SECTIONS: { title: string; body: string }[] = [
   {
     title: 'Children',
     /**
-     * The app's floor is 18, enforced by `MINIMUM_AGE` on both the profile form and the
+     * The app's floor is 16 (owner, 24 Nov 2026; backend ac-2-3), enforced by `MINIMUM_AGE` on both the profile form and the
      * backend validator. This used to say 13, which contradicted every one of them, and it
      * promised a per-event minimum age "shown on the event itself" that no event has ever
      * carried: there is no such field in the domain types, the mock, or the backend.
      *
-     * Sukun the company does run events children attend. What is 18-only is the account, so
+     * Sukun the company does run events children attend. What is 16-and-over is the account, so
      * the distinction is drawn here rather than implying no Sukun event admits a child.
      */
-    body: 'The Sukun app is for adults: you must be 18 or over to create an account, and we ask for your date of birth to check. Some Sukun events welcome children, and an adult books through the app on their behalf. Anything a child needs for an event is arranged with the event itself. We do not knowingly collect data from anyone under 18 through the app. If you believe we have, contact us and we will remove it.',
+    body: 'You must be 16 or over to create a Sukun account, and we ask for your date of birth to check. Some Sukun events welcome children, and an adult books through the app on their behalf. Anything a child needs for an event is arranged with the event itself. We do not knowingly collect data from anyone under 16 through the app. If you believe we have, contact us and we will remove it.',
   },
   {
     title: 'Changes',

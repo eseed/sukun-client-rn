@@ -447,10 +447,13 @@ describe('06 Discover', () => {
 
     await waitFor(() => expect(screen.getByText('Tulua')).toBeTruthy());
 
-    // The chips are built from the tags the loaded events carry, so they arrive with the
-    // events rather than being present on the first frame. Labels are title-cased for display;
-    // the value sent when filtering is the stored lowercase tag.
-    expect(screen.getByText('All')).toBeTruthy();
+    // P4: All · Studios · Events, with the Sukun Studios card. The event tag chips are built
+    // from the tags the loaded events carry and narrow the Events side. Labels are title-cased
+    // for display; the value sent when filtering is the stored lowercase tag.
+    await waitFor(() => expect(screen.getByText('Studios')).toBeTruthy());
+    expect(screen.getByText('Yoga, Pilates & more')).toBeTruthy();
+    fireEvent.press(screen.getByText('Events'));
+    expect(screen.getAllByText('All').length).toBeGreaterThan(0);
     expect(screen.getByText('Festivals')).toBeTruthy();
     expect(screen.getByText('On sale now')).toBeTruthy();
     expect(screen.getByText('23–24 Oct 2026 · El Gouna, Egypt')).toBeTruthy();
@@ -1699,7 +1702,9 @@ describe('13 My tickets', () => {
     await signInAndComplete();
     renderWithProviders(<TicketsScreen />);
 
-    expect(screen.getByText('My tickets')).toBeTruthy();
+    // P4: the tab is Bookings, opening on Events unless Studio asks for Classes.
+    expect(screen.getByText('Bookings')).toBeTruthy();
+    expect(screen.getByText('Classes')).toBeTruthy();
     await waitFor(() => expect(screen.getByText('Full Weekend Pass')).toBeTruthy());
     expect(screen.getByText('Tulua · 23–24 Oct')).toBeTruthy();
     expect(screen.getByText('Paid')).toBeTruthy();
@@ -1721,7 +1726,7 @@ describe('13 My tickets', () => {
     useAuthStore.setState({ status: 'signed-out', user: null, pendingPhone: null });
     renderWithProviders(<TicketsScreen />);
 
-    await waitFor(() => expect(screen.getByText('Your tickets live here')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Your bookings live here')).toBeTruthy());
     expect(screen.getByText('Sign in')).toBeTruthy();
     expect(screen.queryByText('Loading your tickets...')).toBeNull();
     expect(screen.queryByText('No tickets yet')).toBeNull();

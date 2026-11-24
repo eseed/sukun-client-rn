@@ -36,7 +36,7 @@ describe('live order and account routes', () => {
     expect(requestMock.mock.calls.map(([path]) => path)).toEqual([
       'mobile/orders/validate-guests',
       'mobile/orders/order-1',
-      'mobile/orders',
+      'mobile/orders/history',
       'mobile/orders/order-1/cancel',
     ]);
     expect(requestMock.mock.calls[0]?.[1]).toMatchObject({
@@ -46,6 +46,21 @@ describe('live order and account routes', () => {
     expect(requestMock.mock.calls[2]?.[1]).toMatchObject({
       query: { cursor: 'cursor-1', limit: 20 },
     });
+  });
+
+  it('falls back to the Event-only order list on a backend without order history', async () => {
+    const { ApiError } = jest.requireMock('../http') as {
+      ApiError: new (...args: unknown[]) => Error;
+    };
+    const legacy = Object.assign(new ApiError('VALIDATION_ERROR'), { status: 400 });
+    const page = { data: [], meta: { hasNextPage: false, nextCursor: null } };
+    requestMock.mockRejectedValueOnce(legacy).mockResolvedValueOnce(page);
+
+    await expect(liveApi.orders.list(null, 20)).resolves.toBe(page);
+    expect(requestMock.mock.calls.map(([path]) => path)).toEqual([
+      'mobile/orders/history',
+      'mobile/orders',
+    ]);
   });
 
   /*
