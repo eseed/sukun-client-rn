@@ -662,12 +662,18 @@ export interface OrderDetail {
 export interface OrderSummary {
   id: string;
   orderNumber: string;
-  eventId: string;
+  /** `GET mobile/orders/history` (P4) lists Studio package sales too; absent means an Event order. */
+  orderType?: 'event' | 'studio';
+  /** Null on a Studio order. */
+  eventId: string | null;
   status: OrderStatus;
   totalEgp: string;
   currency: string;
-  holdExpiresAt: string;
+  /** Null on a Studio sale made at the desk. */
+  holdExpiresAt: string | null;
   createdAt: string;
+  /** A Studio order's package names (snapshots) and branch. */
+  studio?: { packageNames: string[]; branchName: string | null } | null;
 }
 
 /**
@@ -890,6 +896,15 @@ export interface AccountDeletionPreview {
   pendingPaymentOrderCount: number;
   deletionBlockedByPendingPayment: boolean;
   dataRetainedDays: number;
+  /** Studio packages still held (backend #341); absent from backends before it. */
+  activeStudioPackages?: {
+    id: string;
+    name: string;
+    passesRemaining: number | null;
+    expiresOn: string | null;
+  }[];
+  /** Class bookings ahead (backend #341); absent from backends before it. */
+  upcomingClassBookingCount?: number;
 }
 
 /** Wire DTO for `MobileTicketResponseDto`, including its optional properties. */

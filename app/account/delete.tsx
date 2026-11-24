@@ -64,7 +64,11 @@ export default function DeleteAccountScreen() {
   async function onConfirm() {
     setError(null);
     try {
-      await deleteAccount.mutateAsync({ code, confirmForfeit });
+      // `confirmForfeit` is the server's ticket question; the Studio tick is the app's own.
+      await deleteAccount.mutateAsync({
+        code,
+        confirmForfeit: Boolean(preview?.requiresForfeitConfirmation) && confirmForfeit,
+      });
       track('account_deleted', {
         active_ticket_count: preview?.activeTicketCount ?? 0,
         forfeit_confirmed: confirmForfeit,
@@ -77,7 +81,11 @@ export default function DeleteAccountScreen() {
   }
 
   const blocked = Boolean(preview?.deletionBlockedByPendingPayment);
-  const needsForfeit = Boolean(preview?.requiresForfeitConfirmation);
+  const studioPackages = preview?.activeStudioPackages ?? [];
+  const upcomingClasses = preview?.upcomingClassBookingCount ?? 0;
+  const holdsStudio = studioPackages.length > 0 || upcomingClasses > 0;
+  // The Studio items are lost with the account too (P4 design `delete`): the same tick covers them.
+  const needsForfeit = Boolean(preview?.requiresForfeitConfirmation) || holdsStudio;
   const canRequestCode =
     Boolean(preview) && !isLoading && !isError && !blocked && (!needsForfeit || confirmForfeit);
 
@@ -145,12 +153,44 @@ export default function DeleteAccountScreen() {
             </Card>
           ) : null}
 
-          {preview && preview.requiresForfeitConfirmation ? (
+          {preview && !blocked && holdsStudio ? (
+            <Card radiusSize={14} style={styles.card}>
+              <Text variant="eyebrow" style={styles.cardLabel}>
+                You still have at Sukun Studios
+              </Text>
+              {studioPackages.map((pkg) => (
+                <View key={pkg.id} style={styles.eventRow}>
+                  <Text variant="bodyValue">{pkg.name}</Text>
+                  <Text variant="metaSm">
+                    {pkg.passesRemaining === null
+                      ? 'Unlimited'
+                      : `${pkg.passesRemaining} ${pkg.passesRemaining === 1 ? 'pass' : 'passes'} left`}
+                    {pkg.expiresOn ? ` · expires ${formatDate(pkg.expiresOn)}` : ''}
+                  </Text>
+                </View>
+              ))}
+              {upcomingClasses > 0 ? (
+                <View style={styles.eventRow}>
+                  <Text variant="bodyValue">Upcoming classes</Text>
+                  <Text variant="metaSm">{upcomingClasses}</Text>
+                </View>
+              ) : null}
+              <Text variant="metaSm" style={styles.cardNote}>
+                Deleting your account voids them. You will not be refunded.
+              </Text>
+            </Card>
+          ) : null}
+
+          {preview && needsForfeit && !blocked ? (
             <Card radiusSize={14} style={styles.forfeitCard}>
               <Checkbox
                 checked={confirmForfeit}
                 onToggle={() => setConfirmForfeit((checked) => !checked)}
-                label="I understand these tickets will be forfeited and cannot be refunded."
+                label={
+                  preview.requiresForfeitConfirmation
+                    ? 'I understand these tickets will be forfeited and cannot be refunded.'
+                    : 'I understand I lose these.'
+                }
               />
             </Card>
           ) : null}

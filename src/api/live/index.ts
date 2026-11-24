@@ -402,10 +402,22 @@ export const liveApi: SukunApi = {
     detail: (orderId) => request<OrderDetail>(`mobile/orders/${orderId}`),
 
     // GET mobile/orders
-    list: (cursor, limit) =>
-      request<CursorPage<OrderSummary>>('mobile/orders', {
-        query: { cursor: cursor ?? undefined, limit },
-      }),
+    // GET mobile/orders/history: Event orders and Studio package sales. A backend from before it
+    // answers the path as an order id (400) or not at all (404), so the Event-only list stands in.
+    list: async (cursor, limit) => {
+      try {
+        return await request<CursorPage<OrderSummary>>('mobile/orders/history', {
+          query: { cursor: cursor ?? undefined, limit },
+        });
+      } catch (error) {
+        if (!(error instanceof ApiError) || (error.status !== 400 && error.status !== 404)) {
+          throw error;
+        }
+        return request<CursorPage<OrderSummary>>('mobile/orders', {
+          query: { cursor: cursor ?? undefined, limit },
+        });
+      }
+    },
 
     // POST orders/:orderId/cancel
     cancel: (orderId) =>

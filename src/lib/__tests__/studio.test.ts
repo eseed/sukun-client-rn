@@ -33,6 +33,18 @@ describe('studioLinkPath', () => {
     );
   });
 
+  it('opens the Studio push landings', () => {
+    expect(studioLinkPath(`sukun://classes/sessions/${ROOM}`)).toBe(`/classes/sessions/${ROOM}`);
+    expect(studioLinkPath(`sukun://studio/bookings/${ROOM}/rate`)).toBe(
+      `/studio/bookings/${ROOM}/rate`,
+    );
+    expect(studioLinkPath(`sukunclient://studio/packages/${ROOM}`)).toBe(
+      `/studio/packages/${ROOM}`,
+    );
+    expect(studioLinkPath('sukun://studio/packages')).toBe('/studio/packages');
+    expect(studioLinkPath('sukun://studio/elsewhere')).toBeNull();
+  });
+
   it('leaves everything else alone', () => {
     expect(studioLinkPath('https://book.sukunwellness.co/claim')).toBeNull();
     expect(studioLinkPath(`https://evil.example.com/checkin/${ROOM}`)).toBeNull();
