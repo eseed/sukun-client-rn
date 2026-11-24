@@ -27,6 +27,7 @@ import { messageForError } from '../../src/lib/errors';
 import { useAllowGuestBrowsing } from '../../src/stores/flags';
 import { formatDateOfBirth } from '../../src/lib/format';
 import {
+  AGE_HELPER,
   buildProfileSchema,
   type ProfileFormValues,
   profileProblems,
@@ -42,6 +43,7 @@ import {
 import {
   countryRequiresLivingArea,
   DEFAULT_COUNTRY,
+  normalizePhone,
   requiresLivingArea,
 } from '../../src/lib/phone';
 
@@ -102,6 +104,7 @@ export default function ProfileFormScreen() {
     }
   }, [isFocused, router, saved, user]);
 
+  const [callingDifferent, setCallingDifferent] = useState(false);
   const { control, handleSubmit, formState, reset, setFocus } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -111,6 +114,7 @@ export default function ProfileFormScreen() {
       gender: undefined,
       areaId: '',
       marketingOptIn: false,
+      callingNumber: '',
     },
     mode: 'onBlur',
     // `goToField` instead, which scrolls a picker into view as well as focusing a text field.
@@ -136,6 +140,7 @@ export default function ProfileFormScreen() {
       gender: user?.gender === 'male' || user?.gender === 'female' ? user.gender : undefined,
       areaId: user?.area?.id ?? '',
       marketingOptIn: user?.marketingOptIn ?? false,
+      callingNumber: user?.callingPhoneNumber ?? '',
     });
   }, [reset, user]);
 
@@ -151,6 +156,9 @@ export default function ProfileFormScreen() {
           gender: values.gender,
           areaId: areaRequired ? values.areaId : undefined,
           marketingOptIn: values.marketingOptIn,
+          ...(callingDifferent && values.callingNumber
+            ? { callingPhoneNumber: normalizePhone(values.callingNumber) }
+            : {}),
         });
         const area = areas.find((a) => a.id === values.areaId);
         setUserProperties({
@@ -349,6 +357,9 @@ export default function ProfileFormScreen() {
             )}
           />
         </View>
+        <Text variant="metaSm" color={colors.textMuted} style={styles.ageHelper}>
+          {AGE_HELPER}
+        </Text>
 
         {areaRequired ? (
           <Controller
@@ -372,6 +383,32 @@ export default function ProfileFormScreen() {
                   onClose={() => setSheet(null)}
                 />
               </View>
+            )}
+          />
+        ) : null}
+
+        <Checkbox
+          checked={callingDifferent}
+          onToggle={() => setCallingDifferent((v) => !v)}
+          label="My calling number is different from my WhatsApp number"
+        />
+        {callingDifferent ? (
+          <Controller
+            control={control}
+            name="callingNumber"
+            render={({ field, fieldState }) => (
+              <TextField
+                ref={field.ref}
+                label="Calling number (optional)"
+                value={field.value ?? ''}
+                onChangeText={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="+20 12 3456 7890"
+                keyboardType="phone-pad"
+                autoComplete="tel"
+                textContentType="telephoneNumber"
+                error={fieldState.error?.message ?? null}
+              />
             )}
           />
         ) : null}
@@ -434,6 +471,9 @@ export default function ProfileFormScreen() {
 }
 
 const styles = StyleSheet.create({
+  ageHelper: {
+    marginTop: -8,
+  },
   claimNote: {
     marginBottom: 20,
   },

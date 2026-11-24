@@ -1,4 +1,5 @@
 import type { SukunApi } from '../contract';
+import { liveStudioApi } from './studio';
 import { Platform } from 'react-native';
 import { File } from 'expo-file-system';
 import type {
@@ -548,6 +549,8 @@ export const liveApi: SukunApi = {
         body: { otpCode: code, reason, confirmForfeit },
       }),
   },
+
+  studio: liveStudioApi,
 };
 
 /**

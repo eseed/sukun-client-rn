@@ -101,8 +101,9 @@ export default function DeleteAccountScreen() {
       {stage === 'review' ? (
         <>
           <Text variant="bodyMuted" style={styles.blurb}>
-            This removes your profile, your selfie and your sign-in for good. It cannot be
-            undone, and tickets are non-refundable.
+            This removes your profile, your selfie and your sign-in for good. It cannot be undone,
+            and purchases are non-refundable. Studio packages and class bookings on this account are
+            lost too.
           </Text>
 
           {isLoading || isError ? (

@@ -119,6 +119,8 @@ interface AuthState {
    * `pendingCheckoutEventId`.
    */
   pendingAccommodationEventId: string | null;
+  /** A Studio link (class, invite, room poster) that opened the app before sign-in. */
+  pendingStudioPath: string | null;
   /**
    * Tokens are stored but the launch could not confirm them: `me()` failed on something other
    * than a refused session (offline, a timeout, a 5xx), so `status` reads signed out while the
@@ -137,6 +139,7 @@ interface AuthState {
   setPendingClaimTicketId: (ticketId: string | null) => void;
   takePendingClaimTicketId: () => string | null;
   setPendingAccommodationEventId: (eventId: string | null) => void;
+  setPendingStudioPath: (path: string | null) => void;
   deferSetup: () => Promise<void>;
   browseAsGuest: () => Promise<void>;
   signIn: (
@@ -155,6 +158,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   pendingCheckoutEventId: null,
   pendingClaimTicketId: null,
   pendingAccommodationEventId: null,
+  pendingStudioPath: null,
   sessionUnconfirmed: false,
   user: null,
   pendingPhone: null,
@@ -241,6 +245,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return ticketId;
   },
 
+  setPendingStudioPath(path) {
+    set({ pendingStudioPath: path });
+  },
+
   setPendingAccommodationEventId(eventId) {
     set({ pendingAccommodationEventId: eventId });
   },
@@ -311,6 +319,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       sessionUnconfirmed: false,
       pendingCheckoutEventId: null,
       pendingClaimTicketId: null,
+      pendingStudioPath: null,
       pendingAccommodationEventId: null,
     });
     resetAnalytics();

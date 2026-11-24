@@ -22,7 +22,7 @@ import { OptionSheet } from '../../src/components/ui/OptionSheet';
 import { useAreas, useUpdateProfile } from '../../src/hooks/queries';
 import { messageForError } from '../../src/lib/errors';
 import { formatDateOfBirth } from '../../src/lib/format';
-import { requiresLivingArea } from '../../src/lib/phone';
+import { formatPhoneForDisplay, normalizePhone, requiresLivingArea } from '../../src/lib/phone';
 import {
   buildProfileSchema,
   type ProfileFormValues,
@@ -68,6 +68,7 @@ export default function EditProfileScreen() {
       gender: user?.gender === 'male' || user?.gender === 'female' ? user.gender : undefined,
       areaId: user?.area?.id ?? '',
       marketingOptIn: user?.marketingOptIn ?? false,
+      callingNumber: user?.callingPhoneNumber ? formatPhoneForDisplay(user.callingPhoneNumber) : '',
     },
     mode: 'onBlur',
     // `goToField` instead, which scrolls a picker into view as well as focusing a text field.
@@ -103,6 +104,14 @@ export default function EditProfileScreen() {
           gender: values.gender,
           areaId: areaRequired ? values.areaId : undefined,
           marketingOptIn: values.marketingOptIn,
+          // Only sent when touched, so a backend before calling numbers is never asked to clear it.
+          ...(formState.dirtyFields.callingNumber
+            ? {
+                callingPhoneNumber: values.callingNumber
+                  ? normalizePhone(values.callingNumber)
+                  : null,
+              }
+            : {}),
         });
         router.back();
       } catch (err) {
@@ -140,6 +149,30 @@ export default function EditProfileScreen() {
                 error={fieldState.error?.message ?? null}
               />
             </View>
+          )}
+        />
+        {/* The WhatsApp number is the account: it is changed only through the studio (ac-1-4). */}
+        <TextField
+          label="WhatsApp number"
+          value={formatPhoneForDisplay(user.phoneNumber)}
+          editable={false}
+        />
+        <Controller
+          control={control}
+          name="callingNumber"
+          render={({ field, fieldState }) => (
+            <TextField
+              ref={field.ref}
+              label="Calling number"
+              value={field.value ?? ''}
+              onChangeText={field.onChange}
+              onBlur={field.onBlur}
+              placeholder="Add (optional)"
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+              error={fieldState.error?.message ?? null}
+            />
           )}
         />
         <Controller

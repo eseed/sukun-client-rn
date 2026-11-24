@@ -42,6 +42,9 @@ export function openNotificationLanding(router: Router, landing: NotificationLan
     case 'accommodation':
       router.push({ pathname: '/accommodation', params: { eventId: landing.eventId } });
       return;
+    case 'studio':
+      router.push(landing.path as never);
+      return;
     case 'link':
       void Linking.openURL(landing.url).catch(() => undefined);
       return;

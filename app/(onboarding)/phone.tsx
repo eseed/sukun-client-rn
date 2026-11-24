@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { StudioNote } from '../../src/components/studio/StudioUi';
 import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import {
@@ -90,16 +91,15 @@ export default function PhoneScreen() {
 
       <StepLabel>Step 1 of 2</StepLabel>
       <View style={styles.heading}>
-        <BulletHeading title="Hello! What's your number?" size="lg" />
+        <BulletHeading title="Hello! What's your WhatsApp number?" size="lg" />
       </View>
 
       <Text variant="bodyMuted" style={styles.blurb}>
-        Your phone number is how we know you. It&apos;s how tickets find you, and how friends can
-        send you one.
+        Your WhatsApp number is associated with your account and bookings.
       </Text>
 
       <PhoneField
-        label="Mobile number"
+        label="WhatsApp number"
         country={country}
         onCountryChange={(next) => {
           setCountry(next);
@@ -117,6 +117,11 @@ export default function PhoneScreen() {
         }}
         error={error}
       />
+
+      <StudioNote tone="sage" style={styles.studioNote}>
+        Already booked with Sukun Studios before? Use the same number and everything will be there:
+        your packages, classes and history.
+      </StudioNote>
 
       {/* Always rendered: this is also the flexible gap that pins the CTA to the bottom. The
           swirl itself steps aside for the keyboard, which leaves it no room to sit in. */}
@@ -139,6 +144,9 @@ export default function PhoneScreen() {
 }
 
 const styles = StyleSheet.create({
+  studioNote: {
+    marginTop: 16,
+  },
   content: {
     paddingHorizontal: 28,
   },
